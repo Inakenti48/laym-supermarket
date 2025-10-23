@@ -1,13 +1,20 @@
 import { useState } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
-import { CameraScanner } from './CameraScanner';
+import { BarcodeScanner } from './BarcodeScanner';
 import { findProductByBarcode } from '@/lib/storage';
+import { 
+  connectPrinter, 
+  isPrinterConnected, 
+  printReceipt as printToDevice,
+  printReceiptBrowser,
+  type ReceiptData 
+} from '@/lib/printer';
 
 interface CartItem {
   id: string;
@@ -38,7 +45,18 @@ export const CashierTab = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [printerConnected, setPrinterConnected] = useState(false);
   const user = getCurrentUser();
+
+  const handleConnectPrinter = async () => {
+    const connected = await connectPrinter();
+    if (connected) {
+      setPrinterConnected(true);
+      toast.success('Принтер чеков подключен');
+    } else {
+      toast.error('Не удалось подключить принтер');
+    }
+  };
 
   const handleScan = (barcode: string) => {
     const product = findProductByBarcode(barcode);
@@ -94,7 +112,7 @@ export const CashierTab = () => {
     return received - total;
   };
 
-  const completeSale = () => {
+  const completeSale = async () => {
     if (cart.length === 0) {
       toast.error('Корзина пуста');
       return;
@@ -105,11 +123,18 @@ export const CashierTab = () => {
       return;
     }
 
-    // Generate receipt
-    const receipt = {
+    const now = new Date();
+    const receiptData: ReceiptData = {
+      receiptNumber: now.getTime().toString().slice(-7),
+      date: now.toLocaleDateString('ru-RU'),
+      time: now.toLocaleTimeString('ru-RU'),
       cashier: user?.cashierName || 'Кассир',
-      date: new Date().toLocaleString('ru-RU'),
-      items: cart,
+      items: cart.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity
+      })),
       total,
       received: showCalculator ? parseFloat(receivedAmount) : total,
       change: showCalculator ? change : 0
@@ -117,8 +142,19 @@ export const CashierTab = () => {
 
     addLog(`Продажа завершена: ${total}₽ (${cart.length} товаров)`);
     
-    // Print receipt (in real app would connect to printer)
-    printReceipt(receipt);
+    // Печать на физическом принтере если подключен
+    if (isPrinterConnected()) {
+      try {
+        await printToDevice(receiptData);
+        toast.success('Чек отправлен на принтер');
+      } catch (error) {
+        toast.error('Ошибка печати. Открываю браузерную версию');
+        printReceiptBrowser(receiptData);
+      }
+    } else {
+      // Браузерная печать
+      printReceiptBrowser(receiptData);
+    }
     
     // Clear cart
     setCart([]);
@@ -127,18 +163,35 @@ export const CashierTab = () => {
     toast.success('Продажа завершена!');
   };
 
-  const printReceipt = (receipt: any) => {
-    setLastReceipt(receipt);
-    setShowReceipt(true);
-  };
-
   return (
     <div className="space-y-4">
-      {showScanner && (
-        <CameraScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
+      {/* Scanner */}
+      <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
+
+      {/* Printer Connection */}
+      {!printerConnected && (
+        <Card className="p-3 bg-amber-50 border-amber-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Printer className="w-4 h-4 text-amber-600" />
+              <span className="text-sm text-amber-800">Принтер чеков не подключен</span>
+            </div>
+            <Button onClick={handleConnectPrinter} size="sm" variant="outline">
+              <Usb className="w-4 h-4 mr-1" />
+              Подключить
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {printerConnected && (
+        <Card className="p-3 bg-green-50 border-green-200">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+            <Printer className="w-4 h-4 text-green-600" />
+            <span className="text-sm text-green-800">Принтер чеков подключен</span>
+          </div>
+        </Card>
       )}
 
       {/* Receipt Dialog */}

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CameraScanner } from './CameraScanner';
+import { BarcodeScanner } from './BarcodeScanner';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct } from '@/lib/storage';
@@ -30,7 +30,6 @@ export const InventoryTab = () => {
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
   
-  const [showScanner, setShowScanner] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -71,7 +70,6 @@ export const InventoryTab = () => {
       toast.success(`Штрихкод отсканирован: ${barcode}`);
     }
     
-    setShowScanner(false);
     addLog(`Отсканирован штрихкод: ${barcode}`);
   };
 
@@ -228,13 +226,9 @@ export const InventoryTab = () => {
   };
 
   return (
-    <div>
-      {showScanner && (
-        <CameraScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
+    <div className="space-y-4">
+      {/* Scanner */}
+      <BarcodeScanner onScan={handleScan} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Add Product Form */}
@@ -271,21 +265,12 @@ export const InventoryTab = () => {
           <div className="space-y-3">
             <div>
               <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Штрихкод *</label>
-              <div className="flex gap-2">
-                <Input
-                  className="text-sm"
-                  value={currentProduct.barcode}
-                  onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
-                  placeholder="Введите или отсканируйте"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowScanner(true)}
-                >
-                  <Scan className="h-4 w-4" />
-                </Button>
-              </div>
+              <Input
+                className="text-sm"
+                value={currentProduct.barcode}
+                onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
+                placeholder="Используйте сканер выше"
+              />
             </div>
 
             <div>

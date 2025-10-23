@@ -81,7 +81,7 @@ const Index = () => {
   };
 
   const tabs = [
-    { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin', 'cashier', 'inventory'] },
+    { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
     { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
     { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart, roles: ['admin', 'cashier'] },
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },

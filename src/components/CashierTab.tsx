@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,7 +7,12 @@ import { Switch } from '@/components/ui/switch';
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
-import { findProductByBarcode } from '@/lib/storage';
+import { 
+  findProductByBarcode, 
+  isProductExpired, 
+  updateProductQuantity,
+  createCancellationRequest 
+} from '@/lib/storage';
 import { 
   connectPrinter, 
   isPrinterConnected, 
@@ -21,6 +26,7 @@ interface CartItem {
   name: string;
   price: number;
   quantity: number;
+  barcode?: string;
 }
 
 const QUICK_ITEMS = [
@@ -61,7 +67,21 @@ export const CashierTab = () => {
   const handleScan = (barcode: string) => {
     const product = findProductByBarcode(barcode);
     if (product) {
-      addToCart(product.name, product.retailPrice);
+      // Проверка просрочки
+      if (isProductExpired(product)) {
+        toast.error(`❌ ПРОСРОЧКА! Товар "${product.name}" истёк ${new Date(product.expiryDate!).toLocaleDateString('ru-RU')}. Продажа запрещена!`, {
+          duration: 5000,
+        });
+        return;
+      }
+      
+      // Проверка наличия
+      if (product.quantity <= 0) {
+        toast.error(`Товар "${product.name}" отсутствует на складе`);
+        return;
+      }
+      
+      addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}`);
     } else {
       toast.error('Товар не найден');
@@ -69,7 +89,7 @@ export const CashierTab = () => {
     setShowScanner(false);
   };
 
-  const addToCart = (name: string, price: number) => {
+  const addToCart = (name: string, price: number, barcode?: string) => {
     const existingItem = cart.find(item => item.name === name);
     if (existingItem) {
       setCart(cart.map(item => 
@@ -78,7 +98,7 @@ export const CashierTab = () => {
           : item
       ));
     } else {
-      setCart([...cart, { id: Date.now().toString(), name, price, quantity: 1 }]);
+      setCart([...cart, { id: Date.now().toString(), name, price, quantity: 1, barcode }]);
     }
     addLog(`Добавлен товар: ${name} (${price}₽)`);
   };
@@ -112,6 +132,24 @@ export const CashierTab = () => {
     return received - total;
   };
 
+  const handleCancelItems = () => {
+    if (cart.length === 0) {
+      toast.error('Корзина пуста');
+      return;
+    }
+    
+    const itemsToCancel = cart.map(item => ({
+      barcode: item.barcode || '',
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price
+    }));
+    
+    createCancellationRequest(itemsToCancel, user?.cashierName || 'Кассир');
+    toast.success('Запрос на отмену товаров отправлен администратору');
+    setCart([]);
+  };
+
   const completeSale = async () => {
     if (cart.length === 0) {
       toast.error('Корзина пуста');
@@ -122,6 +160,13 @@ export const CashierTab = () => {
     if (showCalculator && (change === undefined || change < 0)) {
       return;
     }
+
+    // Уменьшаем количество товаров в базе
+    cart.forEach(item => {
+      if (item.barcode) {
+        updateProductQuantity(item.barcode, -item.quantity);
+      }
+    });
 
     const now = new Date();
     const receiptData: ReceiptData = {
@@ -460,7 +505,7 @@ export const CashierTab = () => {
 
           {/* Calculator and Total */}
           <Card className="p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 flex-wrap gap-2">
               <Button
                 variant={showCalculator ? "default" : "outline"}
                 onClick={() => setShowCalculator(!showCalculator)}
@@ -468,6 +513,15 @@ export const CashierTab = () => {
               >
                 <Calculator className="h-4 w-4 mr-2" />
                 Калькулятор сдачи
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCancelItems}
+                className="text-xs sm:text-sm"
+                disabled={cart.length === 0}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Отмена товара
               </Button>
             </div>
 

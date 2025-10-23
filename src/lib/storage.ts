@@ -110,3 +110,91 @@ export const getExpiringProducts = (daysBeforeExpiry: number = 3): StoredProduct
     return expiryDate >= now && expiryDate <= targetDate;
   });
 };
+
+export const isProductExpired = (product: StoredProduct): boolean => {
+  if (!product.expiryDate) return false;
+  const now = new Date();
+  const expiryDate = new Date(product.expiryDate);
+  return expiryDate < now;
+};
+
+export const updateProductQuantity = (barcode: string, quantityChange: number): void => {
+  const products = getStoredProducts();
+  const updated = products.map(p => {
+    if (p.barcode === barcode) {
+      return { ...p, quantity: p.quantity + quantityChange };
+    }
+    return p;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+};
+
+// Система отмены товаров
+export interface CancellationRequest {
+  id: string;
+  items: Array<{ barcode: string; name: string; quantity: number; price: number }>;
+  cashier: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+const CANCELLATIONS_KEY = 'cancellation_requests';
+
+export const getCancellationRequests = (): CancellationRequest[] => {
+  const data = localStorage.getItem(CANCELLATIONS_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+};
+
+export const createCancellationRequest = (items: Array<{ barcode: string; name: string; quantity: number; price: number }>, cashier: string): CancellationRequest => {
+  const requests = getCancellationRequests();
+  const newRequest: CancellationRequest = {
+    id: Date.now().toString(),
+    items,
+    cashier,
+    requestedAt: new Date().toISOString(),
+    status: 'pending'
+  };
+  requests.push(newRequest);
+  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(requests));
+  return newRequest;
+};
+
+export const updateCancellationRequest = (id: string, status: 'approved' | 'rejected'): void => {
+  const requests = getCancellationRequests();
+  const updated = requests.map(r => {
+    if (r.id === id) {
+      return { ...r, status };
+    }
+    return r;
+  });
+  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(updated));
+  
+  // Если отмена одобрена, возвращаем товары в склад
+  if (status === 'approved') {
+    const request = requests.find(r => r.id === id);
+    if (request) {
+      request.items.forEach(item => {
+        updateProductQuantity(item.barcode, item.quantity);
+      });
+    }
+  }
+};
+
+// Удаление старых запросов (старше 24 часов)
+export const cleanupOldCancellations = (): void => {
+  const requests = getCancellationRequests();
+  const now = new Date().getTime();
+  const dayInMs = 24 * 60 * 60 * 1000;
+  
+  const filtered = requests.filter(r => {
+    const requestTime = new Date(r.requestedAt).getTime();
+    return now - requestTime < dayInMs;
+  });
+  
+  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(filtered));
+};

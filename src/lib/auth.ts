@@ -153,3 +153,15 @@ export const saveEmployee = (employee: Omit<Employee, 'id' | 'createdAt'>): Empl
   addLog(`Добавлен сотрудник: ${employee.name} (${employee.login})`);
   return newEmployee;
 };
+
+export const updateEmployee = (id: string, updates: Partial<Employee>): void => {
+  const employees = getEmployees();
+  const updated = employees.map(e => {
+    if (e.id === id) {
+      return { ...e, ...updates };
+    }
+    return e;
+  });
+  localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(updated));
+  addLog(`Обновлён сотрудник: ${updates.name || 'ID ' + id}`);
+};

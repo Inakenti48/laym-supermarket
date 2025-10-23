@@ -5,23 +5,36 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { getEmployees, saveEmployee, type Employee } from '@/lib/auth';
+import { getEmployees, saveEmployee, updateEmployee, type Employee } from '@/lib/auth';
 import { saveTask } from '@/lib/employees';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Users, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const EmployeesTab = () => {
   const [employees, setEmployees] = useState<Employee[]>(getEmployees());
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [position, setPosition] = useState('');
   const [workConditions, setWorkConditions] = useState('');
   const [schedule, setSchedule] = useState<'full' | 'piece'>('full');
   const [hourlyRate, setHourlyRate] = useState('');
+  const [customLogin, setCustomLogin] = useState('');
 
   const generateLogin = () => {
     const timestamp = Date.now().toString().slice(-6);
     return `emp${timestamp}`;
+  };
+
+  const handleEditEmployee = (employee: Employee) => {
+    setEditingId(employee.id);
+    setName(employee.name);
+    setPosition(employee.position);
+    setWorkConditions(employee.workConditions);
+    setSchedule(employee.schedule);
+    setHourlyRate(employee.hourlyRate?.toString() || '');
+    setCustomLogin(employee.login);
+    setShowForm(true);
   };
 
   const handleAddEmployee = () => {
@@ -30,25 +43,41 @@ export const EmployeesTab = () => {
       return;
     }
 
-    const login = generateLogin();
-    const employee = saveEmployee({
-      name,
-      position,
-      workConditions,
-      schedule,
-      hourlyRate: schedule === 'full' ? parseFloat(hourlyRate) : undefined,
-      login
-    });
-
-    setEmployees(getEmployees());
-    toast.success(`Сотрудник добавлен. Логин: ${login}`);
+    if (editingId) {
+      // Обновление существующего сотрудника
+      updateEmployee(editingId, {
+        name,
+        position,
+        workConditions,
+        schedule,
+        hourlyRate: schedule === 'full' ? parseFloat(hourlyRate) : undefined,
+        login: customLogin || generateLogin()
+      });
+      setEmployees(getEmployees());
+      toast.success('Сотрудник обновлён');
+    } else {
+      // Добавление нового сотрудника
+      const login = customLogin || generateLogin();
+      const employee = saveEmployee({
+        name,
+        position,
+        workConditions,
+        schedule,
+        hourlyRate: schedule === 'full' ? parseFloat(hourlyRate) : undefined,
+        login
+      });
+      setEmployees(getEmployees());
+      toast.success(`Сотрудник добавлен. Логин: ${login}`);
+    }
     
     // Reset form
+    setEditingId(null);
     setName('');
     setPosition('');
     setWorkConditions('');
     setSchedule('full');
     setHourlyRate('');
+    setCustomLogin('');
     setShowForm(false);
   };
 
@@ -82,7 +111,7 @@ export const EmployeesTab = () => {
 
       {showForm && (
         <Card className="p-4 space-y-3">
-          <h3 className="font-semibold text-sm">Новый сотрудник</h3>
+          <h3 className="font-semibold text-sm">{editingId ? 'Редактировать сотрудника' : 'Новый сотрудник'}</h3>
           
           <div className="space-y-2">
             <Label className="text-xs">Имя</Label>
@@ -140,11 +169,30 @@ export const EmployeesTab = () => {
             </div>
           )}
 
+          <div className="space-y-2">
+            <Label className="text-xs">Логин {!editingId && '(оставьте пустым для авто-генерации)'}</Label>
+            <Input
+              value={customLogin}
+              onChange={(e) => setCustomLogin(e.target.value)}
+              placeholder="emp123456"
+              className="text-sm font-mono"
+            />
+          </div>
+
           <div className="flex gap-2">
             <Button onClick={handleAddEmployee} size="sm" className="flex-1">
-              Создать
+              {editingId ? 'Сохранить' : 'Создать'}
             </Button>
-            <Button onClick={() => setShowForm(false)} variant="outline" size="sm">
+            <Button onClick={() => {
+              setShowForm(false);
+              setEditingId(null);
+              setName('');
+              setPosition('');
+              setWorkConditions('');
+              setSchedule('full');
+              setHourlyRate('');
+              setCustomLogin('');
+            }} variant="outline" size="sm">
               Отмена
             </Button>
           </div>
@@ -160,14 +208,24 @@ export const EmployeesTab = () => {
                   <h3 className="font-semibold text-sm">{employee.name}</h3>
                   <p className="text-xs text-muted-foreground">{employee.position}</p>
                 </div>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleAddTask(employee.id, employee.name)}
-                  className="text-xs"
-                >
-                  Добавить задание
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="ghost"
+                    onClick={() => handleEditEmployee(employee)}
+                    className="text-xs"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => handleAddTask(employee.id, employee.name)}
+                    className="text-xs"
+                  >
+                    Добавить задание
+                  </Button>
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-2 text-xs">

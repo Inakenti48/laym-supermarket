@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Scan, Plus, Package, X } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarcodeScanner } from './BarcodeScanner';
+import { CameraScanner } from './CameraScanner';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct } from '@/lib/storage';
@@ -34,6 +35,7 @@ export const InventoryTab = () => {
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [showCamera, setShowCamera] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState({
     barcode: '',
@@ -227,8 +229,24 @@ export const InventoryTab = () => {
 
   return (
     <div className="space-y-4">
+      {/* Camera Scanner */}
+      {showCamera && (
+        <CameraScanner 
+          onScan={handleScan} 
+          onClose={() => setShowCamera(false)} 
+        />
+      )}
+
       {/* Scanner */}
-      <BarcodeScanner onScan={handleScan} />
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <BarcodeScanner onScan={handleScan} />
+        </div>
+        <Button onClick={() => setShowCamera(true)} variant="outline">
+          <Camera className="h-4 w-4 mr-2" />
+          Камера
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Add Product Form */}

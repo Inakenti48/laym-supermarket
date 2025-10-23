@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle
 } from 'lucide-react';
 import { LoginScreen } from '@/components/LoginScreen';
 import { DashboardTab } from '@/components/DashboardTab';
@@ -12,13 +12,14 @@ import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { PhotoReportsTab } from '@/components/PhotoReportsTab';
+import { CancellationsTab } from '@/components/CancellationsTab';
 import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -87,6 +88,7 @@ const Index = () => {
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },
     { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
     { id: 'photo-reports' as Tab, label: 'Фотоотчёты', icon: FileText, roles: ['admin'] },
+    { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
     { id: 'import' as Tab, label: 'Импорт', icon: Upload, roles: ['admin'] },
     { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee'] },
@@ -226,10 +228,11 @@ const Index = () => {
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
         {activeTab === 'photo-reports' && <PhotoReportsTab />}
+        {activeTab === 'cancellations' && <CancellationsTab />}
         {activeTab === 'employee-work' && currentUser.employeeId && (
           <EmployeeWorkTab employeeId={currentUser.employeeId} />
         )}
-        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work'].includes(activeTab) && (
+        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

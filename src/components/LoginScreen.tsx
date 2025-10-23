@@ -8,7 +8,7 @@ import { UserRole } from '@/lib/auth';
 
 interface LoginScreenProps {
   role: UserRole;
-  onLogin: (username: string, password: string, cashierName?: string) => void;
+  onLogin: (username: string, role: UserRole, cashierName?: string) => void;
   onCancel: () => void;
 }
 
@@ -30,22 +30,27 @@ const roleInfo = {
     description: 'Управление складом и товарами',
     icon: User,
     color: 'text-accent-foreground'
+  },
+  employee: {
+    title: 'Вход Сотрудника',
+    description: 'Доступ к заданиям',
+    icon: User,
+    color: 'text-muted-foreground'
   }
 };
 
 export const LoginScreen = ({ role, onLogin, onCancel }: LoginScreenProps) => {
   const [username, setUsername] = useState('');
   const [cashierName, setCashierName] = useState('');
-  const [password, setPassword] = useState('');
   const info = roleInfo[role];
   const Icon = info.icon;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (role === 'cashier') {
-      onLogin(username, password, cashierName);
+      onLogin(username, role, cashierName);
     } else {
-      onLogin(username, password);
+      onLogin(username, role);
     }
   };
 
@@ -73,21 +78,6 @@ export const LoginScreen = ({ role, onLogin, onCancel }: LoginScreenProps) => {
                   placeholder="Введите логин"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="pl-9"
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Пароль</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Введите пароль"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   className="pl-9"
                   required
                 />

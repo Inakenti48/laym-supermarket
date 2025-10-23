@@ -1,9 +1,10 @@
-export type UserRole = 'admin' | 'cashier' | 'inventory';
+export type UserRole = 'admin' | 'cashier' | 'inventory' | 'employee';
 
 interface User {
   role: UserRole;
   username: string;
   cashierName?: string;
+  employeeId?: string;
 }
 
 const STORAGE_KEY = 'inventory_user';
@@ -22,28 +23,35 @@ const ADMIN_PASSWORD_HASH = 'c6ee9e33cf5c6715a1d148fd73f7318884b41adcb916021e2bc
 
 export const login = async (
   username: string, 
-  password: string, 
   role: UserRole, 
-  cashierName?: string
+  cashierName?: string,
+  employeeId?: string
 ): Promise<boolean> => {
   let isValid = false;
 
   if (role === 'admin') {
-    const passwordHash = await sha256(password);
-    isValid = username === '8080' && passwordHash === ADMIN_PASSWORD_HASH;
+    isValid = username === '8080';
   } else if (role === 'cashier') {
     if (!cashierName || cashierName.trim() === '') {
       return false;
     }
-    isValid = username === '2030' && password === '2030';
+    isValid = username === '2030';
   } else if (role === 'inventory') {
-    isValid = username === '4050' && password === '4050';
+    isValid = username === '4050';
+  } else if (role === 'employee') {
+    // Check if employee exists in employees list
+    const employees = getEmployees();
+    const employee = employees.find(emp => emp.login === username);
+    isValid = employee !== undefined;
+    if (isValid && employee) {
+      employeeId = employee.id;
+    }
   }
 
   if (isValid) {
-    const user: User = { role, username, cashierName };
+    const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    addLog(`Вход в систему: ${role}${cashierName ? ` (${cashierName})` : ''}`);
+    addLog(`Вход в систему: ${role}${cashierName ? ` (${cashierName})` : ''}${employeeId ? ` (ID: ${employeeId})` : ''}`);
     return true;
   }
   return false;
@@ -107,4 +115,41 @@ export const getLogs = (): LogEntry[] => {
   } catch {
     return [];
   }
+};
+
+// Employee management
+const EMPLOYEES_KEY = 'system_employees';
+
+export interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  workConditions: string;
+  schedule: 'full' | 'piece';
+  hourlyRate?: number;
+  login: string;
+  createdAt: string;
+}
+
+export const getEmployees = (): Employee[] => {
+  const employeesStr = localStorage.getItem(EMPLOYEES_KEY);
+  if (!employeesStr) return [];
+  try {
+    return JSON.parse(employeesStr);
+  } catch {
+    return [];
+  }
+};
+
+export const saveEmployee = (employee: Omit<Employee, 'id' | 'createdAt'>): Employee => {
+  const employees = getEmployees();
+  const newEmployee: Employee = {
+    ...employee,
+    id: Date.now().toString(),
+    createdAt: new Date().toISOString()
+  };
+  employees.push(newEmployee);
+  localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
+  addLog(`Добавлен сотрудник: ${employee.name} (${employee.login})`);
+  return newEmployee;
 };

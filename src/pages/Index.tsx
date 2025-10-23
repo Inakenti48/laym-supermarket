@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users 
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft
 } from 'lucide-react';
 import { LoginScreen } from '@/components/LoginScreen';
 import { DashboardTab } from '@/components/DashboardTab';
@@ -9,13 +9,16 @@ import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
 import { LogsTab } from '@/components/LogsTab';
 import { ExpiryTab } from '@/components/ExpiryTab';
+import { EmployeesTab } from '@/components/EmployeesTab';
+import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
+import { PhotoReportsTab } from '@/components/PhotoReportsTab';
 import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -32,19 +35,26 @@ const Index = () => {
     setShowLogin(true);
   };
 
-  const handleLogin = async (username: string, password: string, cashierName?: string) => {
-    const success = await login(username, password, loginRole, cashierName);
+  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
+    const success = await login(username, role, cashierName);
     if (success) {
       setCurrentUser(getCurrentUser());
       setShowLogin(false);
-      const displayName = cashierName || username;
-      toast.success(`Добро пожаловать, ${displayName}!`);
-    } else {
-      if (loginRole === 'cashier') {
-        toast.error('Неверные учетные данные или не указано имя');
-      } else {
-        toast.error('Неверные учетные данные');
+      setLoginRole(undefined);
+      toast.success('Вход выполнен успешно');
+      
+      // Set active tab based on role
+      if (role === 'admin') {
+        setActiveTab('dashboard');
+      } else if (role === 'cashier') {
+        setActiveTab('cashier');
+      } else if (role === 'inventory') {
+        setActiveTab('inventory');
+      } else if (role === 'employee') {
+        setActiveTab('employee-work');
       }
+    } else {
+      toast.error('Неверные учетные данные');
     }
   };
 
@@ -52,7 +62,20 @@ const Index = () => {
     logout();
     setCurrentUser(null);
     setActiveTab('dashboard');
+    setShowLogin(false);
+    setLoginRole(undefined);
     toast.info('Вы вышли из системы');
+  };
+
+  const handleBack = () => {
+    // Go back to previous tab or logout if on main screen
+    if (activeTab !== 'dashboard' && activeTab !== 'cashier' && activeTab !== 'inventory' && activeTab !== 'employee-work') {
+      setActiveTab(currentUser?.role === 'admin' ? 'dashboard' : 
+                   currentUser?.role === 'cashier' ? 'cashier' : 
+                   currentUser?.role === 'inventory' ? 'inventory' : 'employee-work');
+    } else {
+      handleLogout();
+    }
   };
 
   const tabs = [
@@ -62,9 +85,11 @@ const Index = () => {
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
     { id: 'reports' as Tab, label: 'Отчеты', icon: FileText, roles: ['admin'] },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },
+    { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+    { id: 'photo-reports' as Tab, label: 'Фотоотчёты', icon: FileText, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
     { id: 'import' as Tab, label: 'Импорт', icon: Upload, roles: ['admin'] },
-    { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+    { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee'] },
   ];
 
   const visibleTabs = tabs.filter(tab => 
@@ -114,6 +139,14 @@ const Index = () => {
                   <Package className="h-5 w-5 mr-2" />
                   Войти как Склад
                 </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 text-base" 
+                  onClick={() => handleLoginClick('employee')}
+                >
+                  <Users className="h-5 w-5 mr-2" />
+                  Работа
+                </Button>
               </div>
             </Card>
           </div>
@@ -143,7 +176,10 @@ const Index = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleBack} title="Назад">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div className="text-right mr-2">
               <p className="text-sm font-medium">{currentUser.cashierName || currentUser.username}</p>
               <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
@@ -188,7 +224,12 @@ const Index = () => {
         {activeTab === 'inventory' && <InventoryTab />}
         {activeTab === 'expiry' && <ExpiryTab />}
         {activeTab === 'logs' && <LogsTab />}
-        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs'].includes(activeTab) && (
+        {activeTab === 'employees' && <EmployeesTab />}
+        {activeTab === 'photo-reports' && <PhotoReportsTab />}
+        {activeTab === 'employee-work' && currentUser.employeeId && (
+          <EmployeeWorkTab employeeId={currentUser.employeeId} />
+        )}
+        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

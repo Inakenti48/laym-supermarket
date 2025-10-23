@@ -8,8 +8,10 @@ import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
 import { LogsTab } from '@/components/LogsTab';
+import { ExpiryTab } from '@/components/ExpiryTab';
 import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -69,6 +71,57 @@ const Index = () => {
     !currentUser || tab.roles.includes(currentUser.role)
   );
 
+  // Требуем авторизацию для всего приложения
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-background">
+        {showLogin ? (
+          <LoginScreen
+            role={loginRole}
+            onLogin={handleLogin}
+            onCancel={() => setShowLogin(false)}
+          />
+        ) : (
+          <div className="flex items-center justify-center min-h-screen">
+            <Card className="p-8 max-w-md w-full mx-4">
+              <div className="text-center mb-6">
+                <Package className="h-16 w-16 text-primary mx-auto mb-4" />
+                <h1 className="text-2xl font-bold mb-2">Система Учета Товаров</h1>
+                <p className="text-muted-foreground">Выберите роль для входа</p>
+              </div>
+              <div className="space-y-3">
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 text-base" 
+                  onClick={() => handleLoginClick('admin')}
+                >
+                  <LayoutDashboard className="h-5 w-5 mr-2" />
+                  Войти как Админ
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 text-base" 
+                  onClick={() => handleLoginClick('cashier')}
+                >
+                  <ShoppingCart className="h-5 w-5 mr-2" />
+                  Войти как Кассир
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 text-base" 
+                  onClick={() => handleLoginClick('inventory')}
+                >
+                  <Package className="h-5 w-5 mr-2" />
+                  Войти как Склад
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {showLogin && (
@@ -91,29 +144,13 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-3">
-            {!currentUser ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => handleLoginClick('admin')}>
-                  Админ
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleLoginClick('cashier')}>
-                  Кассир
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleLoginClick('inventory')}>
-                  Склад
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="text-right mr-2">
-                  <p className="text-sm font-medium">{currentUser.username}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
-                </div>
-                <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход">
-                  <LogOut className="h-5 w-5" />
-                </Button>
-              </>
-            )}
+            <div className="text-right mr-2">
+              <p className="text-sm font-medium">{currentUser.cashierName || currentUser.username}</p>
+              <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход">
+              <LogOut className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </header>
@@ -149,8 +186,9 @@ const Index = () => {
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'cashier' && <CashierTab />}
         {activeTab === 'inventory' && <InventoryTab />}
+        {activeTab === 'expiry' && <ExpiryTab />}
         {activeTab === 'logs' && <LogsTab />}
-        {!['dashboard', 'cashier', 'inventory', 'logs'].includes(activeTab) && (
+        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

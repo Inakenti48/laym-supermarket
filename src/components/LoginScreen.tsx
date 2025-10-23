@@ -8,7 +8,7 @@ import { UserRole } from '@/lib/auth';
 
 interface LoginScreenProps {
   role: UserRole;
-  onLogin: (username: string, password: string) => void;
+  onLogin: (username: string, password: string, cashierName?: string) => void;
   onCancel: () => void;
 }
 
@@ -35,13 +35,18 @@ const roleInfo = {
 
 export const LoginScreen = ({ role, onLogin, onCancel }: LoginScreenProps) => {
   const [username, setUsername] = useState('');
+  const [cashierName, setCashierName] = useState('');
   const [password, setPassword] = useState('');
   const info = roleInfo[role];
   const Icon = info.icon;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(username, password);
+    if (role === 'cashier') {
+      onLogin(username, password, cashierName);
+    } else {
+      onLogin(username, password);
+    }
   };
 
   return (
@@ -59,13 +64,13 @@ export const LoginScreen = ({ role, onLogin, onCancel }: LoginScreenProps) => {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Имя пользователя</Label>
+              <Label htmlFor="username">Логин</Label>
               <div className="relative">
                 <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="username"
                   type="text"
-                  placeholder="Введите имя пользователя"
+                  placeholder="Введите логин"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="pl-9"
@@ -88,6 +93,23 @@ export const LoginScreen = ({ role, onLogin, onCancel }: LoginScreenProps) => {
                 />
               </div>
             </div>
+            {role === 'cashier' && (
+              <div className="space-y-2">
+                <Label htmlFor="cashierName">Ваше имя</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="cashierName"
+                    type="text"
+                    placeholder="Введите ваше имя"
+                    value={cashierName}
+                    onChange={(e) => setCashierName(e.target.value)}
+                    className="pl-9"
+                    required
+                  />
+                </div>
+              </div>
+            )}
             <div className="flex gap-3 pt-4">
               <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
                 Отмена

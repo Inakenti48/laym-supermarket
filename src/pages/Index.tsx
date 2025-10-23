@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { LoginScreen } from '@/components/LoginScreen';
 import { DashboardTab } from '@/components/DashboardTab';
+import { CashierTab } from '@/components/CashierTab';
+import { InventoryTab } from '@/components/InventoryTab';
+import { LogsTab } from '@/components/LogsTab';
 import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,14 +30,19 @@ const Index = () => {
     setShowLogin(true);
   };
 
-  const handleLogin = (username: string, password: string) => {
-    const success = login(username, password, loginRole);
+  const handleLogin = async (username: string, password: string, cashierName?: string) => {
+    const success = await login(username, password, loginRole, cashierName);
     if (success) {
       setCurrentUser(getCurrentUser());
       setShowLogin(false);
-      toast.success(`Добро пожаловать, ${username}!`);
+      const displayName = cashierName || username;
+      toast.success(`Добро пожаловать, ${displayName}!`);
     } else {
-      toast.error('Неверные учетные данные');
+      if (loginRole === 'cashier') {
+        toast.error('Неверные учетные данные или не указано имя');
+      } else {
+        toast.error('Неверные учетные данные');
+      }
     }
   };
 
@@ -139,7 +147,10 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         {activeTab === 'dashboard' && <DashboardTab />}
-        {activeTab !== 'dashboard' && (
+        {activeTab === 'cashier' && <CashierTab />}
+        {activeTab === 'inventory' && <InventoryTab />}
+        {activeTab === 'logs' && <LogsTab />}
+        {!['dashboard', 'cashier', 'inventory', 'logs'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

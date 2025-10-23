@@ -49,14 +49,21 @@ export const InventoryTab = () => {
   });
 
   const handleScan = (barcode: string) => {
-    const existing = findProductByBarcode(barcode);
+    // Безопасность: санитизация входных данных
+    const sanitizedBarcode = barcode.trim().replace(/[<>'"]/g, '');
+    if (!sanitizedBarcode || sanitizedBarcode.length > 50) {
+      toast.error('Неверный формат штрихкода');
+      return;
+    }
+
+    const existing = findProductByBarcode(sanitizedBarcode);
     
     if (existing) {
       setSuggestedProduct(existing);
       setShowSuggestion(true);
       setCurrentProduct({ 
         ...currentProduct, 
-        barcode,
+        barcode: sanitizedBarcode,
         name: existing.name,
         category: existing.category,
         purchasePrice: existing.purchasePrice.toString(),
@@ -66,11 +73,11 @@ export const InventoryTab = () => {
       setPhotos(existing.photos);
       toast.info('Товар найден в базе данных');
     } else {
-      setCurrentProduct({ ...currentProduct, barcode });
-      toast.success(`Штрихкод отсканирован: ${barcode}`);
+      setCurrentProduct({ ...currentProduct, barcode: sanitizedBarcode });
+      toast.success(`Штрихкод отсканирован: ${sanitizedBarcode}`);
     }
     
-    addLog(`Отсканирован штрихкод: ${barcode}`);
+    addLog(`Отсканирован штрихкод: ${sanitizedBarcode}`);
   };
 
   const acceptSuggestion = () => {

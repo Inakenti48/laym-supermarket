@@ -90,7 +90,14 @@ export const CashierTab = () => {
   };
 
   const handleScan = (barcode: string) => {
-    const product = findProductByBarcode(barcode);
+    // Безопасность: санитизация входных данных
+    const sanitizedBarcode = barcode.trim().replace(/[<>'"]/g, '');
+    if (!sanitizedBarcode || sanitizedBarcode.length > 50) {
+      toast.error('Неверный формат штрихкода');
+      return;
+    }
+
+    const product = findProductByBarcode(sanitizedBarcode);
     if (product) {
       // Проверка просрочки
       if (isProductExpired(product)) {
@@ -115,17 +122,24 @@ export const CashierTab = () => {
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {
-    const existingItem = cart.find(item => item.name === name);
+    // Безопасность: санитизация входных данных
+    const sanitizedName = name.trim().substring(0, 100).replace(/[<>]/g, '');
+    if (!sanitizedName || price <= 0) {
+      toast.error('Неверные данные товара');
+      return;
+    }
+
+    const existingItem = cart.find(item => item.name === sanitizedName);
     if (existingItem) {
       setCart(cart.map(item => 
-        item.name === name 
+        item.name === sanitizedName 
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ));
     } else {
-      setCart([...cart, { id: Date.now().toString(), name, price, quantity: 1, barcode }]);
+      setCart([...cart, { id: Date.now().toString(), name: sanitizedName, price, quantity: 1, barcode }]);
     }
-    addLog(`Добавлен товар: ${name} (${price}₽)`);
+    addLog(`Добавлен товар: ${sanitizedName} (${price}₽)`);
   };
 
   const removeFromCart = (id: string) => {

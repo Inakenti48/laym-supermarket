@@ -8,11 +8,11 @@ import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
 import { SuppliersTab } from '@/components/SuppliersTab';
+import { ReportsTab } from '@/components/ReportsTab';
 import { LogsTab } from '@/components/LogsTab';
 import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
-import { PhotoReportsTab } from '@/components/PhotoReportsTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -85,10 +85,9 @@ const Index = () => {
     { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
     { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart, roles: ['admin', 'cashier'] },
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
-    { id: 'reports' as Tab, label: 'Отчеты', icon: FileText, roles: ['admin'] },
+    { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },
     { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
-    { id: 'photo-reports' as Tab, label: 'Фотоотчёты', icon: FileText, roles: ['admin'] },
     { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
     { id: 'import' as Tab, label: 'Импорт', icon: Upload, roles: ['admin'] },
@@ -184,7 +183,7 @@ const Index = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="text-right mr-2">
-              <p className="text-sm font-medium">{currentUser.cashierName || currentUser.username}</p>
+              <p className="text-sm font-medium">{currentUser.cashierName || 'Пользователь'}</p>
               <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход">
@@ -226,15 +225,15 @@ const Index = () => {
         {activeTab === 'cashier' && <CashierTab />}
         {activeTab === 'inventory' && <InventoryTab />}
         {activeTab === 'suppliers' && <SuppliersTab />}
+        {activeTab === 'reports' && <ReportsTab />}
         {activeTab === 'expiry' && <ExpiryTab />}
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
-        {activeTab === 'photo-reports' && <PhotoReportsTab />}
         {activeTab === 'cancellations' && <CancellationsTab />}
         {activeTab === 'employee-work' && currentUser.employeeId && (
           <EmployeeWorkTab employeeId={currentUser.employeeId} />
         )}
-        {!['dashboard', 'cashier', 'inventory', 'suppliers', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work', 'cancellations'].includes(activeTab) && (
+        {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

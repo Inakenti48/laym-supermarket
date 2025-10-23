@@ -198,3 +198,134 @@ export const cleanupOldCancellations = (): void => {
   
   localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(filtered));
 };
+
+// Поставщики
+export interface Supplier {
+  id: string;
+  name: string;
+  phone: string;
+  notes: string;
+  totalDebt: number;
+  paymentHistory: Array<{
+    date: string;
+    amount: number;
+    paymentType: 'full' | 'partial' | 'debt';
+    productName: string;
+    productQuantity: number;
+    productPrice: number;
+    changedBy: string;
+  }>;
+  createdAt: string;
+  lastUpdated: string;
+}
+
+const SUPPLIERS_KEY = 'suppliers';
+
+export const getSuppliers = (): Supplier[] => {
+  const data = localStorage.getItem(SUPPLIERS_KEY);
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+};
+
+export const saveSupplier = (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Supplier => {
+  const suppliers = getSuppliers();
+  const now = new Date().toISOString();
+  
+  const newSupplier: Supplier = {
+    ...supplier,
+    id: Date.now().toString(),
+    paymentHistory: [],
+    createdAt: now,
+    lastUpdated: now,
+  };
+  
+  suppliers.push(newSupplier);
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(suppliers));
+  return newSupplier;
+};
+
+export const updateSupplier = (id: string, updates: Partial<Supplier>): void => {
+  const suppliers = getSuppliers();
+  const updated = suppliers.map(s => {
+    if (s.id === id) {
+      return { ...s, ...updates, lastUpdated: new Date().toISOString() };
+    }
+    return s;
+  });
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+};
+
+export const addSupplierPayment = (
+  supplierId: string, 
+  payment: {
+    amount: number;
+    paymentType: 'full' | 'partial' | 'debt';
+    productName: string;
+    productQuantity: number;
+    productPrice: number;
+  },
+  userId: string
+): void => {
+  const suppliers = getSuppliers();
+  const updated = suppliers.map(s => {
+    if (s.id === supplierId) {
+      const totalCost = payment.productPrice * payment.productQuantity;
+      const newDebt = payment.paymentType === 'full' 
+        ? s.totalDebt 
+        : payment.paymentType === 'debt'
+        ? s.totalDebt + totalCost
+        : s.totalDebt + (totalCost - payment.amount);
+      
+      return {
+        ...s,
+        totalDebt: Math.max(0, newDebt),
+        paymentHistory: [
+          ...s.paymentHistory,
+          {
+            date: new Date().toISOString(),
+            amount: payment.amount,
+            paymentType: payment.paymentType,
+            productName: payment.productName,
+            productQuantity: payment.productQuantity,
+            productPrice: payment.productPrice,
+            changedBy: userId,
+          }
+        ],
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+    return s;
+  });
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+};
+
+export const paySupplierDebt = (supplierId: string, amount: number, userId: string): void => {
+  const suppliers = getSuppliers();
+  const updated = suppliers.map(s => {
+    if (s.id === supplierId) {
+      return {
+        ...s,
+        totalDebt: Math.max(0, s.totalDebt - amount),
+        paymentHistory: [
+          ...s.paymentHistory,
+          {
+            date: new Date().toISOString(),
+            amount: -amount,
+            paymentType: 'partial' as const,
+            productName: 'Погашение долга',
+            productQuantity: 0,
+            productPrice: 0,
+            changedBy: userId,
+          }
+        ],
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+    return s;
+  });
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+};

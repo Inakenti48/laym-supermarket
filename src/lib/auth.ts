@@ -107,11 +107,29 @@ export const addLog = (message: string) => {
   localStorage.setItem(LOGS_KEY, JSON.stringify(logs.slice(0, 1000))); // Keep last 1000 logs
 };
 
-export const getLogs = (): LogEntry[] => {
+export const getLogs = (startDate?: string, endDate?: string): LogEntry[] => {
   const logsStr = localStorage.getItem(LOGS_KEY);
   if (!logsStr) return [];
   try {
-    return JSON.parse(logsStr);
+    const logs = JSON.parse(logsStr);
+    
+    if (!startDate && !endDate) return logs;
+    
+    return logs.filter((log: LogEntry) => {
+      const logDate = new Date(log.timestamp);
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+      
+      if (start && end) {
+        return logDate >= start && logDate <= end;
+      } else if (start) {
+        return logDate >= start;
+      } else if (end) {
+        return logDate <= end;
+      }
+      
+      return true;
+    });
   } catch {
     return [];
   }

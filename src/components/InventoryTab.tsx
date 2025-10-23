@@ -24,9 +24,6 @@ interface Product {
   unit: 'шт' | 'кг';
   expiryDate?: string;
   photos: string[];
-  paymentType: 'full' | 'partial' | 'debt';
-  paidAmount: number;
-  debtAmount: number;
 }
 
 export const InventoryTab = () => {
@@ -49,8 +46,6 @@ export const InventoryTab = () => {
     quantity: '',
     unit: 'шт' as 'шт' | 'кг',
     expiryDate: '',
-    paymentType: 'full' as 'full' | 'partial' | 'debt',
-    paidAmount: '',
   });
 
   const handleScan = (barcode: string) => {
@@ -95,7 +90,6 @@ export const InventoryTab = () => {
       quantity: '',
       unit: 'шт',
       expiryDate: '',
-      paidAmount: '',
     });
     setPhotos([]);
     toast.info('Введите новые данные');
@@ -124,14 +118,6 @@ export const InventoryTab = () => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const calculateDebt = () => {
-    const price = parseFloat(currentProduct.purchasePrice) || 0;
-    const quantity = parseFloat(currentProduct.quantity) || 0;
-    const total = price * quantity;
-    const paid = parseFloat(currentProduct.paidAmount) || 0;
-    return Math.max(0, total - paid);
-  };
-
   const addProduct = () => {
     if (!currentProduct.barcode || !currentProduct.name || !currentProduct.category || 
         !currentProduct.purchasePrice || !currentProduct.quantity) {
@@ -147,21 +133,6 @@ export const InventoryTab = () => {
     const purchasePrice = parseFloat(currentProduct.purchasePrice);
     const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
     const quantity = parseFloat(currentProduct.quantity);
-    const total = purchasePrice * quantity;
-    const paidAmount = currentProduct.paymentType === 'full' 
-      ? total 
-      : (parseFloat(currentProduct.paidAmount) || 0);
-    const debtAmount = total - paidAmount;
-
-    if (currentProduct.paymentType === 'partial' && paidAmount <= 0) {
-      toast.error('Укажите сумму частичной оплаты');
-      return;
-    }
-
-    if (currentProduct.paymentType === 'partial' && paidAmount >= total) {
-      toast.error('Частичная оплата не может быть больше или равна полной сумме');
-      return;
-    }
 
     const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
       barcode: currentProduct.barcode,
@@ -173,9 +144,9 @@ export const InventoryTab = () => {
       unit: currentProduct.unit,
       expiryDate: currentProduct.expiryDate || undefined,
       photos,
-      paymentType: currentProduct.paymentType,
-      paidAmount,
-      debtAmount: Math.max(0, debtAmount),
+      paymentType: 'full',
+      paidAmount: purchasePrice * quantity,
+      debtAmount: 0,
       addedBy: currentUser?.role || 'unknown',
     };
 
@@ -192,19 +163,11 @@ export const InventoryTab = () => {
       unit: savedProduct.unit,
       expiryDate: savedProduct.expiryDate,
       photos: savedProduct.photos,
-      paymentType: savedProduct.paymentType,
-      paidAmount: savedProduct.paidAmount,
-      debtAmount: savedProduct.debtAmount,
     };
 
     setProducts([...products, newProduct]);
     
-    const paymentStatus = 
-      currentProduct.paymentType === 'full' ? 'Полная оплата' :
-      currentProduct.paymentType === 'partial' ? `Частичная оплата (${paidAmount}₽ из ${total}₽)` :
-      `Долг (${debtAmount}₽)`;
-    
-    addLog(`Добавлен товар: ${newProduct.name} (${quantity} ${newProduct.unit}) - ${paymentStatus}`);
+    addLog(`Добавлен товар: ${newProduct.name} (${quantity} ${newProduct.unit})`);
     
     if (suggestedProduct && (suggestedProduct.purchasePrice !== purchasePrice || suggestedProduct.retailPrice !== retailPrice)) {
       const priceDiff = purchasePrice - suggestedProduct.purchasePrice;
@@ -223,8 +186,6 @@ export const InventoryTab = () => {
       quantity: '',
       unit: 'шт',
       expiryDate: '',
-      paymentType: 'full',
-      paidAmount: '',
     });
     setPhotos([]);
     setSuggestedProduct(null);
@@ -429,52 +390,6 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <div>
-              <label className="text-sm font-medium mb-2 block">Тип оплаты</label>
-              <Select
-                value={currentProduct.paymentType}
-                onValueChange={(value: 'full' | 'partial' | 'debt') => 
-                  setCurrentProduct({ ...currentProduct, paymentType: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full">Полная оплата</SelectItem>
-                  <SelectItem value="partial">Частичная оплата</SelectItem>
-                  <SelectItem value="debt">Долг</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {currentProduct.paymentType === 'partial' && (
-              <div>
-                <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Оплачено (₽)</label>
-                <Input
-                  className="text-sm"
-                  type="number"
-                  step="0.01"
-                  value={currentProduct.paidAmount}
-                  onChange={(e) => setCurrentProduct({ ...currentProduct, paidAmount: e.target.value })}
-                  placeholder="0"
-                />
-                {currentProduct.purchasePrice && currentProduct.quantity && currentProduct.paidAmount && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Остаток долга: {calculateDebt()}₽
-                  </p>
-                )}
-              </div>
-            )}
-
-            {currentProduct.paymentType === 'debt' && currentProduct.purchasePrice && currentProduct.quantity && (
-              <div className="p-2 sm:p-3 bg-warning/10 border border-warning rounded-lg">
-                <p className="text-xs sm:text-sm font-medium text-warning">
-                  Сумма долга: {parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity)}₽
-                </p>
-              </div>
-            )}
-
             <Button onClick={addProduct} className="w-full">
               <Plus className="h-4 w-4 mr-2" />
               Добавить товар
@@ -521,28 +436,6 @@ export const InventoryTab = () => {
                         </Badge>
                       )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-2 flex-wrap">
-                    {product.paymentType === 'full' && (
-                      <span className="px-2 py-1 bg-success/10 text-success text-xs rounded">
-                        Оплачено
-                      </span>
-                    )}
-                    {product.paymentType === 'partial' && (
-                      <>
-                        <span className="px-2 py-1 bg-warning/10 text-warning text-xs rounded">
-                          Частично: {product.paidAmount}₽
-                        </span>
-                        <span className="px-2 py-1 bg-destructive/10 text-destructive text-xs rounded">
-                          Долг: {product.debtAmount}₽
-                        </span>
-                      </>
-                    )}
-                    {product.paymentType === 'debt' && (
-                      <span className="px-2 py-1 bg-destructive/10 text-destructive text-xs rounded">
-                        Долг: {product.debtAmount}₽
-                      </span>
-                    )}
                   </div>
                   {product.photos.length > 0 && (
                     <div className="flex gap-2 mt-2 overflow-x-auto">

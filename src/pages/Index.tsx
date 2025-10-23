@@ -7,6 +7,7 @@ import { LoginScreen } from '@/components/LoginScreen';
 import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
+import { SuppliersTab } from '@/components/SuppliersTab';
 import { LogsTab } from '@/components/LogsTab';
 import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
@@ -224,6 +225,7 @@ const Index = () => {
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'cashier' && <CashierTab />}
         {activeTab === 'inventory' && <InventoryTab />}
+        {activeTab === 'suppliers' && <SuppliersTab />}
         {activeTab === 'expiry' && <ExpiryTab />}
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
@@ -232,7 +234,7 @@ const Index = () => {
         {activeTab === 'employee-work' && currentUser.employeeId && (
           <EmployeeWorkTab employeeId={currentUser.employeeId} />
         )}
-        {!['dashboard', 'cashier', 'inventory', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work', 'cancellations'].includes(activeTab) && (
+        {!['dashboard', 'cashier', 'inventory', 'suppliers', 'expiry', 'logs', 'employees', 'photo-reports', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

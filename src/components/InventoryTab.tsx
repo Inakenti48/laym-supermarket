@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Scan, Plus, Package, X, Camera } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CameraScanner } from './CameraScanner';
+import { CSVImportDialog } from './CSVImportDialog';
+import { BulkImportButton } from './BulkImportButton';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct } from '@/lib/storage';
@@ -36,6 +38,7 @@ export const InventoryTab = () => {
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
   const [showCamera, setShowCamera] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState({
     barcode: '',
@@ -237,15 +240,34 @@ export const InventoryTab = () => {
         />
       )}
 
-      {/* Scanner */}
-      <div className="flex gap-2">
-        <div className="flex-1">
+      {/* CSV Import Dialog */}
+      {showImportDialog && (
+        <CSVImportDialog
+          onClose={() => setShowImportDialog(false)}
+          onImportComplete={() => {
+            toast.success('Товары успешно импортированы');
+          }}
+        />
+      )}
+
+      {/* Scanner and Import */}
+      <div className="flex gap-2 flex-wrap">
+        <div className="flex-1 min-w-[200px]">
           <BarcodeScanner onScan={handleScan} />
         </div>
         <Button onClick={() => setShowCamera(true)} variant="outline">
           <Camera className="h-4 w-4 mr-2" />
           Камера
         </Button>
+        {isAdmin && (
+          <>
+            <Button onClick={() => setShowImportDialog(true)} variant="outline">
+              <Upload className="h-4 w-4 mr-2" />
+              Импорт CSV
+            </Button>
+            <BulkImportButton />
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

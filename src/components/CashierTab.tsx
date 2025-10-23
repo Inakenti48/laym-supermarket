@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,8 @@ import {
   findProductByBarcode, 
   isProductExpired, 
   updateProductQuantity,
-  createCancellationRequest 
+  createCancellationRequest,
+  getAllProducts
 } from '@/lib/storage';
 import { 
   connectPrinter, 
@@ -52,7 +53,31 @@ export const CashierTab = () => {
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [printerConnected, setPrinterConnected] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   const user = getCurrentUser();
+
+  // Закрытие результатов поиска при клике вне
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Поиск товаров по названию
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) return [];
+    const query = searchQuery.toLowerCase();
+    const allProducts = getAllProducts();
+    return allProducts
+      .filter(p => p.name.toLowerCase().includes(query))
+      .slice(0, 10); // Показываем только первые 10 результатов
+  }, [searchQuery]);
 
   const handleConnectPrinter = async () => {
     const connected = await connectPrinter();
@@ -434,14 +459,46 @@ export const CashierTab = () => {
                 }}
               />
             </div>
-            <div className="relative">
+            <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input
                 placeholder="Поиск товара по названию..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowSearchResults(true);
+                }}
+                onFocus={() => setShowSearchResults(true)}
                 className="pl-10 text-sm sm:text-base"
               />
+              
+              {/* Результаты поиска */}
+              {showSearchResults && searchResults.length > 0 && (
+                <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-80 overflow-y-auto shadow-lg">
+                  <div className="p-2">
+                    {searchResults.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => {
+                          handleScan(product.barcode);
+                          setSearchQuery('');
+                          setShowSearchResults(false);
+                        }}
+                        className="w-full text-left p-3 hover:bg-primary/5 rounded-lg transition-colors"
+                      >
+                        <div className="font-medium text-sm">{product.name}</div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                          <span>{product.category}</span>
+                          <span className="font-semibold text-primary">{product.retailPrice} ₽</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Остаток: {product.quantity} {product.unit}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </div>
           </Card>
 
@@ -455,50 +512,62 @@ export const CashierTab = () => {
               </div>
             ) : (
               <div className="space-y-3">
-                {cart.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 py-3 border-b last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm sm:text-base truncate">{item.name}</div>
-                      <div className="text-xs sm:text-sm text-primary font-medium">{item.price.toFixed(2)} ₽</div>
-                      <div className="text-xs text-muted-foreground">Остаток: 48 шт</div>
+                {cart.map((item) => {
+                  const product = item.barcode ? findProductByBarcode(item.barcode) : null;
+                  const stockQuantity = product?.quantity || 0;
+                  
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 py-3 border-b last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm sm:text-base truncate">{item.name}</div>
+                        <div className="text-xs sm:text-sm text-primary font-medium">{item.price.toFixed(2)} ₽</div>
+                        {product && (
+                          <div className="text-xs text-muted-foreground">
+                            Остаток: {stockQuantity} {product.unit}
+                            {stockQuantity < item.quantity && (
+                              <span className="text-red-500 ml-2">⚠️ Недостаточно!</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                          <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 0)}
+                          className="w-12 sm:w-14 h-8 sm:h-10 text-center text-sm sm:text-base"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg ml-1 sm:ml-2"
+                          onClick={() => removeFromCart(item.id)}
+                        >
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                      </div>
+                      <div className="font-bold text-base sm:text-lg w-16 sm:w-20 text-right">
+                        {(item.price * item.quantity).toFixed(2)} ₽
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      >
-                        <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
-                      <Input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 0)}
-                        className="w-12 sm:w-14 h-8 sm:h-10 text-center text-sm sm:text-base"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      >
-                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg ml-1 sm:ml-2"
-                        onClick={() => removeFromCart(item.id)}
-                      >
-                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
-                    </div>
-                    <div className="font-bold text-base sm:text-lg w-16 sm:w-20 text-right">
-                      {(item.price * item.quantity).toFixed(2)} ₽
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

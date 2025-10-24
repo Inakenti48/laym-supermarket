@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -67,6 +67,8 @@ export const CashierTab = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
+  const [showAIScanner, setShowAIScanner] = useState(false);
+  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
   const user = getCurrentUser();
 
@@ -302,10 +304,26 @@ export const CashierTab = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* AI Product Recognition - Always Active */}
-      <AIProductRecognition 
-        onProductFound={handleScan}
-      />
+      {/* AI Product Recognition */}
+      {showAIScanner && (
+        <div className="fixed inset-0 bg-background z-50">
+          <AIProductRecognition 
+            onProductFound={handleScan}
+            mode={aiScanMode}
+          />
+          <Button
+            onClick={() => {
+              setShowAIScanner(false);
+              setAiScanMode('product');
+            }}
+            variant="outline"
+            className="absolute top-4 right-4 z-50"
+          >
+            <X className="h-4 w-4 mr-2" />
+            Закрыть
+          </Button>
+        </div>
+      )}
 
       {/* Scanner */}
       <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
@@ -531,6 +549,32 @@ export const CashierTab = () => {
                     if (checked) setShowScanner(true);
                   }}
                 />
+              </div>
+              
+              {/* AI Scanning Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => {
+                    setAiScanMode('product');
+                    setShowAIScanner(true);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  AI Лицевая
+                </Button>
+                <Button
+                  onClick={() => {
+                    setAiScanMode('barcode');
+                    setShowAIScanner(true);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  AI Штрихкод
+                </Button>
               </div>
               
             </div>

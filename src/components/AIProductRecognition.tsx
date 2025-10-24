@@ -6,11 +6,12 @@ import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string }) => void;
+  mode?: 'product' | 'barcode'; // Режим: распознавание товара или только штрихкода
 }
 
 type RecognitionStep = 'photo1' | 'photo2' | 'retry';
 
-export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionProps) => {
+export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIProductRecognitionProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -207,7 +208,32 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
         setIsProcessing(true);
 
         try {
-          if (currentStep === 'photo1') {
+          if (mode === 'barcode') {
+            // Режим только штрихкода - сразу ищем штрихкод
+            setNotification('📷 Держите штрихкод неподвижно...');
+            setIsWaitingForSharpImage(true);
+            
+            const { image, isSharp } = captureSharpImage();
+            
+            if (!isSharp) {
+              setIsWaitingForSharpImage(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            setNotification('✅ Четкий кадр! Читаю штрихкод...');
+            setIsWaitingForSharpImage(false);
+            
+            const result = await recognizeProduct(image, 'barcode');
+            
+            if (result.barcode) {
+              setNotification('✅ Штрихкод распознан!');
+              onProductFound(result);
+              setTimeout(() => setNotification(''), 1000);
+            } else {
+              setNotification('');
+            }
+          } else if (currentStep === 'photo1') {
             // Шаг 1: Фото лицевой стороны - ждем четкий кадр
             setNotification('📷 Держите камеру неподвижно...');
             setIsWaitingForSharpImage(true);
@@ -308,9 +334,12 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
 
       return () => clearInterval(interval);
     }
-  }, [currentStep, isProcessing]);
+  }, [currentStep, isProcessing, mode]);
 
   const getStepIndicator = () => {
+    if (mode === 'barcode') {
+      return '📷 Режим штрихкода';
+    }
     switch (currentStep) {
       case 'photo1':
         return '1️⃣ Лицевая сторона';
@@ -379,12 +408,22 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
         ) : (
           <div className="p-4 text-center space-y-2">
             <p className="text-sm text-muted-foreground font-medium">
-              🤖 AI автоматически распознаёт товары по фото и штрихкоду
+              🤖 AI автоматически распознаёт товары
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>1️⃣ Покажите лицевую сторону товара</p>
-              <p>2️⃣ Если не распознал - переверните на штрихкод</p>
-              <p>3️⃣ Система будет пробовать до успешного распознавания</p>
+              {mode === 'barcode' ? (
+                <>
+                  <p>📱 Режим распознавания штрихкода</p>
+                  <p>📷 Наведите камеру на штрихкод</p>
+                  <p>⏱️ Держите неподвижно для четкого снимка</p>
+                </>
+              ) : (
+                <>
+                  <p>1️⃣ Покажите лицевую сторону товара</p>
+                  <p>2️⃣ Если не распознал - переверните на штрихкод</p>
+                  <p>3️⃣ Система будет пробовать до успешного распознавания</p>
+                </>
+              )}
             </div>
           </div>
         )}

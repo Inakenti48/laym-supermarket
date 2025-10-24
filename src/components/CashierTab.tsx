@@ -17,7 +17,7 @@ import {
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
-import { CameraScanner } from './CameraScanner';
+import { AIProductRecognition } from './AIProductRecognition';
 import { 
   findProductByBarcode, 
   isProductExpired, 
@@ -300,10 +300,9 @@ export const CashierTab = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Camera Scanner - Always Active */}
-      <CameraScanner 
-        onScan={handleScan} 
-        onClose={() => {}} 
+      {/* AI Product Recognition - Always Active */}
+      <AIProductRecognition 
+        onProductFound={handleScan}
       />
 
       {/* Scanner */}

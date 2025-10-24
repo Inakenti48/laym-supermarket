@@ -51,8 +51,8 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
       scannerRef.current = scanner;
 
       const config = {
-        fps: 120, // Увеличена скорость сканирования
-        qrbox: { width: 200, height: 200 }, // Уменьшен размер для быстрого распознавания
+        fps: 60, // Оптимальная скорость для баланса производительности и точности
+        qrbox: { width: 250, height: 250 }, // Оптимальный размер для точного распознавания
         aspectRatio: 1.0,
         disableFlip: false,
         experimentalFeatures: {
@@ -67,7 +67,18 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
           16, // UPC_A
           17, // UPC_E
           19, // CODE_93
-        ],
+          1,  // AZTEC
+          2,  // CODABAR
+          3,  // CODE_39
+          4,  // CODE_93
+          5,  // CODE_128
+          6,  // DATA_MATRIX
+          7,  // MAXICODE
+          10, // ITF
+          11, // PDF_417
+          12, // RSS_14
+          15, // RSS_EXPANDED
+        ]
       };
 
       await scanner.start(
@@ -77,8 +88,8 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
           if (!isMountedRef.current) return;
 
           const now = Date.now();
-          // Уменьшена задержка между сканированиями до 300мс для быстроты
-          if (decodedText === lastScanRef.current && now - lastScanTimeRef.current < 300) {
+          // Оптимальная задержка 200мс для предотвращения дублей
+          if (decodedText === lastScanRef.current && now - lastScanTimeRef.current < 200) {
             return;
           }
 
@@ -91,10 +102,10 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
           });
 
           if (navigator.vibrate) {
-            navigator.vibrate(100); // Короче вибрация для быстроты
+            navigator.vibrate([50]); // Короткая вибрация для подтверждения
           }
 
-          const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjKH0fPTgjMGHm7A7+OZSA0PVqzn77BdGAg+ltryxnMpBSl+zPLaizsIGGS57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsI');
+          const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBjKH0fPTgjMGHm7A7+OZSA0PVqzn77BdGAg+ltryxnMpBSl+zPLaizsIGGS57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsIGWW57OihUQ0NTKXh8bllHAU2jdXzx3YsBS1+zPDajTsI');
           beep.play().catch(() => {});
 
           onScan(decodedText);
@@ -181,9 +192,17 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
           </div>
         ) : (
           <div className="p-6 text-center space-y-4">
-            <p className="text-muted-foreground">
-              Наведите камеру на штрихкод или QR-код товара
-            </p>
+            <div className="space-y-2">
+              <p className="text-muted-foreground font-medium">
+                Наведите камеру на штрихкод или QR-код товара
+              </p>
+              <p className="text-sm text-muted-foreground">
+                💡 Совет: Держите камеру на расстоянии 10-20 см от штрихкода
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Поддерживаются все типы штрихкодов: EAN-13, EAN-8, CODE-128, UPC и другие
+              </p>
+            </div>
             <button
               onClick={handleClose}
               className="px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors inline-flex items-center gap-2"

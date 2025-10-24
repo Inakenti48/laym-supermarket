@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
+import { CameraScanner } from './CameraScanner';
 import { 
   findProductByBarcode, 
   isProductExpired, 
@@ -49,6 +50,7 @@ export const CashierTab = () => {
   const [receivedAmount, setReceivedAmount] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -119,6 +121,7 @@ export const CashierTab = () => {
       toast.error('Товар не найден');
     }
     setShowScanner(false);
+    setShowCameraScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {
@@ -249,6 +252,14 @@ export const CashierTab = () => {
 
   return (
     <div className="space-y-4">
+      {/* Camera Scanner */}
+      {showCameraScanner && (
+        <CameraScanner 
+          onScan={handleScan} 
+          onClose={() => setShowCameraScanner(false)} 
+        />
+      )}
+
       {/* Scanner */}
       <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
 
@@ -460,18 +471,29 @@ export const CashierTab = () => {
         <div className="lg:col-span-2 space-y-4">
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-3 p-3 bg-primary/5 rounded-lg">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <ShoppingCart className="h-5 w-5 text-primary" />
-                <span className="font-medium text-sm sm:text-base">Сканер активен</span>
+            <div className="space-y-3 mb-3">
+              <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <span className="font-medium text-sm sm:text-base">Сканер активен</span>
+                </div>
+                <Switch
+                  checked={scannerActive}
+                  onCheckedChange={(checked) => {
+                    setScannerActive(checked);
+                    if (checked) setShowScanner(true);
+                  }}
+                />
               </div>
-              <Switch
-                checked={scannerActive}
-                onCheckedChange={(checked) => {
-                  setScannerActive(checked);
-                  if (checked) setShowScanner(true);
-                }}
-              />
+              
+              <Button 
+                onClick={() => setShowCameraScanner(true)}
+                variant="outline"
+                className="w-full h-12 text-sm sm:text-base font-medium"
+              >
+                <Camera className="h-5 w-5 mr-2" />
+                Открыть камеру для сканирования
+              </Button>
             </div>
             <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />

@@ -285,7 +285,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
         } finally {
           setIsProcessing(false);
         }
-      }, 1500); // Быстрый интервал 1.5 секунды
+      }, 2000); // Интервал 2 секунды
 
       return () => clearInterval(interval);
     }
@@ -371,7 +371,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             <div className="text-xs text-muted-foreground space-y-1">
               <p>📱 Режим быстрого распознавания</p>
               <p>📷 Покажите переднюю часть упаковки</p>
-              <p>⚡ Автоматическое распознавание каждые 1.5 сек</p>
+              <p>⚡ Автоматическое распознавание каждые 2 сек</p>
               <p>📸 Или нажмите кнопку для мгновенной съемки</p>
             </div>
           </div>

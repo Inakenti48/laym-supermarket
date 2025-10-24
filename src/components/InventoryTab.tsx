@@ -53,45 +53,56 @@ export const InventoryTab = () => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
     const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
-    if (!sanitizedBarcode || sanitizedBarcode.length > 50) {
-      toast.error('Неверный формат штрихкода');
+    
+    // Проверка только если штрихкод не пустой
+    if (sanitizedBarcode && sanitizedBarcode.length > 50) {
+      toast.warning('Штрихкод слишком длинный');
       return;
     }
 
-    const existing = findProductByBarcode(sanitizedBarcode);
-    
-    if (existing) {
-      setSuggestedProduct(existing);
-      setShowSuggestion(true);
-      setCurrentProduct({ 
-        ...currentProduct, 
-        barcode: sanitizedBarcode,
-        name: existing.name,
-        category: existing.category,
-        purchasePrice: existing.purchasePrice.toString(),
-        retailPrice: existing.retailPrice.toString(),
-        unit: existing.unit,
-      });
-      setPhotos(existing.photos);
-      toast.info('Товар найден в базе данных');
-    } else {
-      // Заполняем данные из AI распознавания
-      const newPhotos = barcodeData.photoUrl ? [barcodeData.photoUrl] : [];
-      setCurrentProduct({ 
-        ...currentProduct, 
-        barcode: sanitizedBarcode,
-        name: barcodeData.name || '',
-        category: barcodeData.category || ''
-      });
-      setPhotos(newPhotos);
-      if (barcodeData.name) {
-        toast.success(`Распознано: ${barcodeData.name}`);
+    // Если есть штрихкод, ищем в базе
+    if (sanitizedBarcode) {
+      const existing = findProductByBarcode(sanitizedBarcode);
+      
+      if (existing) {
+        setSuggestedProduct(existing);
+        setShowSuggestion(true);
+        setCurrentProduct({ 
+          ...currentProduct, 
+          barcode: sanitizedBarcode,
+          name: existing.name,
+          category: existing.category,
+          purchasePrice: existing.purchasePrice.toString(),
+          retailPrice: existing.retailPrice.toString(),
+          unit: existing.unit,
+        });
+        setPhotos(existing.photos);
+        toast.info('Товар найден в базе данных');
+        addLog(`Отсканирован штрихкод: ${sanitizedBarcode} (${existing.name})`);
+        return;
       } else {
-        toast.success(`Штрихкод отсканирован: ${sanitizedBarcode}`);
+        // Штрихкод не найден в базе
+        toast.info('Штрихкод нет в базе данных');
       }
     }
+
+    // Заполняем данные из AI распознавания (с штрихкодом или без)
+    const newPhotos = barcodeData.photoUrl ? [barcodeData.photoUrl] : [];
+    setCurrentProduct({ 
+      ...currentProduct, 
+      barcode: sanitizedBarcode,
+      name: barcodeData.name || '',
+      category: barcodeData.category || ''
+    });
+    setPhotos(newPhotos);
     
-    addLog(`Отсканирован штрихкод: ${sanitizedBarcode}${barcodeData.name ? ` (${barcodeData.name})` : ''}`);
+    if (barcodeData.name) {
+      toast.success(`Распознано: ${barcodeData.name}`);
+      addLog(`Распознан товар: ${barcodeData.name}${sanitizedBarcode ? ` (штрихкод: ${sanitizedBarcode})` : ''}`);
+    } else if (sanitizedBarcode) {
+      toast.success(`Штрихкод отсканирован: ${sanitizedBarcode}`);
+      addLog(`Отсканирован штрихкод: ${sanitizedBarcode}`);
+    }
   };
 
   const acceptSuggestion = () => {

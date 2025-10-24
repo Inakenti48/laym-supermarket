@@ -406,11 +406,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           
           {/* Индикатор загрузки камеры */}
           {!cameraReady && !error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-              <div className="text-center text-white">
-                <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-lg font-medium">Загрузка камеры...</p>
-                <p className="text-sm text-gray-300 mt-2">Подождите, пожалуйста</p>
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/95">
+              <div className="text-center text-white p-6">
+                <Camera className="w-16 h-16 mx-auto mb-4 text-primary animate-pulse" />
+                <p className="text-xl font-bold mb-2">Запрос доступа к камере</p>
+                <p className="text-base text-gray-300 mb-4">Нажмите "Разрешить" в диалоге браузера</p>
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
               </div>
             </div>
           )}
@@ -451,12 +452,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         </div>
 
         {error ? (
-          <div className="p-4 text-center bg-destructive/10">
-            <div className="text-destructive text-sm mb-3 font-medium">{error}</div>
-            <Button onClick={startCamera} variant="outline" size="sm">
-              <Camera className="h-4 w-4 mr-2" />
-              Попробовать снова
-            </Button>
+          <div className="p-6 text-center bg-destructive/10 border-t-2 border-destructive">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-3" />
+            <div className="text-destructive text-base mb-4 font-semibold">{error}</div>
+            <div className="space-y-2">
+              <Button onClick={startCamera} variant="default" size="lg" className="w-full max-w-xs">
+                <Camera className="h-5 w-5 mr-2" />
+                Дать доступ к камере
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                При нажатии браузер запросит разрешение на использование камеры
+              </p>
+            </div>
           </div>
         ) : (
           <div className="p-4 text-center space-y-2">

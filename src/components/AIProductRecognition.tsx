@@ -20,6 +20,8 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
   const photo1Ref = useRef<string>('');
   const isMountedRef = useRef(true);
   const [manualCapture, setManualCapture] = useState(false);
+  const failedAttemptsRef = useRef(0);
+  const [autoCapturing, setAutoCapturing] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -198,18 +200,25 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     };
   };
 
-  const handleManualCapture = async () => {
+  const handleManualCapture = async (isAuto: boolean = false) => {
     if (isProcessing) return;
     
     setIsProcessing(true);
     setManualCapture(true);
+    if (isAuto) setAutoCapturing(true);
 
     try {
-      setNotification('📸 Захват изображения...');
+      if (isAuto) {
+        setNotification('🤖 Автозахват четкого кадра...');
+        // Ждем немного для стабилизации
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        setNotification('📸 Захват изображения...');
+      }
       
       const { image } = captureSharpImage();
       
-      setNotification('✅ Анализирую...');
+      setNotification('✅ Анализирую фото...');
       photo1Ref.current = image;
       
       const result = await recognizeProduct(image, 'product');
@@ -217,15 +226,18 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
       if (result.barcode || result.name) {
         setNotification('✅ Товар распознан!');
         onProductFound(result);
+        failedAttemptsRef.current = 0; // Сбрасываем счетчик неудач
         setTimeout(() => {
           setNotification('');
           setManualCapture(false);
+          setAutoCapturing(false);
         }, 1000);
       } else {
         setNotification('❌ Не распознано');
         setTimeout(() => {
           setNotification('');
           setManualCapture(false);
+          setAutoCapturing(false);
         }, 1500);
       }
     } catch (err: any) {
@@ -237,15 +249,24 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
       }
       setNotification('');
       setManualCapture(false);
+      setAutoCapturing(false);
     } finally {
       setIsProcessing(false);
     }
   };
 
   useEffect(() => {
-    if (!isProcessing && !manualCapture) {
+    if (!isProcessing && !manualCapture && !autoCapturing) {
       const interval = setInterval(async () => {
         if (isProcessing || !isMountedRef.current) return;
+
+        // Проверяем: если 3 неудачные попытки подряд, делаем автозахват
+        if (failedAttemptsRef.current >= 3) {
+          console.log('Переключение на режим автозахвата после неудачных попыток');
+          failedAttemptsRef.current = 0;
+          handleManualCapture(true);
+          return;
+        }
 
         setIsProcessing(true);
 
@@ -258,6 +279,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
           if (!isSharp) {
             setIsWaitingForSharpImage(false);
             setIsProcessing(false);
+            failedAttemptsRef.current++;
             return;
           }
           
@@ -270,9 +292,11 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
           if (result.barcode || result.name) {
             setNotification('✅ Товар распознан!');
             onProductFound(result);
+            failedAttemptsRef.current = 0; // Сбрасываем счетчик
             setTimeout(() => setNotification(''), 1000);
           } else {
             setNotification('');
+            failedAttemptsRef.current++; // Увеличиваем счетчик неудач
           }
         } catch (err: any) {
           console.error('Recognition cycle error:', err);
@@ -282,6 +306,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             toast.error('Требуется пополнить баланс Lovable AI');
           }
           setNotification('');
+          failedAttemptsRef.current++;
         } finally {
           setIsProcessing(false);
         }
@@ -289,7 +314,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
 
       return () => clearInterval(interval);
     }
-  }, [isProcessing, manualCapture]);
+  }, [isProcessing, manualCapture, autoCapturing]);
 
   const getStepIndicator = () => {
     return '📷 Распознавание товара';
@@ -345,16 +370,25 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             </div>
           )}
 
-          {!isProcessing && (
+          {!isProcessing && !autoCapturing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
               <Button
-                onClick={handleManualCapture}
+                onClick={() => handleManualCapture(false)}
                 size="lg"
                 className="rounded-full shadow-lg"
               >
                 <Camera className="h-5 w-5 mr-2" />
                 Сфотографировать
               </Button>
+            </div>
+          )}
+          
+          {autoCapturing && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+              <div className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-full">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm">Автозахват...</span>
+              </div>
             </div>
           )}
         </div>
@@ -369,9 +403,10 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
               🤖 AI автоматически распознаёт товары
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>📱 Режим быстрого распознавания</p>
+              <p>📱 Умный режим распознавания</p>
               <p>📷 Покажите переднюю часть упаковки</p>
               <p>⚡ Автоматическое распознавание каждые 2 сек</p>
+              <p>🤖 При неудачах - автоматический захват четкого кадра</p>
               <p>📸 Или нажмите кнопку для мгновенной съемки</p>
             </div>
           </div>

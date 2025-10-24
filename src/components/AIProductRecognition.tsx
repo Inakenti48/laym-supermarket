@@ -18,6 +18,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
   const [isProcessing, setIsProcessing] = useState(false);
   const [notification, setNotification] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [isWaitingForSharpImage, setIsWaitingForSharpImage] = useState(false);
   const photo1Ref = useRef<string>('');
   const isMountedRef = useRef(true);
 
@@ -75,7 +76,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
 
   const uploadPhotoToStorage = async (imageBase64: string): Promise<string | null> => {
     try {
-      // Конвертируем base64 в blob
+      // Конвертируем base64 в blob с высоким качеством
       const base64Data = imageBase64.split(',')[1];
       const byteCharacters = atob(base64Data);
       const byteNumbers = new Array(byteCharacters.length);
@@ -112,6 +113,57 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
       console.error('Error uploading photo:', err);
       return null;
     }
+  };
+
+  const checkImageSharpness = (canvas: HTMLCanvasElement): number => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 0;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Вычисляем резкость через анализ контраста соседних пикселей
+    let sharpness = 0;
+    const step = 4; // Проверяем каждый 4-й пиксель для скорости
+    
+    for (let y = step; y < canvas.height - step; y += step) {
+      for (let x = step; x < canvas.width - step; x += step) {
+        const i = (y * canvas.width + x) * 4;
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const rightBrightness = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
+        const bottomBrightness = (data[i + canvas.width * 4] + data[i + canvas.width * 4 + 1] + data[i + canvas.width * 4 + 2]) / 3;
+        
+        sharpness += Math.abs(brightness - rightBrightness) + Math.abs(brightness - bottomBrightness);
+      }
+    }
+    
+    return sharpness;
+  };
+
+  const captureSharpImage = (): { image: string; isSharp: boolean } => {
+    if (!videoRef.current || !canvasRef.current) return { image: '', isSharp: false };
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { image: '', isSharp: false };
+    
+    ctx.drawImage(video, 0, 0);
+    
+    // Проверяем резкость
+    const sharpness = checkImageSharpness(canvas);
+    const threshold = 1000; // Минимальный порог резкости
+    
+    // Сохраняем в высоком качестве (95%)
+    const image = canvas.toDataURL('image/jpeg', 0.95);
+    
+    return {
+      image,
+      isSharp: sharpness > threshold
+    };
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
@@ -156,15 +208,27 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
 
         try {
           if (currentStep === 'photo1') {
-            // Шаг 1: Фото лицевой стороны
-            setNotification('📷 Сканирую лицевую сторону...');
-            const image = captureImage();
+            // Шаг 1: Фото лицевой стороны - ждем четкий кадр
+            setNotification('📷 Держите камеру неподвижно...');
+            setIsWaitingForSharpImage(true);
+            
+            const { image, isSharp } = captureSharpImage();
+            
+            if (!isSharp) {
+              // Кадр размытый, пропускаем этот цикл
+              setIsWaitingForSharpImage(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            setNotification('✅ Четкий кадр! Анализирую...');
+            setIsWaitingForSharpImage(false);
             photo1Ref.current = image;
             
             const result = await recognizeProduct(image, 'product');
             
             if (result.barcode || result.name) {
-              setNotification(`✅ Товар распознан!`);
+              setNotification('✅ Товар распознан!');
               onProductFound(result);
               setTimeout(() => setNotification(''), 1000);
             } else {
@@ -174,14 +238,26 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
               setTimeout(() => setNotification(''), 2000);
             }
           } else if (currentStep === 'photo2') {
-            // Шаг 2: Фото штрихкода
-            setNotification('📷 Сканирую штрихкод...');
-            const image = captureImage();
+            // Шаг 2: Фото штрихкода - ждем четкий кадр
+            setNotification('📷 Держите штрихкод неподвижно...');
+            setIsWaitingForSharpImage(true);
+            
+            const { image, isSharp } = captureSharpImage();
+            
+            if (!isSharp) {
+              // Кадр размытый, пропускаем
+              setIsWaitingForSharpImage(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            setNotification('✅ Четкий кадр! Читаю штрихкод...');
+            setIsWaitingForSharpImage(false);
             
             const result = await recognizeProduct(image, 'barcode');
             
             if (result.barcode) {
-              setNotification(`✅ Штрихкод распознан!`);
+              setNotification('✅ Штрихкод распознан!');
               onProductFound(result);
               setTimeout(() => {
                 setNotification('');
@@ -200,7 +276,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             const result = await recognizeProduct(photo1Ref.current, 'product');
             
             if (result.barcode || result.name) {
-              setNotification(`✅ Товар распознан!`);
+              setNotification('✅ Товар распознан!');
               onProductFound(result);
               setTimeout(() => {
                 setNotification('');

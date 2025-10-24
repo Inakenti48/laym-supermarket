@@ -57,16 +57,21 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
 
       userPrompt = 'Распознай товар ТОЧНО, учитывая вкус и вариант. Не путай похожие товары. Верни JSON.';
     } else {
-      // Распознавание штрихкода
-      systemPrompt = `Ты - эксперт по распознаванию штрихкодов. Твоя задача - прочитать штрихкод с изображения.
+      // Распознавание штрихкода - также извлекаем название товара с упаковки
+      systemPrompt = `Ты - эксперт по распознаванию штрихкодов и товаров. Твоя задача:
+1. ПРОЧИТАТЬ штрихкод (EAN-13, EAN-8, CODE-128, UPC и др.)
+2. ДОПОЛНИТЕЛЬНО прочитать название товара и категорию с упаковки (если видно)
 
 ВАЖНО:
-- Ищи на фото штрихкод (EAN-13, EAN-8, CODE-128, UPC и др.)
-- Если штрихкод четкий и читаемый - верни только цифры штрихкода
-- Если штрихкода нет или он нечитаемый - возвращай пустую строку
-- Отвечай ТОЛЬКО цифрами штрихкода или пустой строкой, без объяснений`;
+- Основная задача - прочитать штрихкод
+- Дополнительно: если на фото видна упаковка с текстом - распознай название и категорию
+- Если штрихкода нет или нечитаем - возвращай пустой штрихкод
+- Название и категория могут быть пустыми, если текст не виден
 
-      userPrompt = 'Прочитай штрихкод с фото. Если читаем - верни цифры, иначе пусто.';
+Ответь СТРОГО в формате JSON:
+{"barcode": "цифры штрихкода или пусто", "name": "Название товара если видно", "category": "Категория если видно"}`;
+
+      userPrompt = 'Прочитай штрихкод и дополнительно название товара с упаковки. Верни JSON.';
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -118,8 +123,8 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
     console.log(`Recognition result: ${rawResult}`);
 
     let result;
-    if (recognitionType === 'product') {
-      // Парсим JSON ответ для распознавания товара
+    if (recognitionType === 'product' || recognitionType === 'barcode') {
+      // Парсим JSON ответ для обоих типов распознавания
       try {
         // Извлекаем JSON из ответа (может быть обернут в markdown)
         const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
@@ -129,11 +134,10 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
           result = { barcode: '', name: '', category: '' };
         }
       } catch (e) {
-        console.error('Failed to parse product recognition result:', e);
+        console.error('Failed to parse recognition result:', e);
         result = { barcode: '', name: '', category: '' };
       }
     } else {
-      // Для штрихкода возвращаем просто строку
       result = { barcode: rawResult };
     }
 

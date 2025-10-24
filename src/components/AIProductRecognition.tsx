@@ -209,7 +209,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
 
         try {
           if (mode === 'barcode') {
-            // Режим только штрихкода - сразу ищем штрихкод
+            // Режим штрихкода - ищем штрихкод и распознаем название с упаковки
             setNotification('📷 Держите штрихкод неподвижно...');
             setIsWaitingForSharpImage(true);
             
@@ -233,8 +233,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
             } else {
               setNotification('');
             }
-          } else if (currentStep === 'photo1') {
-            // Шаг 1: Фото лицевой стороны - ждем четкий кадр
+          } else {
+            // Режим лицевой стороны - только распознаем товар, БЕЗ перехода к штрихкоду
             setNotification('📷 Держите камеру неподвижно...');
             setIsWaitingForSharpImage(true);
             
@@ -258,61 +258,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
               onProductFound(result);
               setTimeout(() => setNotification(''), 1000);
             } else {
-              // Не распознали, переходим к фото штрихкода
-              setCurrentStep('photo2');
-              setNotification('🔄 Переверните на штрихкод');
-              setTimeout(() => setNotification(''), 2000);
-            }
-          } else if (currentStep === 'photo2') {
-            // Шаг 2: Фото штрихкода - ждем четкий кадр
-            setNotification('📷 Держите штрихкод неподвижно...');
-            setIsWaitingForSharpImage(true);
-            
-            const { image, isSharp } = captureSharpImage();
-            
-            if (!isSharp) {
-              // Кадр размытый, пропускаем
-              setIsWaitingForSharpImage(false);
-              setIsProcessing(false);
-              return;
-            }
-            
-            setNotification('✅ Четкий кадр! Читаю штрихкод...');
-            setIsWaitingForSharpImage(false);
-            
-            const result = await recognizeProduct(image, 'barcode');
-            
-            if (result.barcode) {
-              setNotification('✅ Штрихкод распознан!');
-              onProductFound(result);
-              setTimeout(() => {
-                setNotification('');
-                setCurrentStep('photo1');
-                photo1Ref.current = '';
-              }, 1000);
-            } else {
-              // Не распознали, возвращаемся к более тщательному анализу первого фото
-              setCurrentStep('retry');
-              setNotification('🔄 Повторный анализ...');
-            }
-          } else if (currentStep === 'retry') {
-            // Шаг 3: Повторный тщательный анализ первого фото
-            setNotification('🔍 Тщательный анализ...');
-            
-            const result = await recognizeProduct(photo1Ref.current, 'product');
-            
-            if (result.barcode || result.name) {
-              setNotification('✅ Товар распознан!');
-              onProductFound(result);
-              setTimeout(() => {
-                setNotification('');
-                setCurrentStep('photo1');
-                photo1Ref.current = '';
-              }, 1000);
-            } else {
-              // Снова не распознали, начинаем цикл заново
-              setCurrentStep('photo1');
-              photo1Ref.current = '';
+              // Не распознали - просто очищаем и продолжаем пробовать
               setNotification('');
             }
           }
@@ -323,9 +269,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
             toast.error('Требуется пополнить баланс Lovable AI');
           }
-          // Сбрасываем цикл при ошибке
-          setCurrentStep('photo1');
-          photo1Ref.current = '';
           setNotification('');
         } finally {
           setIsProcessing(false);
@@ -416,12 +359,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
                   <p>📱 Режим распознавания штрихкода</p>
                   <p>📷 Наведите камеру на штрихкод</p>
                   <p>⏱️ Держите неподвижно для четкого снимка</p>
+                  <p>✅ Дополнительно распознается название с упаковки</p>
                 </>
               ) : (
                 <>
-                  <p>1️⃣ Покажите лицевую сторону товара</p>
-                  <p>2️⃣ Если не распознал - переверните на штрихкод</p>
-                  <p>3️⃣ Система будет пробовать до успешного распознавания</p>
+                  <p>📱 Режим распознавания лицевой стороны</p>
+                  <p>📷 Покажите переднюю часть упаковки</p>
+                  <p>⏱️ Держите неподвижно для четкого снимка</p>
+                  <p>✅ Автоматическое распознавание названия и категории</p>
                 </>
               )}
             </div>

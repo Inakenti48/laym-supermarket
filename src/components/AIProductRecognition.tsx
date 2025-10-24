@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
@@ -18,6 +19,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
   const [isWaitingForSharpImage, setIsWaitingForSharpImage] = useState(false);
   const photo1Ref = useRef<string>('');
   const isMountedRef = useRef(true);
+  const [manualCapture, setManualCapture] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -121,7 +123,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     
     // Вычисляем резкость через анализ контраста соседних пикселей
     let sharpness = 0;
-    const step = 4; // Проверяем каждый 4-й пиксель для скорости
+    const step = 8; // Проверяем каждый 8-й пиксель для большей скорости
     
     for (let y = step; y < canvas.height - step; y += step) {
       for (let x = step; x < canvas.width - step; x += step) {
@@ -152,7 +154,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     
     // Проверяем резкость
     const sharpness = checkImageSharpness(canvas);
-    const threshold = 1000; // Минимальный порог резкости
+    const threshold = 400; // Более низкий порог для быстрого распознавания
     
     // Сохраняем в высоком качестве (95%)
     const image = canvas.toDataURL('image/jpeg', 0.95);
@@ -196,15 +198,59 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     };
   };
 
+  const handleManualCapture = async () => {
+    if (isProcessing) return;
+    
+    setIsProcessing(true);
+    setManualCapture(true);
+
+    try {
+      setNotification('📸 Захват изображения...');
+      
+      const { image } = captureSharpImage();
+      
+      setNotification('✅ Анализирую...');
+      photo1Ref.current = image;
+      
+      const result = await recognizeProduct(image, 'product');
+      
+      if (result.barcode || result.name) {
+        setNotification('✅ Товар распознан!');
+        onProductFound(result);
+        setTimeout(() => {
+          setNotification('');
+          setManualCapture(false);
+        }, 1000);
+      } else {
+        setNotification('❌ Не распознано');
+        setTimeout(() => {
+          setNotification('');
+          setManualCapture(false);
+        }, 1500);
+      }
+    } catch (err: any) {
+      console.error('Recognition error:', err);
+      if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
+        toast.error('Слишком много запросов, подождите немного');
+      } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
+        toast.error('Требуется пополнить баланс Lovable AI');
+      }
+      setNotification('');
+      setManualCapture(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   useEffect(() => {
-    if (!isProcessing) {
+    if (!isProcessing && !manualCapture) {
       const interval = setInterval(async () => {
         if (isProcessing || !isMountedRef.current) return;
 
         setIsProcessing(true);
 
         try {
-          setNotification('📷 Держите камеру неподвижно...');
+          setNotification('📷 Ищу товар...');
           setIsWaitingForSharpImage(true);
           
           const { image, isSharp } = captureSharpImage();
@@ -215,7 +261,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             return;
           }
           
-          setNotification('✅ Четкий кадр! Анализирую...');
+          setNotification('✅ Анализирую...');
           setIsWaitingForSharpImage(false);
           photo1Ref.current = image;
           
@@ -239,11 +285,11 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
         } finally {
           setIsProcessing(false);
         }
-      }, 3000);
+      }, 1500); // Быстрый интервал 1.5 секунды
 
       return () => clearInterval(interval);
     }
-  }, [isProcessing]);
+  }, [isProcessing, manualCapture]);
 
   const getStepIndicator = () => {
     return '📷 Распознавание товара';
@@ -298,6 +344,19 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
               </div>
             </div>
           )}
+
+          {!isProcessing && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+              <Button
+                onClick={handleManualCapture}
+                size="lg"
+                className="rounded-full shadow-lg"
+              >
+                <Camera className="h-5 w-5 mr-2" />
+                Сфотографировать
+              </Button>
+            </div>
+          )}
         </div>
 
         {error ? (
@@ -310,10 +369,10 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
               🤖 AI автоматически распознаёт товары
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>📱 Режим распознавания лицевой стороны</p>
+              <p>📱 Режим быстрого распознавания</p>
               <p>📷 Покажите переднюю часть упаковки</p>
-              <p>⏱️ Держите неподвижно для четкого снимка</p>
-              <p>✅ Автоматическое распознавание названия и категории</p>
+              <p>⚡ Автоматическое распознавание каждые 1.5 сек</p>
+              <p>📸 Или нажмите кнопку для мгновенной съемки</p>
             </div>
           </div>
         )}

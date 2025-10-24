@@ -329,3 +329,48 @@ export const paySupplierDebt = (supplierId: string, amount: number, userId: stri
   });
   localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
 };
+
+// Экспорт всех данных для резервного копирования
+export const exportAllData = () => {
+  const allData = {
+    products: getStoredProducts(),
+    cancellations: getCancellationRequests(),
+    suppliers: getSuppliers(),
+    exportDate: new Date().toISOString(),
+    version: '1.0'
+  };
+
+  const jsonString = JSON.stringify(allData, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+// Импорт данных из резервной копии
+export const importAllData = (jsonData: string) => {
+  try {
+    const data = JSON.parse(jsonData);
+    
+    if (data.products) {
+      localStorage.setItem('products', JSON.stringify(data.products));
+    }
+    if (data.cancellations) {
+      localStorage.setItem('cancellationRequests', JSON.stringify(data.cancellations));
+    }
+    if (data.suppliers) {
+      localStorage.setItem('suppliers', JSON.stringify(data.suppliers));
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Ошибка импорта данных:', error);
+    return false;
+  }
+};

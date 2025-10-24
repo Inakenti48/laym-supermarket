@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getAllProducts, getExpiringProducts } from '@/lib/storage';
+import { Button } from '@/components/ui/button';
+import { getAllProducts, getExpiringProducts, exportAllData } from '@/lib/storage';
 import { getEmployees, getLogs } from '@/lib/auth';
+import { toast } from 'sonner';
 
 export const DashboardTab = () => {
   const [stats, setStats] = useState({
@@ -99,13 +101,24 @@ export const DashboardTab = () => {
     }
   ];
 
+  const handleExport = () => {
+    exportAllData();
+    toast.success('Резервная копия успешно скачана');
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Панель управления</h2>
-        <p className="text-muted-foreground mt-2">
-          Обзор ключевых показателей вашего бизнеса
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Панель управления</h2>
+          <p className="text-muted-foreground mt-2">
+            Обзор ключевых показателей вашего бизнеса
+          </p>
+        </div>
+        <Button onClick={handleExport} variant="outline" className="gap-2">
+          <Download className="h-4 w-4" />
+          Скачать резервную копию
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -35,7 +35,6 @@ export const InventoryTab = () => {
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
   const [showAIScanner, setShowAIScanner] = useState(false);
-  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState({
@@ -255,13 +254,9 @@ export const InventoryTab = () => {
         <div className="fixed inset-0 bg-background z-50">
           <AIProductRecognition 
             onProductFound={handleScan}
-            mode={aiScanMode}
           />
           <Button
-            onClick={() => {
-              setShowAIScanner(false);
-              setAiScanMode('product');
-            }}
+            onClick={() => setShowAIScanner(false)}
             variant="outline"
             className="absolute top-4 right-4 z-50"
           >
@@ -287,24 +282,11 @@ export const InventoryTab = () => {
           <BarcodeScanner onScan={handleScan} />
         </div>
         <Button 
-          onClick={() => {
-            setAiScanMode('product');
-            setShowAIScanner(true);
-          }} 
+          onClick={() => setShowAIScanner(true)} 
           variant="outline"
         >
           <Camera className="h-4 w-4 mr-2" />
-          AI Лицевая
-        </Button>
-        <Button 
-          onClick={() => {
-            setAiScanMode('barcode');
-            setShowAIScanner(true);
-          }} 
-          variant="outline"
-        >
-          <Scan className="h-4 w-4 mr-2" />
-          AI Штрихкод
+          AI Распознавание
         </Button>
         {isAdmin && (
           <>

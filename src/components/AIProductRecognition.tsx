@@ -6,16 +6,12 @@ import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string }) => void;
-  mode?: 'product' | 'barcode'; // Режим: распознавание товара или только штрихкода
 }
 
-type RecognitionStep = 'photo1' | 'photo2' | 'retry';
-
-export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIProductRecognitionProps) => {
+export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [currentStep, setCurrentStep] = useState<RecognitionStep>('photo1');
   const [isProcessing, setIsProcessing] = useState(false);
   const [notification, setNotification] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -208,59 +204,29 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         setIsProcessing(true);
 
         try {
-          if (mode === 'barcode') {
-            // Режим штрихкода - ищем штрихкод и распознаем название с упаковки
-            setNotification('📷 Держите штрихкод неподвижно...');
-            setIsWaitingForSharpImage(true);
-            
-            const { image, isSharp } = captureSharpImage();
-            
-            if (!isSharp) {
-              setIsWaitingForSharpImage(false);
-              setIsProcessing(false);
-              return;
-            }
-            
-            setNotification('✅ Четкий кадр! Читаю штрихкод...');
+          setNotification('📷 Держите камеру неподвижно...');
+          setIsWaitingForSharpImage(true);
+          
+          const { image, isSharp } = captureSharpImage();
+          
+          if (!isSharp) {
             setIsWaitingForSharpImage(false);
-            
-            const result = await recognizeProduct(image, 'barcode');
-            
-            if (result.barcode) {
-              setNotification('✅ Штрихкод распознан!');
-              onProductFound(result);
-              setTimeout(() => setNotification(''), 1000);
-            } else {
-              setNotification('');
-            }
+            setIsProcessing(false);
+            return;
+          }
+          
+          setNotification('✅ Четкий кадр! Анализирую...');
+          setIsWaitingForSharpImage(false);
+          photo1Ref.current = image;
+          
+          const result = await recognizeProduct(image, 'product');
+          
+          if (result.barcode || result.name) {
+            setNotification('✅ Товар распознан!');
+            onProductFound(result);
+            setTimeout(() => setNotification(''), 1000);
           } else {
-            // Режим лицевой стороны - только распознаем товар, БЕЗ перехода к штрихкоду
-            setNotification('📷 Держите камеру неподвижно...');
-            setIsWaitingForSharpImage(true);
-            
-            const { image, isSharp } = captureSharpImage();
-            
-            if (!isSharp) {
-              // Кадр размытый, пропускаем этот цикл
-              setIsWaitingForSharpImage(false);
-              setIsProcessing(false);
-              return;
-            }
-            
-            setNotification('✅ Четкий кадр! Анализирую...');
-            setIsWaitingForSharpImage(false);
-            photo1Ref.current = image;
-            
-            const result = await recognizeProduct(image, 'product');
-            
-            if (result.barcode || result.name) {
-              setNotification('✅ Товар распознан!');
-              onProductFound(result);
-              setTimeout(() => setNotification(''), 1000);
-            } else {
-              // Не распознали - просто очищаем и продолжаем пробовать
-              setNotification('');
-            }
+            setNotification('');
           }
         } catch (err: any) {
           console.error('Recognition cycle error:', err);
@@ -273,24 +239,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         } finally {
           setIsProcessing(false);
         }
-      }, 3000); // Интервал между попытками распознавания
+      }, 3000);
 
       return () => clearInterval(interval);
     }
-  }, [currentStep, isProcessing, mode]);
+  }, [isProcessing]);
 
   const getStepIndicator = () => {
-    if (mode === 'barcode') {
-      return '📷 Режим штрихкода';
-    }
-    switch (currentStep) {
-      case 'photo1':
-        return '1️⃣ Лицевая сторона';
-      case 'photo2':
-        return '2️⃣ Штрихкод';
-      case 'retry':
-        return '3️⃣ Повторный анализ';
-    }
+    return '📷 Распознавание товара';
   };
 
   return (
@@ -354,21 +310,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
               🤖 AI автоматически распознаёт товары
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              {mode === 'barcode' ? (
-                <>
-                  <p>📱 Режим распознавания штрихкода</p>
-                  <p>📷 Наведите камеру на штрихкод</p>
-                  <p>⏱️ Держите неподвижно для четкого снимка</p>
-                  <p>✅ Дополнительно распознается название с упаковки</p>
-                </>
-              ) : (
-                <>
-                  <p>📱 Режим распознавания лицевой стороны</p>
-                  <p>📷 Покажите переднюю часть упаковки</p>
-                  <p>⏱️ Держите неподвижно для четкого снимка</p>
-                  <p>✅ Автоматическое распознавание названия и категории</p>
-                </>
-              )}
+              <p>📱 Режим распознавания лицевой стороны</p>
+              <p>📷 Покажите переднюю часть упаковки</p>
+              <p>⏱️ Держите неподвижно для четкого снимка</p>
+              <p>✅ Автоматическое распознавание названия и категории</p>
             </div>
           </div>
         )}

@@ -68,7 +68,6 @@ export const CashierTab = () => {
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
   const [showAIScanner, setShowAIScanner] = useState(false);
-  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
   const user = getCurrentUser();
 
@@ -309,13 +308,9 @@ export const CashierTab = () => {
         <div className="fixed inset-0 bg-background z-50">
           <AIProductRecognition 
             onProductFound={handleScan}
-            mode={aiScanMode}
           />
           <Button
-            onClick={() => {
-              setShowAIScanner(false);
-              setAiScanMode('product');
-            }}
+            onClick={() => setShowAIScanner(false)}
             variant="outline"
             className="absolute top-4 right-4 z-50"
           >
@@ -554,26 +549,12 @@ export const CashierTab = () => {
               {/* AI Scanning Buttons */}
               <div className="grid grid-cols-2 gap-2">
                 <Button
-                  onClick={() => {
-                    setAiScanMode('product');
-                    setShowAIScanner(true);
-                  }}
+                  onClick={() => setShowAIScanner(true)}
                   variant="outline"
                   className="w-full"
                 >
                   <Camera className="h-4 w-4 mr-2" />
-                  AI Лицевая
-                </Button>
-                <Button
-                  onClick={() => {
-                    setAiScanMode('barcode');
-                    setShowAIScanner(true);
-                  }}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  AI Штрихкод
+                  AI Распознавание
                 </Button>
               </div>
               

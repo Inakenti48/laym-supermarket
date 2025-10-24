@@ -377,13 +377,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           </div>
         </div>
 
-        <div className="relative bg-black rounded-b-lg overflow-hidden">
+        <div className="relative bg-black rounded-b-lg overflow-hidden" style={{ minHeight: '400px' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full aspect-video object-cover"
+            className="w-full h-full object-cover"
+            style={{ minHeight: '400px', maxHeight: '600px' }}
           />
 
           {notification && (
@@ -430,8 +431,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         </div>
 
         {error ? (
-          <div className="p-4 text-center">
-            <div className="text-destructive text-sm mb-3">{error}</div>
+          <div className="p-4 text-center bg-destructive/10">
+            <div className="text-destructive text-sm mb-3 font-medium">{error}</div>
+            <Button onClick={startCamera} variant="outline" size="sm">
+              <Camera className="h-4 w-4 mr-2" />
+              Попробовать снова
+            </Button>
           </div>
         ) : (
           <div className="p-4 text-center space-y-2">

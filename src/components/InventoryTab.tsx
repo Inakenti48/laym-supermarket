@@ -156,7 +156,9 @@ export const InventoryTab = () => {
     const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
     const quantity = parseFloat(currentProduct.quantity);
 
-    const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
+    // Создаем товар для списка (пока не сохраняем в базу)
+    const newProduct: Product = {
+      id: `temp-${Date.now()}`, // Временный ID
       barcode: currentProduct.barcode,
       name: currentProduct.name,
       category: currentProduct.category,
@@ -166,37 +168,11 @@ export const InventoryTab = () => {
       unit: currentProduct.unit,
       expiryDate: currentProduct.expiryDate || undefined,
       photos,
-      paymentType: 'full',
-      paidAmount: purchasePrice * quantity,
-      debtAmount: 0,
-      addedBy: currentUser?.role || 'unknown',
-    };
-
-    const savedProduct = saveProduct(productData, currentUser?.username || 'unknown');
-
-    const newProduct: Product = {
-      id: savedProduct.id,
-      barcode: savedProduct.barcode,
-      name: savedProduct.name,
-      category: savedProduct.category,
-      purchasePrice: savedProduct.purchasePrice,
-      retailPrice: savedProduct.retailPrice,
-      quantity: savedProduct.quantity,
-      unit: savedProduct.unit,
-      expiryDate: savedProduct.expiryDate,
-      photos: savedProduct.photos,
     };
 
     setProducts([...products, newProduct]);
     
-    addLog(`Добавлен товар: ${newProduct.name} (${quantity} ${newProduct.unit})`);
-    
-    if (suggestedProduct && (suggestedProduct.purchasePrice !== purchasePrice || suggestedProduct.retailPrice !== retailPrice)) {
-      const priceDiff = purchasePrice - suggestedProduct.purchasePrice;
-      addLog(`Изменение цены "${newProduct.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
-    }
-    
-    toast.success('Товар добавлен');
+    toast.success('Товар добавлен в список. Нажмите "Занести товары" для сохранения в базу');
 
     // Reset form
     setCurrentProduct({
@@ -211,6 +187,65 @@ export const InventoryTab = () => {
     });
     setPhotos([]);
     setSuggestedProduct(null);
+  };
+
+  const saveAllProducts = () => {
+    if (products.length === 0) {
+      toast.error('Список товаров пуст');
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    products.forEach(product => {
+      try {
+        const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
+          barcode: product.barcode,
+          name: product.name,
+          category: product.category,
+          purchasePrice: product.purchasePrice,
+          retailPrice: product.retailPrice,
+          quantity: product.quantity,
+          unit: product.unit,
+          expiryDate: product.expiryDate,
+          photos: product.photos,
+          paymentType: 'full',
+          paidAmount: product.purchasePrice * product.quantity,
+          debtAmount: 0,
+          addedBy: currentUser?.role || 'unknown',
+        };
+
+        const saved = saveProduct(productData, currentUser?.username || 'unknown');
+        
+        if (saved) {
+          addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
+          
+          if (suggestedProduct && 
+              (suggestedProduct.purchasePrice !== product.purchasePrice || 
+               suggestedProduct.retailPrice !== product.retailPrice)) {
+            const priceDiff = product.purchasePrice - suggestedProduct.purchasePrice;
+            addLog(`Изменение цены "${product.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
+          }
+          
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      } catch (error) {
+        console.error('Error saving product:', error);
+        errorCount++;
+      }
+    });
+
+    if (successCount > 0) {
+      toast.success(`Успешно добавлено товаров: ${successCount}`);
+      setProducts([]); // Очищаем список после успешного сохранения
+    }
+    
+    if (errorCount > 0) {
+      toast.error(`Ошибок при добавлении: ${errorCount}`);
+    }
   };
 
   return (
@@ -450,19 +485,30 @@ export const InventoryTab = () => {
 
         {/* Products List */}
         <Card className="p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Список товаров ({products.length})
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Список товаров ({products.length})
+            </h3>
+            {products.length > 0 && (
+              <Button 
+                onClick={saveAllProducts}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Занести товары
+              </Button>
+            )}
+          </div>
 
           {products.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              Товары не добавлены
+              Товары не добавлены. Добавьте товары и нажмите "Занести товары"
             </div>
           ) : (
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {products.map((product) => (
-                <div key={product.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg">
+                <div key={product.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg border-l-4 border-amber-500">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <div className="font-medium text-sm sm:text-base">{product.name}</div>
@@ -473,6 +519,9 @@ export const InventoryTab = () => {
                           <div>Срок до: {new Date(product.expiryDate).toLocaleDateString('ru-RU')}</div>
                         )}
                       </div>
+                      <Badge variant="secondary" className="mt-2 text-xs">
+                        Ожидает подтверждения
+                      </Badge>
                     </div>
                     <div className="text-right ml-2">
                       <div className="font-semibold text-sm sm:text-base">

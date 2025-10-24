@@ -4,6 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
@@ -55,6 +65,8 @@ export const CashierTab = () => {
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [printerConnected, setPrinterConnected] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const user = getCurrentUser();
 
@@ -227,29 +239,67 @@ export const CashierTab = () => {
 
     addLog(`Продажа завершена: ${total}₽ (${cart.length} товаров)`);
     
+    // Показываем диалог выбора печати
+    setPendingReceiptData(receiptData);
+    setShowPrintDialog(true);
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!pendingReceiptData) return;
+
     // Печать на физическом принтере если подключен
     if (isPrinterConnected()) {
       try {
-        await printToDevice(receiptData);
+        await printToDevice(pendingReceiptData);
         toast.success('Чек отправлен на принтер');
       } catch (error) {
-        toast.error('Ошибка печати. Открываю браузерную версию');
-        printReceiptBrowser(receiptData);
+        toast.error('Ошибка печати на принтере');
       }
     } else {
       // Браузерная печать
-      printReceiptBrowser(receiptData);
+      printReceiptBrowser(pendingReceiptData);
     }
     
-    // Clear cart
+    finalizeSale();
+  };
+
+  const handleSkipPrint = () => {
+    toast.success('Продажа завершена без печати чека');
+    finalizeSale();
+  };
+
+  const finalizeSale = () => {
     setCart([]);
     setReceivedAmount('');
     setShowCalculator(false);
-    toast.success('Продажа завершена!');
+    setShowPrintDialog(false);
+    setPendingReceiptData(null);
   };
 
   return (
     <div className="space-y-4">
+      {/* Print Confirmation Dialog */}
+      <AlertDialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Печать чека</AlertDialogTitle>
+            <AlertDialogDescription>
+              Хотите распечатать чек для этой продажи?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleSkipPrint}>
+              <XCircle className="w-4 h-4 mr-2" />
+              Без печати
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handlePrintReceipt}>
+              <Printer className="w-4 h-4 mr-2" />
+              Печатать чек
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Camera Scanner - Always Active */}
       <CameraScanner 
         onScan={handleScan} 

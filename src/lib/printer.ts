@@ -159,9 +159,6 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
 
 // Альтернативный метод для браузерной печати (если принтер не подключен)
 export const printReceiptBrowser = (data: ReceiptData): void => {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
   const html = `
     <!DOCTYPE html>
     <html>
@@ -186,6 +183,9 @@ export const printReceiptBrowser = (data: ReceiptData): void => {
         .separator { border-top: 1px dashed #000; margin: 5px 0; }
         .item { display: flex; justify-content: space-between; margin: 2px 0; }
         .total { font-size: 14px; font-weight: bold; }
+        @media print {
+          body { width: 80mm; }
+        }
       </style>
     </head>
     <body>
@@ -218,11 +218,28 @@ export const printReceiptBrowser = (data: ReceiptData): void => {
     </html>
   `;
 
-  printWindow.document.write(html);
-  printWindow.document.close();
-  
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.close();
-  }, 250);
+  // Создаем скрытый iframe для печати
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+
+  const iframeDoc = iframe.contentWindow?.document;
+  if (iframeDoc) {
+    iframeDoc.open();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    // Печать и удаление iframe
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    }, 250);
+  }
 };

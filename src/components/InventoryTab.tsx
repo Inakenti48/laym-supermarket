@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarcodeScanner } from './BarcodeScanner';
-import { CameraScanner } from './CameraScanner';
+import { AIProductRecognition } from './AIProductRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
 import { addLog, getCurrentUser } from '@/lib/auth';
@@ -34,7 +34,7 @@ export const InventoryTab = () => {
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [showCamera, setShowCamera] = useState(false);
+  const [showAIScanner, setShowAIScanner] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState({
@@ -200,12 +200,21 @@ export const InventoryTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* Camera Scanner */}
-      {showCamera && (
-        <CameraScanner 
-          onScan={handleScan} 
-          onClose={() => setShowCamera(false)} 
-        />
+      {/* AI Product Recognition */}
+      {showAIScanner && (
+        <div className="fixed inset-0 bg-background z-50">
+          <AIProductRecognition 
+            onProductFound={handleScan}
+          />
+          <Button
+            onClick={() => setShowAIScanner(false)}
+            variant="outline"
+            className="absolute top-4 right-4 z-50"
+          >
+            <X className="h-4 w-4 mr-2" />
+            Закрыть
+          </Button>
+        </div>
       )}
 
       {/* CSV Import Dialog */}
@@ -223,9 +232,9 @@ export const InventoryTab = () => {
         <div className="flex-1 min-w-[200px]">
           <BarcodeScanner onScan={handleScan} />
         </div>
-        <Button onClick={() => setShowCamera(true)} variant="outline">
+        <Button onClick={() => setShowAIScanner(true)} variant="outline">
           <Camera className="h-4 w-4 mr-2" />
-          Камера
+          AI Распознавание
         </Button>
         {isAdmin && (
           <>

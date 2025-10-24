@@ -102,9 +102,11 @@ export const CashierTab = () => {
     }
   };
 
-  const handleScan = (barcode: string) => {
-    // Безопасность: санитизация входных данных
-    const sanitizedBarcode = barcode.trim().replace(/[<>'"]/g, '');
+  const handleScan = (data: { barcode: string; name?: string; category?: string } | string) => {
+    // Поддержка обратной совместимости: если передана строка, преобразуем в объект
+    const barcodeData = typeof data === 'string' ? { barcode: data } : data;
+    
+    const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
     if (!sanitizedBarcode || sanitizedBarcode.length > 50) {
       toast.error('Неверный формат штрихкода');
       return;

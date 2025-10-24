@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (barcode: string) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string }) => void;
 }
 
 type RecognitionStep = 'photo1' | 'photo2' | 'retry';
@@ -73,7 +73,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     return canvas.toDataURL('image/jpeg', 0.8);
   };
 
-  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<string> => {
+  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string }> => {
     const allProducts = getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {
@@ -83,7 +83,7 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
         allProducts: allProducts.map(p => ({
           barcode: p.barcode,
           name: p.name,
-          retailPrice: p.retailPrice
+          category: p.category
         }))
       }
     });
@@ -93,7 +93,12 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
       throw error;
     }
 
-    return data?.result || '';
+    const result = data?.result || {};
+    return {
+      barcode: result.barcode || '',
+      name: result.name || '',
+      category: result.category || ''
+    };
   };
 
   useEffect(() => {
@@ -110,11 +115,11 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             const image = captureImage();
             photo1Ref.current = image;
             
-            const barcode = await recognizeProduct(image, 'product');
+            const result = await recognizeProduct(image, 'product');
             
-            if (barcode) {
+            if (result.barcode || result.name) {
               setNotification(`✅ Товар распознан!`);
-              onProductFound(barcode);
+              onProductFound(result);
               setTimeout(() => setNotification(''), 1000);
             } else {
               // Не распознали, переходим к фото штрихкода
@@ -127,11 +132,11 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             setNotification('📷 Сканирую штрихкод...');
             const image = captureImage();
             
-            const barcode = await recognizeProduct(image, 'barcode');
+            const result = await recognizeProduct(image, 'barcode');
             
-            if (barcode) {
+            if (result.barcode) {
               setNotification(`✅ Штрихкод распознан!`);
-              onProductFound(barcode);
+              onProductFound(result);
               setTimeout(() => {
                 setNotification('');
                 setCurrentStep('photo1');
@@ -146,11 +151,11 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
             // Шаг 3: Повторный тщательный анализ первого фото
             setNotification('🔍 Тщательный анализ...');
             
-            const barcode = await recognizeProduct(photo1Ref.current, 'product');
+            const result = await recognizeProduct(photo1Ref.current, 'product');
             
-            if (barcode) {
+            if (result.barcode || result.name) {
               setNotification(`✅ Товар распознан!`);
-              onProductFound(barcode);
+              onProductFound(result);
               setTimeout(() => {
                 setNotification('');
                 setCurrentStep('photo1');

@@ -25,18 +25,22 @@ serve(async (req) => {
 
     if (recognitionType === 'product') {
       // Распознавание по лицевой стороне товара
-      systemPrompt = `Ты - эксперт по распознаванию товаров в супермаркете. Твоя задача - определить товар по фото его лицевой стороны.
+      systemPrompt = `Ты - эксперт по распознаванию товаров в супермаркете. Твоя задача - определить товар по фото его лицевой стороны и извлечь информацию.
 
-Список доступных товаров в базе (barcode|name|price):
-${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.retailPrice}₽`).join('\n')}
+Список доступных товаров в базе (barcode|name|category):
+${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')}
 
 ВАЖНО:
-- Внимательно анализируй упаковку, этикетку, логотипы
-- Если видишь точное совпадение с товаром из списка - возвращай его штрихкод
-- Если товара НЕТ в списке или не уверен на 90% - возвращай пустую строку
-- Отвечай ТОЛЬКО штрихкодом или пустой строкой, без объяснений`;
+- Внимательно анализируй упаковку, этикетку, текст на товаре
+- Определи название товара (бренд + тип продукта)
+- Определи категорию (Молочные продукты, Напитки, Хлеб и выпечка, Мясо, Сладости, и т.д.)
+- Если товар ЕСТЬ в списке - верни его штрихкод
+- Если товара НЕТ в списке - верни пустой штрихкод, но заполни название и категорию
 
-      userPrompt = 'Определи товар по фото. Если уверен на 90%+ - верни штрихкод, иначе пусто.';
+Ответь СТРОГО в формате JSON:
+{"barcode": "штрихкод или пусто", "name": "Название товара", "category": "Категория"}`;
+
+      userPrompt = 'Распознай товар и верни JSON с barcode, name, category.';
     } else {
       // Распознавание штрихкода
       systemPrompt = `Ты - эксперт по распознаванию штрихкодов. Твоя задача - прочитать штрихкод с изображения.
@@ -94,9 +98,29 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.retailPrice}₽`).join
     }
 
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content?.trim() || '';
+    const rawResult = data.choices?.[0]?.message?.content?.trim() || '';
     
-    console.log(`Recognition result: ${result}`);
+    console.log(`Recognition result: ${rawResult}`);
+
+    let result;
+    if (recognitionType === 'product') {
+      // Парсим JSON ответ для распознавания товара
+      try {
+        // Извлекаем JSON из ответа (может быть обернут в markdown)
+        const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[0]);
+        } else {
+          result = { barcode: '', name: '', category: '' };
+        }
+      } catch (e) {
+        console.error('Failed to parse product recognition result:', e);
+        result = { barcode: '', name: '', category: '' };
+      }
+    } else {
+      // Для штрихкода возвращаем просто строку
+      result = { barcode: rawResult };
+    }
 
     return new Response(JSON.stringify({ result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -23,6 +23,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const [manualCapture, setManualCapture] = useState(false);
   const failedAttemptsRef = useRef(0);
   const [autoCapturing, setAutoCapturing] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -36,6 +37,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
 
   const startCamera = async () => {
     try {
+      setCameraReady(false);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 1280, height: 720 }
       });
@@ -43,20 +45,42 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       if (videoRef.current && isMountedRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Ждем загрузки метаданных видео
+        await new Promise<void>((resolve, reject) => {
+          if (!videoRef.current) {
+            reject(new Error('Video ref lost'));
+            return;
+          }
+          
+          const video = videoRef.current;
+          const timeout = setTimeout(() => {
+            reject(new Error('Video load timeout'));
+          }, 10000);
+          
+          video.onloadedmetadata = () => {
+            clearTimeout(timeout);
+            console.log('Видео метаданные загружены:', video.videoWidth, 'x', video.videoHeight);
+            resolve();
+          };
+        });
+        
         // Явно запускаем воспроизведение
-        try {
+        if (videoRef.current) {
           await videoRef.current.play();
           console.log('Видео успешно запущено');
-        } catch (playErr) {
-          console.error('Ошибка запуска видео:', playErr);
+          setCameraReady(true);
         }
       }
     } catch (err: any) {
       console.error('Camera error:', err);
+      setCameraReady(false);
       if (err.name === 'NotAllowedError') {
         setError('Доступ к камере запрещен. Разрешите доступ в настройках.');
+      } else if (err.message?.includes('timeout')) {
+        setError('Таймаут запуска камеры. Попробуйте еще раз.');
       } else {
-        setError('Не удалось запустить камеру.');
+        setError('Не удалось запустить камеру. Проверьте подключение.');
       }
     }
   };
@@ -154,6 +178,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    
+    // Проверяем что видео загружено
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.warn('Видео еще не загружено');
+      return { image: '', isSharp: false };
+    }
+    
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     
@@ -285,9 +316,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   };
 
   useEffect(() => {
-    if (!isProcessing && !manualCapture && !autoCapturing) {
+    if (!isProcessing && !manualCapture && !autoCapturing && cameraReady) {
       const interval = setInterval(async () => {
-        if (isProcessing || !isMountedRef.current) return;
+        if (isProcessing || !isMountedRef.current || !cameraReady) return;
 
         // Проверяем: если 3 неудачные попытки подряд, делаем автозахват
         if (failedAttemptsRef.current >= 3) {
@@ -357,7 +388,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
 
       return () => clearInterval(interval);
     }
-  }, [isProcessing, manualCapture, autoCapturing, mode]);
+  }, [isProcessing, manualCapture, autoCapturing, mode, cameraReady]);
 
   const getStepIndicator = () => {
     return mode === 'barcode' ? '📷 Распознавание штрихкода' : '📷 Распознавание товара';
@@ -379,7 +410,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
             </span>
             <div className="flex items-center gap-1 text-xs text-green-600">
               <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
-              Активно
+              {cameraReady ? 'Готова' : 'Загрузка...'}
             </div>
           </div>
         </div>

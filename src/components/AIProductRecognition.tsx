@@ -35,49 +35,65 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const startCamera = async () => {
     try {
       setCameraReady(false);
+      console.log('Запрос доступа к камере...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 1280, height: 720 }
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
       });
+      
+      console.log('Камера получена, настройка видео...');
       
       if (videoRef.current && isMountedRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
-        // Ждем загрузки метаданных видео
-        await new Promise<void>((resolve, reject) => {
+        // Ждем события loadedmetadata
+        const metadataPromise = new Promise<void>((resolve, reject) => {
           if (!videoRef.current) {
-            reject(new Error('Video ref lost'));
+            reject(new Error('Video ref потерян'));
             return;
           }
           
           const video = videoRef.current;
           const timeout = setTimeout(() => {
-            reject(new Error('Video load timeout'));
-          }, 10000);
+            reject(new Error('Таймаут загрузки метаданных'));
+          }, 5000);
           
-          video.onloadedmetadata = () => {
+          const handleMetadata = () => {
             clearTimeout(timeout);
-            console.log('Видео метаданные загружены:', video.videoWidth, 'x', video.videoHeight);
+            console.log('Метаданные загружены:', video.videoWidth, 'x', video.videoHeight);
+            video.removeEventListener('loadedmetadata', handleMetadata);
             resolve();
           };
+          
+          video.addEventListener('loadedmetadata', handleMetadata);
         });
         
-        // Явно запускаем воспроизведение
+        await metadataPromise;
+        
+        // Запускаем воспроизведение
         if (videoRef.current) {
           await videoRef.current.play();
-          console.log('Видео успешно запущено');
+          console.log('Видео запущено успешно');
           setCameraReady(true);
+          setError('');
         }
       }
     } catch (err: any) {
-      console.error('Camera error:', err);
+      console.error('Ошибка камеры:', err);
       setCameraReady(false);
       if (err.name === 'NotAllowedError') {
-        setError('Доступ к камере запрещен. Разрешите доступ в настройках.');
-      } else if (err.message?.includes('timeout')) {
-        setError('Таймаут запуска камеры. Попробуйте еще раз.');
+        setError('Доступ к камере запрещен. Нажмите "Разрешить" в браузере.');
+      } else if (err.name === 'NotFoundError') {
+        setError('Камера не найдена на устройстве.');
+      } else if (err.message?.includes('таймаут') || err.message?.includes('Timeout')) {
+        setError('Таймаут запуска камеры. Попробуйте перезагрузить страницу.');
       } else {
-        setError('Не удалось запустить камеру. Проверьте подключение.');
+        setError(`Ошибка камеры: ${err.message || 'Неизвестная ошибка'}`);
       }
     }
   };
@@ -371,18 +387,20 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           </div>
         </div>
 
-        <div className="relative bg-gray-900 rounded-b-lg overflow-hidden" style={{ minHeight: '500px' }}>
+        <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '500px' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
             style={{ 
+              width: '100%',
+              height: 'auto',
               minHeight: '500px',
               maxHeight: '700px',
+              objectFit: 'cover',
               display: 'block',
-              backgroundColor: '#1a1a1a'
+              backgroundColor: '#000'
             }}
           />
           

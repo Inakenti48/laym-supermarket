@@ -371,22 +371,34 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           </div>
         </div>
 
-        <div className="relative bg-gray-900 rounded-b-lg overflow-hidden" style={{ minHeight: '400px' }}>
+        <div className="relative bg-gray-900 rounded-b-lg overflow-hidden" style={{ minHeight: '500px' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover bg-gray-800"
+            className="w-full h-full object-cover"
             style={{ 
-              minHeight: '400px', 
-              maxHeight: '600px',
-              display: 'block'
+              minHeight: '500px',
+              maxHeight: '700px',
+              display: 'block',
+              backgroundColor: '#1a1a1a'
             }}
           />
+          
+          {/* Индикатор загрузки камеры */}
+          {!cameraReady && !error && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
+              <div className="text-center text-white">
+                <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-lg font-medium">Загрузка камеры...</p>
+                <p className="text-sm text-gray-300 mt-2">Подождите, пожалуйста</p>
+              </div>
+            </div>
+          )}
 
           {notification && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in z-10">
               {notification.includes('✅') ? (
                 <CheckCircle className="h-5 w-5" />
               ) : (
@@ -397,7 +409,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           )}
 
           {isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
               <div className="flex items-center gap-2 bg-black/70 text-white px-4 py-2 rounded-full">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span className="text-sm">Распознавание...</span>
@@ -406,7 +418,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           )}
 
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
               <Button
                 onClick={handleManualCapture}
                 size="lg"

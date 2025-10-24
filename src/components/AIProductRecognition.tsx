@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string }) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string }) => void;
 }
 
 type RecognitionStep = 'photo1' | 'photo2' | 'retry';
@@ -73,17 +73,62 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     return canvas.toDataURL('image/jpeg', 0.8);
   };
 
-  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string }> => {
+  const uploadPhotoToStorage = async (imageBase64: string): Promise<string | null> => {
+    try {
+      // Конвертируем base64 в blob
+      const base64Data = imageBase64.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      // Генерируем уникальное имя файла
+      const fileName = `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+      const filePath = `scans/${fileName}`;
+
+      // Загружаем в storage
+      const { data, error } = await supabase.storage
+        .from('product-photos')
+        .upload(filePath, blob, {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Storage upload error:', error);
+        return null;
+      }
+
+      // Получаем публичный URL
+      const { data: urlData } = supabase.storage
+        .from('product-photos')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Error uploading photo:', err);
+      return null;
+    }
+  };
+
+  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
+    // Сначала сохраняем фото в storage
+    const photoUrl = await uploadPhotoToStorage(imageBase64);
+    
     const allProducts = getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {
       body: {
-        imageBase64,
+        imageUrl: photoUrl || imageBase64, // Используем URL если есть, иначе base64
         recognitionType: type,
         allProducts: allProducts.map(p => ({
           barcode: p.barcode,
           name: p.name,
-          category: p.category
+          category: p.category,
+          photos: p.photos
         }))
       }
     });
@@ -97,7 +142,8 @@ export const AIProductRecognition = ({ onProductFound }: AIProductRecognitionPro
     return {
       barcode: result.barcode || '',
       name: result.name || '',
-      category: result.category || ''
+      category: result.category || '',
+      photoUrl: photoUrl || undefined
     };
   };
 

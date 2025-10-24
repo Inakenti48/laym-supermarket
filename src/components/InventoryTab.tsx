@@ -48,7 +48,7 @@ export const InventoryTab = () => {
     expiryDate: '',
   });
 
-  const handleScan = (data: { barcode: string; name?: string; category?: string } | string) => {
+  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
@@ -76,12 +76,14 @@ export const InventoryTab = () => {
       toast.info('Товар найден в базе данных');
     } else {
       // Заполняем данные из AI распознавания
+      const newPhotos = barcodeData.photoUrl ? [barcodeData.photoUrl] : [];
       setCurrentProduct({ 
         ...currentProduct, 
         barcode: sanitizedBarcode,
         name: barcodeData.name || '',
         category: barcodeData.category || ''
       });
+      setPhotos(newPhotos);
       if (barcodeData.name) {
         toast.success(`Распознано: ${barcodeData.name}`);
       } else {

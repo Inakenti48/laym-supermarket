@@ -102,7 +102,7 @@ export const CashierTab = () => {
     }
   };
 
-  const handleScan = (data: { barcode: string; name?: string; category?: string } | string) => {
+  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     

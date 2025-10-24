@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, Camera } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -50,7 +50,6 @@ export const CashierTab = () => {
   const [receivedAmount, setReceivedAmount] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -121,7 +120,6 @@ export const CashierTab = () => {
       toast.error('Товар не найден');
     }
     setShowScanner(false);
-    setShowCameraScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {
@@ -252,13 +250,11 @@ export const CashierTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* Camera Scanner */}
-      {showCameraScanner && (
-        <CameraScanner 
-          onScan={handleScan} 
-          onClose={() => setShowCameraScanner(false)} 
-        />
-      )}
+      {/* Camera Scanner - Always Active */}
+      <CameraScanner 
+        onScan={handleScan} 
+        onClose={() => {}} 
+      />
 
       {/* Scanner */}
       <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
@@ -486,14 +482,6 @@ export const CashierTab = () => {
                 />
               </div>
               
-              <Button 
-                onClick={() => setShowCameraScanner(true)}
-                variant="outline"
-                className="w-full h-12 text-sm sm:text-base font-medium"
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                Открыть камеру для сканирования
-              </Button>
             </div>
             <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />

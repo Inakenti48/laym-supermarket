@@ -152,23 +152,20 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b bg-primary/5">
-          <div className="flex items-center gap-3">
-            <Camera className="h-6 w-6 text-primary" />
-            <h3 className="text-lg font-semibold">Сканирование штрихкода</h3>
+    <div className="w-full">
+      <div className="bg-card rounded-lg shadow-lg overflow-hidden">
+        <div className="flex items-center justify-between p-3 border-b bg-primary/5">
+          <div className="flex items-center gap-2">
+            <Camera className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold">Камера распознавания товаров</h3>
           </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-muted rounded-lg transition-colors"
-            type="button"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1 text-xs text-green-600">
+            <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+            Активна
+          </div>
         </div>
 
-        <div className="relative bg-black">
+        <div className="relative bg-black rounded-b-lg overflow-hidden">
           <div id="camera-scanner" className="w-full aspect-video"></div>
 
           {notification && (
@@ -180,37 +177,17 @@ export const CameraScanner = ({ onScan, onClose }: CameraScannerProps) => {
         </div>
 
         {error ? (
-          <div className="p-6 text-center">
-            <div className="text-destructive mb-4">{error}</div>
-            <button
-              onClick={handleClose}
-              className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              type="button"
-            >
-              Закрыть
-            </button>
+          <div className="p-4 text-center">
+            <div className="text-destructive text-sm mb-3">{error}</div>
           </div>
         ) : (
-          <div className="p-6 text-center space-y-4">
-            <div className="space-y-2">
-              <p className="text-muted-foreground font-medium">
-                Наведите камеру на штрихкод или QR-код товара
-              </p>
-              <p className="text-sm text-muted-foreground">
-                💡 Совет: Держите камеру на расстоянии 10-20 см от штрихкода
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Поддерживаются все типы штрихкодов: EAN-13, EAN-8, CODE-128, UPC и другие
-              </p>
-            </div>
-            <button
-              onClick={handleClose}
-              className="px-6 py-3 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors inline-flex items-center gap-2"
-              type="button"
-            >
-              <ArrowLeft className="h-5 w-5" />
-              Закрыть камеру
-            </button>
+          <div className="p-4 text-center space-y-2">
+            <p className="text-sm text-muted-foreground font-medium">
+              📷 Наведите камеру на штрихкод товара для автоматического добавления в чек
+            </p>
+            <p className="text-xs text-muted-foreground">
+              💡 Держите камеру на расстоянии 10-20 см от штрихкода. Поддерживаются: EAN-13, EAN-8, CODE-128, UPC
+            </p>
           </div>
         )}
       </div>

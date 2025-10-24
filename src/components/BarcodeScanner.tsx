@@ -12,8 +12,8 @@ interface BarcodeScannerProps {
 
 export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProps) => {
   const [barcode, setBarcode] = useState('');
-  const [scannerConnected, setScannerConnected] = useState(false);
-  const [scannerType, setScannerType] = useState<'keyboard' | 'serial' | null>(null);
+  const [scannerConnected, setScannerConnected] = useState(true); // USB по умолчанию
+  const [scannerType, setScannerType] = useState<'keyboard' | null>('keyboard'); // USB по умолчанию
   const inputRef = useRef<HTMLInputElement>(null);
   const barcodeBufferRef = useRef('');
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,61 +69,6 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
     };
   }, [onScan]);
 
-  const connectSerialScanner = async () => {
-    try {
-      if (!('serial' in navigator)) {
-        toast.error('Web Serial API не поддерживается');
-        return;
-      }
-
-      // @ts-ignore - Web Serial API
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 9600 });
-      
-      setScannerConnected(true);
-      setScannerType('serial');
-      toast.success('Сканер подключен через Serial');
-
-      // Читаем данные
-      const reader = port.readable?.getReader();
-      if (reader) {
-        let buffer = '';
-        
-        const readLoop = async () => {
-          try {
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              
-              const decoder = new TextDecoder();
-              const text = decoder.decode(value);
-              buffer += text;
-              
-              // Если найден конец строки
-              if (buffer.includes('\n') || buffer.includes('\r')) {
-                const scannedBarcode = buffer.trim();
-                if (scannedBarcode.length >= 3) {
-                  onScan(scannedBarcode);
-                  toast.success('Штрихкод отсканирован');
-                }
-                buffer = '';
-              }
-            }
-          } catch (error) {
-            console.error('Ошибка чтения сканера:', error);
-          } finally {
-            reader.releaseLock();
-          }
-        };
-        
-        readLoop();
-      }
-    } catch (error) {
-      console.error('Ошибка подключения сканера:', error);
-      toast.error('Не удалось подключить сканер');
-    }
-  };
-
   const connectKeyboardScanner = () => {
     setScannerConnected(true);
     setScannerType('keyboard');
@@ -157,33 +102,7 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
         )}
       </div>
 
-      {!scannerConnected ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Выберите тип подключения сканера:
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              onClick={connectKeyboardScanner}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <Usb className="w-4 h-4" />
-              USB/Клавиатура
-            </Button>
-            <Button
-              onClick={connectSerialScanner}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <Bluetooth className="w-4 h-4" />
-              Serial Port
-            </Button>
-          </div>
-        </div>
-      ) : (
+      <div>
         <form onSubmit={handleManualSubmit} className="space-y-2">
           <div className="flex items-center gap-2">
             <Input
@@ -200,27 +119,11 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            {scannerType === 'keyboard' 
-              ? 'Сканируйте товар или введите штрихкод вручную'
-              : 'Сканер готов к работе через Serial Port'}
+            USB-сканер подключен. Сканируйте товар или введите штрихкод вручную
           </p>
         </form>
-      )}
+      </div>
 
-      {scannerConnected && (
-        <Button
-          onClick={() => {
-            setScannerConnected(false);
-            setScannerType(null);
-            toast.info('Сканер отключен');
-          }}
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs"
-        >
-          Отключить сканер
-        </Button>
-      )}
     </Card>
   );
 };

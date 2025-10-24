@@ -43,6 +43,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       if (videoRef.current && isMountedRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        // Явно запускаем воспроизведение
+        try {
+          await videoRef.current.play();
+          console.log('Видео успешно запущено');
+        } catch (playErr) {
+          console.error('Ошибка запуска видео:', playErr);
+        }
       }
     } catch (err: any) {
       console.error('Camera error:', err);
@@ -377,14 +384,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           </div>
         </div>
 
-        <div className="relative bg-black rounded-b-lg overflow-hidden" style={{ minHeight: '400px' }}>
+        <div className="relative bg-gray-900 rounded-b-lg overflow-hidden" style={{ minHeight: '400px' }}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
-            style={{ minHeight: '400px', maxHeight: '600px' }}
+            className="w-full h-full object-cover bg-gray-800"
+            style={{ 
+              minHeight: '400px', 
+              maxHeight: '600px',
+              display: 'block'
+            }}
           />
 
           {notification && (

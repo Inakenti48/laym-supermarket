@@ -20,9 +20,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const [isWaitingForSharpImage, setIsWaitingForSharpImage] = useState(false);
   const photo1Ref = useRef<string>('');
   const isMountedRef = useRef(true);
-  const [manualCapture, setManualCapture] = useState(false);
-  const failedAttemptsRef = useRef(0);
-  const [autoCapturing, setAutoCapturing] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
@@ -239,22 +236,21 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     };
   };
 
-  const handleManualCapture = async (isAuto: boolean = false) => {
+  const handleManualCapture = async () => {
     if (isProcessing) return;
     
     setIsProcessing(true);
-    setManualCapture(true);
-    if (isAuto) setAutoCapturing(true);
 
     try {
-      if (isAuto) {
-        setNotification(mode === 'barcode' ? '🤖 Автозахват штрихкода...' : '🤖 Автозахват товара...');
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } else {
-        setNotification(mode === 'barcode' ? '📸 Захват штрихкода...' : '📸 Захват товара...');
-      }
+      setNotification(mode === 'barcode' ? '📸 Захват штрихкода...' : '📸 Захват товара...');
       
       const { image } = captureSharpImage();
+      
+      if (!image) {
+        setNotification('❌ Камера не готова');
+        setTimeout(() => setNotification(''), 1500);
+        return;
+      }
       
       setNotification('✅ Анализирую...');
       photo1Ref.current = image;
@@ -262,42 +258,22 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       const result = await recognizeProduct(image, mode);
       
       if (mode === 'barcode') {
-        // Режим штрихкода - принимаем только если есть штрихкод
         if (result.barcode) {
           setNotification('✅ Штрихкод распознан!');
           onProductFound(result);
-          failedAttemptsRef.current = 0;
-          setTimeout(() => {
-            setNotification('');
-            setManualCapture(false);
-            setAutoCapturing(false);
-          }, 1000);
+          setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Штрихкод не найден');
-          setTimeout(() => {
-            setNotification('');
-            setManualCapture(false);
-            setAutoCapturing(false);
-          }, 1500);
+          setTimeout(() => setNotification(''), 1500);
         }
       } else {
-        // Режим товара - принимаем если есть название или категория
         if (result.name || result.category) {
           setNotification('✅ Товар распознан!');
           onProductFound(result);
-          failedAttemptsRef.current = 0;
-          setTimeout(() => {
-            setNotification('');
-            setManualCapture(false);
-            setAutoCapturing(false);
-          }, 1000);
+          setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Товар не распознан');
-          setTimeout(() => {
-            setNotification('');
-            setManualCapture(false);
-            setAutoCapturing(false);
-          }, 1500);
+          setTimeout(() => setNotification(''), 1500);
         }
       }
     } catch (err: any) {
@@ -308,68 +284,49 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         toast.error('Требуется пополнить баланс Lovable AI');
       }
       setNotification('');
-      setManualCapture(false);
-      setAutoCapturing(false);
     } finally {
       setIsProcessing(false);
     }
   };
 
   useEffect(() => {
-    if (!isProcessing && !manualCapture && !autoCapturing && cameraReady) {
+    if (!isProcessing && cameraReady) {
       const interval = setInterval(async () => {
         if (isProcessing || !isMountedRef.current || !cameraReady) return;
-
-        // Проверяем: если 3 неудачные попытки подряд, делаем автозахват
-        if (failedAttemptsRef.current >= 3) {
-          console.log('Переключение на режим автозахвата после неудачных попыток');
-          failedAttemptsRef.current = 0;
-          handleManualCapture(true);
-          return;
-        }
 
         setIsProcessing(true);
 
         try {
           setNotification(mode === 'barcode' ? '📷 Ищу штрихкод...' : '📷 Ищу товар...');
-          setIsWaitingForSharpImage(true);
           
           const { image, isSharp } = captureSharpImage();
           
-          if (!isSharp) {
-            setIsWaitingForSharpImage(false);
+          if (!image || !isSharp) {
             setIsProcessing(false);
-            failedAttemptsRef.current++;
+            setNotification('');
             return;
           }
           
           setNotification('✅ Анализирую...');
-          setIsWaitingForSharpImage(false);
           photo1Ref.current = image;
           
           const result = await recognizeProduct(image, mode);
           
           if (mode === 'barcode') {
-            // Режим штрихкода - принимаем только штрихкод
             if (result.barcode) {
               setNotification('✅ Штрихкод распознан!');
               onProductFound(result);
-              failedAttemptsRef.current = 0;
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');
-              failedAttemptsRef.current++;
             }
           } else {
-            // Режим товара - принимаем название/категорию
             if (result.name || result.category) {
               setNotification('✅ Товар распознан!');
               onProductFound(result);
-              failedAttemptsRef.current = 0;
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');
-              failedAttemptsRef.current++;
             }
           }
         } catch (err: any) {
@@ -380,7 +337,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
             toast.error('Требуется пополнить баланс Lovable AI');
           }
           setNotification('');
-          failedAttemptsRef.current++;
         } finally {
           setIsProcessing(false);
         }
@@ -388,7 +344,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
 
       return () => clearInterval(interval);
     }
-  }, [isProcessing, manualCapture, autoCapturing, mode, cameraReady]);
+  }, [isProcessing, mode, cameraReady]);
 
   const getStepIndicator = () => {
     return mode === 'barcode' ? '📷 Распознавание штрихкода' : '📷 Распознавание товара';
@@ -449,25 +405,17 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
             </div>
           )}
 
-          {!isProcessing && !autoCapturing && (
+          {!isProcessing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
               <Button
-                onClick={() => handleManualCapture(false)}
+                onClick={handleManualCapture}
                 size="lg"
                 className="rounded-full shadow-lg"
+                disabled={!cameraReady}
               >
                 <Camera className="h-5 w-5 mr-2" />
                 Сфотографировать
               </Button>
-            </div>
-          )}
-          
-          {autoCapturing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-              <div className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-full">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm">Автозахват...</span>
-              </div>
             </div>
           )}
         </div>
@@ -491,7 +439,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
                   <p>📱 Режим распознавания штрихкода</p>
                   <p>📷 Наведите камеру на штрихкод</p>
                   <p>⚡ Автоматическое распознавание каждые 2 сек</p>
-                  <p>🤖 При неудачах - автоматический захват</p>
                   <p>📸 Или нажмите кнопку для мгновенной съемки</p>
                 </>
               ) : (
@@ -499,7 +446,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
                   <p>📱 Режим распознавания товара</p>
                   <p>📷 Покажите переднюю часть упаковки</p>
                   <p>⚡ Автоматическое распознавание каждые 2 сек</p>
-                  <p>🤖 При неудачах - автоматический захват</p>
                   <p>📸 Или нажмите кнопку для мгновенной съемки</p>
                 </>
               )}

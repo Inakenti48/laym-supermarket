@@ -178,7 +178,8 @@ export const CashierTab = () => {
       
       addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}${isTemporary ? ' (из временной базы)' : ''}`);
-    } else {
+    } else if (!productName) {
+      // Показываем ошибку только если AI вообще ничего не распознал
       toast.error('Товар не найден');
     }
     setShowScanner(false);

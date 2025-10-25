@@ -3,7 +3,6 @@ import {
   LayoutDashboard, Package, ShoppingCart, Building2, 
   LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
@@ -14,48 +13,68 @@ import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
+import { RoleSelector } from '@/components/RoleSelector';
+import { LoginScreen } from '@/components/LoginScreen';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useAuth } from '@/lib/useAuth';
+import { getCurrentUser, login, logout, UserRole } from '@/lib/auth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const { user, userRole, loading, logout: authLogout, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [currentUser, setCurrentUser] = useState(getCurrentUser());
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      navigate('/auth');
-    }
-  }, [loading, isAuthenticated, navigate]);
-
-  useEffect(() => {
+    const user = getCurrentUser();
+    setCurrentUser(user);
+    
     // Set initial tab based on role
-    if (userRole) {
-      if (userRole === 'admin') {
+    if (user?.role) {
+      if (user.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (userRole === 'cashier') {
+      } else if (user.role === 'cashier') {
         setActiveTab('cashier');
-      } else if (userRole === 'inventory') {
+      } else if (user.role === 'inventory') {
         setActiveTab('inventory');
       } else {
         setActiveTab('employee-work');
       }
     }
-  }, [userRole]);
+  }, []);
+
+  const handleSelectRole = (role: UserRole) => {
+    setSelectedRole(role);
+  };
+
+  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
+    const success = await login(username, role, cashierName);
+    if (success) {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+      setSelectedRole(null);
+      toast.success('Вход выполнен успешно');
+    } else {
+      toast.error('Неверный логин');
+    }
+  };
+
+  const handleCancelLogin = () => {
+    setSelectedRole(null);
+  };
 
   const handleLogout = () => {
-    authLogout();
+    logout();
+    setCurrentUser(null);
+    setSelectedRole(null);
     toast.info('Вы вышли из системы');
   };
 
   const handleBack = () => {
-    // Go back to previous tab or logout if on main screen
     const mainTabs = { admin: 'dashboard', cashier: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
-    const mainTab = userRole ? mainTabs[userRole as keyof typeof mainTabs] : 'dashboard';
+    const mainTab = currentUser?.role ? mainTabs[currentUser.role as keyof typeof mainTabs] : 'dashboard';
     
     if (activeTab !== mainTab) {
       setActiveTab(mainTab as Tab);
@@ -79,22 +98,15 @@ const Index = () => {
   ];
 
   const visibleTabs = tabs.filter(tab => 
-    userRole && tab.roles.includes(userRole)
+    currentUser?.role && tab.roles.includes(currentUser.role)
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Загрузка...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
+  // Show role selector if not logged in
+  if (!currentUser) {
+    if (selectedRole) {
+      return <LoginScreen role={selectedRole} onLogin={handleLogin} onCancel={handleCancelLogin} />;
+    }
+    return <RoleSelector onSelectRole={handleSelectRole} />;
   }
 
   return (
@@ -115,11 +127,11 @@ const Index = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="text-right mr-2">
-              <p className="text-sm font-medium">{user?.email || 'Пользователь'}</p>
+              <p className="text-sm font-medium">{currentUser.username}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {userRole === 'admin' ? 'Администратор' :
-                 userRole === 'cashier' ? 'Кассир' :
-                 userRole === 'inventory' ? 'Склад' :
+                {currentUser.role === 'admin' ? 'Администратор' :
+                 currentUser.role === 'cashier' ? 'Кассир' :
+                 currentUser.role === 'inventory' ? 'Склад' :
                  'Сотрудник'}
               </p>
             </div>
@@ -167,8 +179,8 @@ const Index = () => {
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
         {activeTab === 'cancellations' && <CancellationsTab />}
-        {activeTab === 'employee-work' && user?.id && (
-          <EmployeeWorkTab employeeId={user.id} />
+        {activeTab === 'employee-work' && currentUser.employeeId && (
+          <EmployeeWorkTab employeeId={currentUser.employeeId} />
         )}
         {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">

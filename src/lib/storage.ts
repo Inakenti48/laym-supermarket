@@ -25,198 +25,76 @@ export interface StoredProduct {
 
 const STORAGE_KEY = 'inventory_products';
 
-import { supabase } from '@/integrations/supabase/client';
-
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
+  const data = localStorage.getItem(STORAGE_KEY);
+  if (!data) return [];
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    // Преобразуем данные из Supabase в формат StoredProduct
-    return (data || []).map(product => ({
-      id: product.id,
-      barcode: product.barcode,
-      name: product.name,
-      category: product.category,
-      purchasePrice: Number(product.purchase_price),
-      retailPrice: Number(product.sale_price),
-      quantity: product.quantity,
-      unit: product.unit as 'шт' | 'кг',
-      expiryDate: product.expiry_date || undefined,
-      photos: [], // Фото загружаются отдельно
-      paymentType: product.payment_type as 'full' | 'partial' | 'debt',
-      paidAmount: Number(product.paid_amount),
-      debtAmount: Number(product.debt_amount),
-      addedBy: product.created_by || '',
-      supplier: product.supplier || undefined,
-      lastUpdated: product.updated_at,
-      priceHistory: Array.isArray(product.price_history) 
-        ? product.price_history.map((h: any) => ({
-            date: h.date,
-            purchasePrice: Number(h.purchase_price || h.purchasePrice),
-            retailPrice: Number(h.retail_price || h.retailPrice),
-            changedBy: h.changed_by || h.changedBy
-          }))
-        : []
-    }));
-  } catch (error) {
-    console.error('Ошибка загрузки товаров:', error);
+    return JSON.parse(data);
+  } catch {
     return [];
   }
 };
 
 export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('barcode', barcode)
-      .maybeSingle();
-    
-    if (error || !data) return null;
-    
-    return {
-      id: data.id,
-      barcode: data.barcode,
-      name: data.name,
-      category: data.category,
-      purchasePrice: Number(data.purchase_price),
-      retailPrice: Number(data.sale_price),
-      quantity: data.quantity,
-      unit: data.unit as 'шт' | 'кг',
-      expiryDate: data.expiry_date || undefined,
-      photos: [],
-      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
-      paidAmount: Number(data.paid_amount),
-      debtAmount: Number(data.debt_amount),
-      addedBy: data.created_by || '',
-      supplier: data.supplier || undefined,
-      lastUpdated: data.updated_at,
-      priceHistory: Array.isArray(data.price_history)
-        ? data.price_history.map((h: any) => ({
-            date: h.date,
-            purchasePrice: Number(h.purchase_price || h.purchasePrice),
-            retailPrice: Number(h.retail_price || h.retailPrice),
-            changedBy: h.changed_by || h.changedBy
-          }))
-        : []
-    };
-  } catch (error) {
-    console.error('Ошибка поиска товара:', error);
-    return null;
-  }
+  const products = await getStoredProducts();
+  return products.find(p => p.barcode === barcode) || null;
 };
 
 export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): Promise<StoredProduct> => {
-  try {
-    const existing = await findProductByBarcode(product.barcode);
-    const now = new Date().toISOString();
+  const products = await getStoredProducts();
+  const existing = await findProductByBarcode(product.barcode);
+  const now = new Date().toISOString();
+  
+  if (existing) {
+    // Обновляем количество и цены существующего товара
+    const priceChanged = 
+      existing.purchasePrice !== product.purchasePrice || 
+      existing.retailPrice !== product.retailPrice;
     
-    if (existing) {
-      // Обновляем существующий товар
-      const priceChanged = 
-        existing.purchasePrice !== product.purchasePrice || 
-        existing.retailPrice !== product.retailPrice;
-      
-      const newPriceHistory = priceChanged
-        ? [
-            ...existing.priceHistory,
-            {
-              date: now,
-              purchasePrice: product.purchasePrice,
-              retailPrice: product.retailPrice,
-              changedBy: userId,
-            },
-          ]
-        : existing.priceHistory;
-      
-      const { data, error } = await supabase
-        .from('products')
-        .update({
-          name: product.name,
-          category: product.category,
-          purchase_price: product.purchasePrice,
-          sale_price: product.retailPrice,
-          quantity: product.quantity,
-          unit: product.unit,
-          expiry_date: product.expiryDate || null,
-          payment_type: product.paymentType,
-          paid_amount: product.paidAmount,
-          debt_amount: product.debtAmount,
-          supplier: product.supplier || null,
-          price_history: newPriceHistory.map(h => ({
-            date: h.date,
-            purchase_price: h.purchasePrice,
-            retail_price: h.retailPrice,
-            changed_by: h.changedBy
-          }))
-        })
-        .eq('barcode', product.barcode)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      return {
-        ...existing,
-        ...product,
-        id: data.id,
-        lastUpdated: now,
-        priceHistory: newPriceHistory
-      };
-    } else {
-      // Создаем новый товар
-      const initialPriceHistory = [
+    const newPriceHistory = priceChanged
+      ? [
+          ...existing.priceHistory,
+          {
+            date: now,
+            purchasePrice: product.purchasePrice,
+            retailPrice: product.retailPrice,
+            changedBy: userId,
+          },
+        ]
+      : existing.priceHistory;
+    
+    const updated: StoredProduct = {
+      ...existing,
+      ...product,
+      quantity: existing.quantity + product.quantity,
+      lastUpdated: now,
+      priceHistory: newPriceHistory,
+    };
+    
+    const updatedProducts = products.map(p => 
+      p.barcode === product.barcode ? updated : p
+    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
+    return updated;
+  } else {
+    // Создаем новый товар
+    const newProduct: StoredProduct = {
+      ...product,
+      id: Date.now().toString(),
+      lastUpdated: now,
+      priceHistory: [
         {
           date: now,
           purchasePrice: product.purchasePrice,
           retailPrice: product.retailPrice,
           changedBy: userId,
         },
-      ];
-      
-      const { data, error } = await supabase
-        .from('products')
-        .insert({
-          barcode: product.barcode,
-          name: product.name,
-          category: product.category,
-          purchase_price: product.purchasePrice,
-          sale_price: product.retailPrice,
-          quantity: product.quantity,
-          unit: product.unit,
-          expiry_date: product.expiryDate || null,
-          payment_type: product.paymentType,
-          paid_amount: product.paidAmount,
-          debt_amount: product.debtAmount,
-          supplier: product.supplier || null,
-          price_history: initialPriceHistory.map(h => ({
-            date: h.date,
-            purchase_price: h.purchasePrice,
-            retail_price: h.retailPrice,
-            changed_by: h.changedBy
-          })),
-          created_by: userId
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      return {
-        ...product,
-        id: data.id,
-        lastUpdated: now,
-        priceHistory: initialPriceHistory
-      };
-    }
-  } catch (error) {
-    console.error('Ошибка сохранения товара:', error);
-    throw error;
+      ],
+    };
+    
+    const updatedProducts = [...products, newProduct];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
+    return newProduct;
   }
 };
 
@@ -245,22 +123,21 @@ export const isProductExpired = (product: StoredProduct): boolean => {
 };
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
-  try {
-    const product = await findProductByBarcode(barcode);
-    if (!product) {
-      throw new Error(`Товар с штрихкодом ${barcode} не найден`);
-    }
-    
-    const { error } = await supabase
-      .from('products')
-      .update({ quantity: product.quantity + quantityChange })
-      .eq('barcode', barcode);
-    
-    if (error) throw error;
-  } catch (error) {
-    console.error('Ошибка обновления количества:', error);
-    throw error;
+  const products = await getStoredProducts();
+  const product = await findProductByBarcode(barcode);
+  
+  if (!product) {
+    throw new Error(`Товар с штрихкодом ${barcode} не найден`);
   }
+  
+  const updatedProducts = products.map(p => {
+    if (p.barcode === barcode) {
+      return { ...p, quantity: p.quantity + quantityChange };
+    }
+    return p;
+  });
+  
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
 };
 
 // Система отмены товаров
@@ -356,87 +233,41 @@ export interface Supplier {
 const SUPPLIERS_KEY = 'suppliers';
 
 export const getSuppliers = async (): Promise<Supplier[]> => {
+  const data = localStorage.getItem(SUPPLIERS_KEY);
+  if (!data) return [];
   try {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    return (data || []).map(supplier => ({
-      id: supplier.id,
-      name: supplier.name,
-      phone: supplier.phone || '',
-      notes: supplier.address || '',
-      totalDebt: Number(supplier.debt || 0),
-      paymentHistory: Array.isArray(supplier.payment_history) 
-        ? supplier.payment_history.map((h: any) => ({
-            date: h.date,
-            amount: Number(h.amount),
-            paymentType: h.payment_type || h.paymentType,
-            productName: h.product_name || h.productName,
-            productQuantity: Number(h.product_quantity || h.productQuantity || 0),
-            productPrice: Number(h.product_price || h.productPrice || 0),
-            changedBy: h.changed_by || h.changedBy
-          }))
-        : [],
-      createdAt: supplier.created_at,
-      lastUpdated: supplier.updated_at
-    }));
-  } catch (error) {
-    console.error('Ошибка загрузки поставщиков:', error);
+    return JSON.parse(data);
+  } catch {
     return [];
   }
 };
 
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
-  try {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert({
-        name: supplier.name,
-        phone: supplier.phone || null,
-        address: supplier.notes || null,
-        debt: supplier.totalDebt || 0,
-        payment_history: []
-      })
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    return {
-      id: data.id,
-      name: data.name,
-      phone: data.phone || '',
-      notes: data.address || '',
-      totalDebt: Number(data.debt || 0),
-      paymentHistory: [],
-      createdAt: data.created_at,
-      lastUpdated: data.updated_at
-    };
-  } catch (error) {
-    console.error('Ошибка сохранения поставщика:', error);
-    throw error;
-  }
+  const suppliers = await getSuppliers();
+  const now = new Date().toISOString();
+  
+  const newSupplier: Supplier = {
+    ...supplier,
+    id: Date.now().toString(),
+    paymentHistory: [],
+    createdAt: now,
+    lastUpdated: now,
+  };
+  
+  const updatedSuppliers = [...suppliers, newSupplier];
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updatedSuppliers));
+  return newSupplier;
 };
 
 export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
-  try {
-    await supabase
-      .from('suppliers')
-      .update({
-        name: updates.name,
-        phone: updates.phone || null,
-        address: updates.notes || null,
-        debt: updates.totalDebt || null,
-      })
-      .eq('id', id);
-  } catch (error) {
-    console.error('Ошибка обновления поставщика:', error);
-    throw error;
-  }
+  const suppliers = await getSuppliers();
+  const updatedSuppliers = suppliers.map(s => {
+    if (s.id === id) {
+      return { ...s, ...updates, lastUpdated: new Date().toISOString() };
+    }
+    return s;
+  });
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updatedSuppliers));
 };
 
 export const addSupplierPayment = async (

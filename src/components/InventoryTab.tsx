@@ -13,7 +13,6 @@ import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
@@ -225,86 +224,6 @@ export const InventoryTab = () => {
     setSuggestedProduct(null);
   };
 
-  const transferFromTemporaryToMain = async (barcode: string, productName: string) => {
-    try {
-      // Ищем фото во временной базе
-      const { data: tempPhoto, error: searchError } = await supabase
-        .from('vremenno_product_foto')
-        .select('*')
-        .eq('barcode', barcode)
-        .eq('product_name', productName)
-        .maybeSingle();
-
-      if (searchError || !tempPhoto) {
-        console.log('No temporary photo found for transfer');
-        return;
-      }
-
-      // Копируем файл из temporary в products
-      const oldPath = tempPhoto.storage_path;
-      const fileName = `${barcode}-${Date.now()}.jpg`;
-      const newPath = `products/${fileName}`;
-
-      // Скачиваем из storage
-      const { data: fileData, error: downloadError } = await supabase.storage
-        .from('product-photos')
-        .download(oldPath);
-
-      if (downloadError || !fileData) {
-        console.error('Error downloading temporary file:', downloadError);
-        return;
-      }
-
-      // Загружаем в product-images
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(newPath, fileData, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error('Error uploading to main storage:', uploadError);
-        return;
-      }
-
-      // Получаем новый публичный URL
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(newPath);
-
-      // Сохраняем в основную базу
-      const { error: dbError } = await supabase
-        .from('product_images')
-        .insert({
-          barcode,
-          product_name: productName,
-          image_url: urlData.publicUrl,
-          storage_path: newPath
-        });
-
-      if (dbError) {
-        console.error('Error inserting into main database:', dbError);
-        return;
-      }
-
-      // Удаляем из временной базы
-      await supabase
-        .from('vremenno_product_foto')
-        .delete()
-        .eq('id', tempPhoto.id);
-
-      // Удаляем временный файл из storage
-      await supabase.storage
-        .from('product-photos')
-        .remove([oldPath]);
-
-      console.log('Photo transferred from temporary to main storage');
-    } catch (error) {
-      console.error('Error transferring photo:', error);
-    }
-  };
-
   const saveAllProducts = async () => {
     if (products.length === 0) {
       toast.error('Список товаров пуст');
@@ -330,16 +249,13 @@ export const InventoryTab = () => {
           paidAmount: product.purchasePrice * product.quantity,
           debtAmount: 0,
           addedBy: currentUser?.role || 'unknown',
-          supplier: product.supplier || undefined, // Берем поставщика из товара
+          supplier: product.supplier || undefined,
         };
 
         const saved = await saveProduct(productData, currentUser?.username || 'unknown');
         
         if (saved) {
           addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
-          
-          // Переносим фото из временной базы в основную
-          await transferFromTemporaryToMain(product.barcode, product.name);
           
           if (suggestedProduct && 
               (suggestedProduct.purchasePrice !== product.purchasePrice || 
@@ -360,7 +276,7 @@ export const InventoryTab = () => {
 
     if (successCount > 0) {
       toast.success(`Успешно добавлено товаров: ${successCount}`);
-      setProducts([]); // Очищаем список после успешного сохранения
+      setProducts([]);
     }
     
     if (errorCount > 0) {

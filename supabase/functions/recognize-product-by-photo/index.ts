@@ -21,6 +21,27 @@ serve(async (req) => {
       );
     }
 
+    // Validate base64 image format
+    const base64Pattern = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i;
+    if (!base64Pattern.test(imageBase64)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid image format. Must be a valid base64 image (PNG, JPEG, WEBP, GIF)' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Size validation - approximately 10MB limit for base64
+    const base64Data = imageBase64.split(',')[1] || imageBase64;
+    const sizeInBytes = (base64Data.length * 3) / 4;
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    
+    if (sizeInBytes > maxSize) {
+      return new Response(
+        JSON.stringify({ error: `Image size exceeds 10MB limit (current: ${(sizeInBytes / 1024 / 1024).toFixed(2)}MB)` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');

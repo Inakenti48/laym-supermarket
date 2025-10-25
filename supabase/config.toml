@@ -1,10 +1,10 @@
 project_id = "rfkfjfvlcushtejkgbmg"
 
 [functions.recognize-product]
-verify_jwt = false
+verify_jwt = true
 
 [functions.recognize-product-by-photo]
-verify_jwt = false
+verify_jwt = true
 
 [functions.cleanup-temporary-photos]
-verify_jwt = false
+verify_jwt = false  # Called by cron job, validated internally

@@ -18,6 +18,40 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
+    // Input validation - imageUrl
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'imageUrl is required and must be a string' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // URL format validation
+    const urlPattern = /^https?:\/\//i;
+    if (!urlPattern.test(imageUrl)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid image URL format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Block private IP ranges (SSRF protection)
+    const privateIpPattern = /(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^localhost)|(\[::1\])/i;
+    if (privateIpPattern.test(imageUrl)) {
+      return new Response(
+        JSON.stringify({ error: 'Access to private IP ranges is not allowed' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // URL length validation
+    if (imageUrl.length > 2048) {
+      return new Response(
+        JSON.stringify({ error: 'URL too long (max 2048 characters)' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log(`Recognition type: ${recognitionType}`);
 
     let systemPrompt = '';
@@ -25,7 +59,6 @@ serve(async (req) => {
 
     if (recognitionType === 'product') {
       // Распознавание по лицевой стороне товара
-      // Сначала проверяем, может ли это фото совпадать с уже существующими товарами по визуальному сравнению
       systemPrompt = `Ты - эксперт по распознаванию товаров в супермаркете. Твоя задача - точно определить товар по фото его лицевой стороны.
 
 Список доступных товаров в базе (barcode|name|category):
@@ -57,7 +90,7 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
 
       userPrompt = 'Распознай товар ТОЧНО, учитывая вкус и вариант. Не путай похожие товары. Верни JSON.';
     } else {
-      // Распознавание штрихкода - также извлекаем название товара с упаковки
+      // Распознавание штрихкода
       systemPrompt = `Ты - эксперт по распознаванию штрихкодов и товаров. Твоя задача:
 1. ПРОЧИТАТЬ штрихкод (EAN-13, EAN-8, CODE-128, UPC и др.)
 2. ДОПОЛНИТЕЛЬНО прочитать название товара и категорию с упаковки (если видно)
@@ -124,9 +157,7 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
 
     let result;
     if (recognitionType === 'product' || recognitionType === 'barcode') {
-      // Парсим JSON ответ для обоих типов распознавания
       try {
-        // Извлекаем JSON из ответа (может быть обернут в markdown)
         const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           result = JSON.parse(jsonMatch[0]);

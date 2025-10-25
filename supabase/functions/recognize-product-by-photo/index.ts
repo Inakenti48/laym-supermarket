@@ -14,7 +14,11 @@ serve(async (req) => {
   try {
     const { imageBase64 } = await req.json();
     
+    console.log('=== RECOGNIZE BY PHOTO START ===');
+    console.log('Image size:', imageBase64?.length || 0);
+    
     if (!imageBase64) {
+      console.error('Missing imageBase64');
       return new Response(
         JSON.stringify({ error: 'imageBase64 is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -118,8 +122,6 @@ ${productsInfo}
             ]
           }
         ],
-        max_tokens: 100,
-        temperature: 0.1
       }),
     });
 

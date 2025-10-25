@@ -12,9 +12,16 @@ serve(async (req) => {
 
   try {
     const { imageUrl, recognitionType, allProducts } = await req.json();
+    
+    console.log('=== RECOGNIZE PRODUCT START ===');
+    console.log('Recognition type:', recognitionType);
+    console.log('Products count:', allProducts?.length || 0);
+    console.log('Image URL length:', imageUrl?.length || 0);
+    
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
     if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY not configured');
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
@@ -128,11 +135,13 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
             ]
           }
         ],
-        max_tokens: 100,
       }),
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI API error:', response.status, errorText);
+      
       if (response.status === 429) {
         console.error('Rate limit exceeded');
         return new Response(JSON.stringify({ error: 'rate_limit', result: '' }), {
@@ -147,7 +156,7 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      throw new Error(`AI API error: ${response.status}`);
+      throw new Error(`AI API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.recognize-product-by-photo]
 verify_jwt = false
+
+[functions.cleanup-temporary-photos]
+verify_jwt = false

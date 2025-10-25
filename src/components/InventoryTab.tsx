@@ -210,57 +210,83 @@ export const InventoryTab = () => {
     setSuggestedProduct(null);
   };
 
-  const saveProductImage = async (barcode: string, productName: string, imageBase64: string) => {
+  const transferFromTemporaryToMain = async (barcode: string, productName: string) => {
     try {
-      // Конвертируем base64 в blob
-      const base64Data = imageBase64.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Ищем фото во временной базе
+      const { data: tempPhoto, error: searchError } = await supabase
+        .from('vremenno_product_foto')
+        .select('*')
+        .eq('barcode', barcode)
+        .eq('product_name', productName)
+        .maybeSingle();
+
+      if (searchError || !tempPhoto) {
+        console.log('No temporary photo found for transfer');
+        return;
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
-      // Генерируем имя файла
+      // Копируем файл из temporary в products
+      const oldPath = tempPhoto.storage_path;
       const fileName = `${barcode}-${Date.now()}.jpg`;
-      const filePath = `products/${fileName}`;
+      const newPath = `products/${fileName}`;
 
-      // Загружаем в storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // Скачиваем из storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('product-photos')
+        .download(oldPath);
+
+      if (downloadError || !fileData) {
+        console.error('Error downloading temporary file:', downloadError);
+        return;
+      }
+
+      // Загружаем в product-images
+      const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(filePath, blob, {
+        .upload(newPath, fileData, {
           contentType: 'image/jpeg',
           upsert: false
         });
 
       if (uploadError) {
-        console.error('Storage upload error:', uploadError);
+        console.error('Error uploading to main storage:', uploadError);
         return;
       }
 
-      // Получаем публичный URL
+      // Получаем новый публичный URL
       const { data: urlData } = supabase.storage
         .from('product-images')
-        .getPublicUrl(filePath);
+        .getPublicUrl(newPath);
 
-      // Сохраняем в базу данных
+      // Сохраняем в основную базу
       const { error: dbError } = await supabase
         .from('product_images')
         .insert({
           barcode,
           product_name: productName,
           image_url: urlData.publicUrl,
-          storage_path: filePath
+          storage_path: newPath
         });
 
       if (dbError) {
-        console.error('Database insert error:', dbError);
-      } else {
-        console.log('Product image saved successfully');
+        console.error('Error inserting into main database:', dbError);
+        return;
       }
+
+      // Удаляем из временной базы
+      await supabase
+        .from('vremenno_product_foto')
+        .delete()
+        .eq('id', tempPhoto.id);
+
+      // Удаляем временный файл из storage
+      await supabase.storage
+        .from('product-photos')
+        .remove([oldPath]);
+
+      console.log('Photo transferred from temporary to main storage');
     } catch (error) {
-      console.error('Error saving product image:', error);
+      console.error('Error transferring photo:', error);
     }
   };
 
@@ -296,10 +322,8 @@ export const InventoryTab = () => {
         if (saved) {
           addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
           
-          // Если есть capturedImage, сохраняем в product_images
-          if (product.capturedImage) {
-            await saveProductImage(product.barcode, product.name, product.capturedImage);
-          }
+          // Переносим фото из временной базы в основную
+          await transferFromTemporaryToMain(product.barcode, product.name);
           
           if (suggestedProduct && 
               (suggestedProduct.purchasePrice !== product.purchasePrice || 

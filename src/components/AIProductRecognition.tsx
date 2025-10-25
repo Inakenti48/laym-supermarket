@@ -120,7 +120,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     return canvas.toDataURL('image/jpeg', 0.8);
   };
 
-  const uploadPhotoToStorage = async (imageBase64: string): Promise<string | null> => {
+  const saveToTemporaryStorage = async (imageBase64: string, barcode: string, productName: string): Promise<string | null> => {
     try {
       // Конвертируем base64 в blob с высоким качеством
       const base64Data = imageBase64.split(',')[1];
@@ -133,19 +133,19 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
       // Генерируем уникальное имя файла
-      const fileName = `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
-      const filePath = `scans/${fileName}`;
+      const fileName = `temp-${barcode}-${Date.now()}.jpg`;
+      const filePath = `temporary/${fileName}`;
 
       // Загружаем в storage
-      const { data, error } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('product-photos')
         .upload(filePath, blob, {
           contentType: 'image/jpeg',
           upsert: false
         });
 
-      if (error) {
-        console.error('Storage upload error:', error);
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
         return null;
       }
 
@@ -154,9 +154,37 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         .from('product-photos')
         .getPublicUrl(filePath);
 
+      // Проверяем, есть ли уже такой товар во временной базе
+      const { data: existing } = await supabase
+        .from('vremenno_product_foto')
+        .select('id')
+        .eq('barcode', barcode)
+        .eq('product_name', productName)
+        .maybeSingle();
+
+      // Если товара нет, добавляем в временную базу
+      if (!existing) {
+        const { error: dbError } = await supabase
+          .from('vremenno_product_foto')
+          .insert({
+            barcode,
+            product_name: productName,
+            image_url: urlData.publicUrl,
+            storage_path: filePath
+          });
+
+        if (dbError) {
+          console.error('Database insert error:', dbError);
+        } else {
+          console.log('Photo saved to temporary storage');
+        }
+      } else {
+        console.log('Product already exists in temporary storage');
+      }
+
       return urlData.publicUrl;
     } catch (err) {
-      console.error('Error uploading photo:', err);
+      console.error('Error saving to temporary storage:', err);
       return null;
     }
   };
@@ -220,14 +248,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    // Сначала сохраняем фото в storage
-    const photoUrl = await uploadPhotoToStorage(imageBase64);
-    
     const allProducts = getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {
       body: {
-        imageUrl: photoUrl || imageBase64, // Используем URL если есть, иначе base64
+        imageUrl: imageBase64,
         recognitionType: type,
         allProducts: allProducts.map(p => ({
           barcode: p.barcode,
@@ -244,9 +269,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     }
 
     const result = data?.result || {};
+    const barcode = result.barcode || '';
+    const name = result.name || '';
+    
+    // Сохраняем во временную базу если есть штрихкод и название
+    let photoUrl: string | null = null;
+    if (barcode && name) {
+      photoUrl = await saveToTemporaryStorage(imageBase64, barcode, name);
+    }
+    
     return {
-      barcode: result.barcode || '',
-      name: result.name || '',
+      barcode,
+      name,
       category: result.category || '',
       photoUrl: photoUrl || undefined
     };

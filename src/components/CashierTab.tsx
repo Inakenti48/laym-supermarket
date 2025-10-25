@@ -120,29 +120,44 @@ export const CashierTab = () => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
-    const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
-    if (!sanitizedBarcode || sanitizedBarcode.length > 50) {
-      toast.error('Неверный формат штрихкода');
-      return;
-    }
-
-    // Сначала ищем в основной базе
-    let product = await findProductByBarcode(sanitizedBarcode);
+    const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
+    const productName = barcodeData.name?.trim() || '';
+    
+    let product = null;
     let isTemporary = false;
 
-    // Если не найден в основной базе, ищем во временной
-    if (!product) {
-      const { data: tempProduct } = await supabase
-        .from('vremenno_product_foto')
-        .select('*')
-        .eq('barcode', sanitizedBarcode)
-        .maybeSingle();
+    // Если есть штрихкод - ищем по штрихкоду
+    if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
+      // Сначала ищем в основной базе
+      product = await findProductByBarcode(sanitizedBarcode);
 
-      if (tempProduct) {
-        // Находим товар по названию из временной базы в Supabase
-        const allProducts = await getAllProducts();
-        product = allProducts.find(p => p.name === tempProduct.product_name);
-        isTemporary = true;
+      // Если не найден в основной базе, ищем во временной
+      if (!product) {
+        const { data: tempProduct } = await supabase
+          .from('vremenno_product_foto')
+          .select('*')
+          .eq('barcode', sanitizedBarcode)
+          .maybeSingle();
+
+        if (tempProduct) {
+          // Находим товар по названию из временной базы в Supabase
+          const allProducts = await getAllProducts();
+          product = allProducts.find(p => p.name === tempProduct.product_name);
+          isTemporary = true;
+        }
+      }
+    }
+    
+    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию
+    if (!product && productName) {
+      const allProducts = await getAllProducts();
+      product = allProducts.find(p => 
+        p.name.toLowerCase().includes(productName.toLowerCase()) ||
+        productName.toLowerCase().includes(p.name.toLowerCase())
+      );
+      
+      if (product) {
+        toast.info(`Товар найден по названию: ${product.name}`);
       }
     }
 

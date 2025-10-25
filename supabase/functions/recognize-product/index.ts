@@ -33,28 +33,31 @@ serve(async (req) => {
       );
     }
 
-    // URL format validation
-    const urlPattern = /^https?:\/\//i;
+    // URL format validation - allow http/https URLs and data URLs
+    const urlPattern = /^(https?:\/\/|data:image\/)/i;
     if (!urlPattern.test(imageUrl)) {
       return new Response(
-        JSON.stringify({ error: 'Invalid image URL format' }),
+        JSON.stringify({ error: 'Invalid image URL format. Must be http://, https://, or data:image/' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Block private IP ranges (SSRF protection)
-    const privateIpPattern = /(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^localhost)|(\[::1\])/i;
-    if (privateIpPattern.test(imageUrl)) {
-      return new Response(
-        JSON.stringify({ error: 'Access to private IP ranges is not allowed' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Block private IP ranges (SSRF protection) - only for http/https URLs
+    if (imageUrl.startsWith('http')) {
+      const privateIpPattern = /(^127\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)|(^localhost)|(\[::1\])/i;
+      if (privateIpPattern.test(imageUrl)) {
+        return new Response(
+          JSON.stringify({ error: 'Access to private IP ranges is not allowed' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    // URL length validation
-    if (imageUrl.length > 2048) {
+    // Length validation - more lenient for base64 images
+    const maxLength = imageUrl.startsWith('data:') ? 5000000 : 2048; // 5MB for base64
+    if (imageUrl.length > maxLength) {
       return new Response(
-        JSON.stringify({ error: 'URL too long (max 2048 characters)' }),
+        JSON.stringify({ error: `Image too large (max ${maxLength} characters)` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

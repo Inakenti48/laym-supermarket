@@ -57,7 +57,11 @@ export const InventoryTab = () => {
   });
 
   useEffect(() => {
-    setSuppliers(getSuppliers());
+    const loadSuppliers = async () => {
+      const loadedSuppliers = await getSuppliers();
+      setSuppliers(loadedSuppliers);
+    };
+    loadSuppliers();
   }, []);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {

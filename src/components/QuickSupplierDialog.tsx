@@ -18,14 +18,14 @@ export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSup
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       toast.error('Введите название поставщика');
       return;
     }
 
     try {
-      const newSupplier = saveSupplier({
+      const newSupplier = await saveSupplier({
         name: name.trim(),
         phone: phone.trim(),
         notes: '',

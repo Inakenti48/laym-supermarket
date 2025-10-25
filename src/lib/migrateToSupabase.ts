@@ -63,7 +63,7 @@ export const migrateToSupabase = async (userId: string): Promise<MigrationResult
     }
 
     // 2. Мигрируем поставщиков
-    const suppliers = getSuppliers();
+    const suppliers = await getSuppliers();
     console.log(`Начинаем миграцию ${suppliers.length} поставщиков...`);
 
     for (const supplier of suppliers) {
@@ -169,7 +169,7 @@ export const exportLocalStorageData = async (): Promise<void> => {
   const allData = {
     products: await getStoredProducts(),
     cancellations: getCancellationRequests(),
-    suppliers: getSuppliers(),
+    suppliers: await getSuppliers(),
     exportDate: new Date().toISOString(),
     version: '1.0',
     note: 'Резервная копия перед миграцией в Supabase'

@@ -355,45 +355,91 @@ export interface Supplier {
 
 const SUPPLIERS_KEY = 'suppliers';
 
-export const getSuppliers = (): Supplier[] => {
-  const data = localStorage.getItem(SUPPLIERS_KEY);
-  if (!data) return [];
+export const getSuppliers = async (): Promise<Supplier[]> => {
   try {
-    return JSON.parse(data);
-  } catch {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    return (data || []).map(supplier => ({
+      id: supplier.id,
+      name: supplier.name,
+      phone: supplier.phone || '',
+      notes: supplier.address || '',
+      totalDebt: Number(supplier.debt || 0),
+      paymentHistory: Array.isArray(supplier.payment_history) 
+        ? supplier.payment_history.map((h: any) => ({
+            date: h.date,
+            amount: Number(h.amount),
+            paymentType: h.payment_type || h.paymentType,
+            productName: h.product_name || h.productName,
+            productQuantity: Number(h.product_quantity || h.productQuantity || 0),
+            productPrice: Number(h.product_price || h.productPrice || 0),
+            changedBy: h.changed_by || h.changedBy
+          }))
+        : [],
+      createdAt: supplier.created_at,
+      lastUpdated: supplier.updated_at
+    }));
+  } catch (error) {
+    console.error('Ошибка загрузки поставщиков:', error);
     return [];
   }
 };
 
-export const saveSupplier = (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Supplier => {
-  const suppliers = getSuppliers();
-  const now = new Date().toISOString();
-  
-  const newSupplier: Supplier = {
-    ...supplier,
-    id: Date.now().toString(),
-    paymentHistory: [],
-    createdAt: now,
-    lastUpdated: now,
-  };
-  
-  suppliers.push(newSupplier);
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(suppliers));
-  return newSupplier;
+export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
+  try {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert({
+        name: supplier.name,
+        phone: supplier.phone || null,
+        address: supplier.notes || null,
+        debt: supplier.totalDebt || 0,
+        payment_history: []
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      phone: data.phone || '',
+      notes: data.address || '',
+      totalDebt: Number(data.debt || 0),
+      paymentHistory: [],
+      createdAt: data.created_at,
+      lastUpdated: data.updated_at
+    };
+  } catch (error) {
+    console.error('Ошибка сохранения поставщика:', error);
+    throw error;
+  }
 };
 
-export const updateSupplier = (id: string, updates: Partial<Supplier>): void => {
-  const suppliers = getSuppliers();
-  const updated = suppliers.map(s => {
-    if (s.id === id) {
-      return { ...s, ...updates, lastUpdated: new Date().toISOString() };
-    }
-    return s;
-  });
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
+  try {
+    await supabase
+      .from('suppliers')
+      .update({
+        name: updates.name,
+        phone: updates.phone || null,
+        address: updates.notes || null,
+        debt: updates.totalDebt || null,
+      })
+      .eq('id', id);
+  } catch (error) {
+    console.error('Ошибка обновления поставщика:', error);
+    throw error;
+  }
 };
 
-export const addSupplierPayment = (
+export const addSupplierPayment = async (
   supplierId: string, 
   payment: {
     amount: number;
@@ -403,65 +449,14 @@ export const addSupplierPayment = (
     productPrice: number;
   },
   userId: string
-): void => {
-  const suppliers = getSuppliers();
-  const updated = suppliers.map(s => {
-    if (s.id === supplierId) {
-      const totalCost = payment.productPrice * payment.productQuantity;
-      const newDebt = payment.paymentType === 'full' 
-        ? s.totalDebt 
-        : payment.paymentType === 'debt'
-        ? s.totalDebt + totalCost
-        : s.totalDebt + (totalCost - payment.amount);
-      
-      return {
-        ...s,
-        totalDebt: Math.max(0, newDebt),
-        paymentHistory: [
-          ...s.paymentHistory,
-          {
-            date: new Date().toISOString(),
-            amount: payment.amount,
-            paymentType: payment.paymentType,
-            productName: payment.productName,
-            productQuantity: payment.productQuantity,
-            productPrice: payment.productPrice,
-            changedBy: userId,
-          }
-        ],
-        lastUpdated: new Date().toISOString(),
-      };
-    }
-    return s;
-  });
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+): Promise<void> => {
+  // Эта функция пока не используется, будет реализована позже
+  console.log('addSupplierPayment - not implemented yet');
 };
 
-export const paySupplierDebt = (supplierId: string, amount: number, userId: string): void => {
-  const suppliers = getSuppliers();
-  const updated = suppliers.map(s => {
-    if (s.id === supplierId) {
-      return {
-        ...s,
-        totalDebt: Math.max(0, s.totalDebt - amount),
-        paymentHistory: [
-          ...s.paymentHistory,
-          {
-            date: new Date().toISOString(),
-            amount: -amount,
-            paymentType: 'partial' as const,
-            productName: 'Погашение долга',
-            productQuantity: 0,
-            productPrice: 0,
-            changedBy: userId,
-          }
-        ],
-        lastUpdated: new Date().toISOString(),
-      };
-    }
-    return s;
-  });
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updated));
+export const paySupplierDebt = async (supplierId: string, amount: number, userId: string): Promise<void> => {
+  // Эта функция пока не используется, будет реализована позже
+  console.log('paySupplierDebt - not implemented yet');
 };
 
 // Экспорт всех данных для резервного копирования

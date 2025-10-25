@@ -14,7 +14,6 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'admin' | 'cashier' | 'inventory' | 'employee'>('cashier');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -47,6 +46,7 @@ export default function Auth() {
         });
         navigate('/');
       } else {
+        // Signup - role will be auto-assigned as 'user' by database trigger
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -59,18 +59,6 @@ export default function Auth() {
         });
 
         if (error) throw error;
-
-        // Assign role to new user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert({ user_id: user.id, role });
-
-          if (roleError) {
-            console.error('Error assigning role:', roleError);
-          }
-        }
 
         toast({
           title: 'Регистрация успешна',
@@ -147,23 +135,6 @@ export default function Auth() {
                 minLength={6}
               />
             </div>
-
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="role">Роль</Label>
-                <Select value={role} onValueChange={(value: any) => setRole(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Администратор</SelectItem>
-                    <SelectItem value="cashier">Кассир</SelectItem>
-                    <SelectItem value="inventory">Складской</SelectItem>
-                    <SelectItem value="employee">Сотрудник</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <Button type="submit" className="w-full gap-2" disabled={loading}>
               {isLogin ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}

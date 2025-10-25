@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Building2, 
   LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle
 } from 'lucide-react';
-import { LoginScreen } from '@/components/LoginScreen';
+import { useNavigate } from 'react-router-dom';
 import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
@@ -14,67 +14,51 @@ import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
-import { login, logout, getCurrentUser, UserRole } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/lib/useAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginRole, setLoginRole] = useState<UserRole>('admin');
-  const [currentUser, setCurrentUser] = useState(getCurrentUser());
+  const { user, userRole, loading, logout: authLogout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
-  }, []);
+    if (!loading && !isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [loading, isAuthenticated, navigate]);
 
-  const handleLoginClick = (role: UserRole) => {
-    setLoginRole(role);
-    setShowLogin(true);
-  };
-
-  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
-    const success = await login(username, role, cashierName);
-    if (success) {
-      setCurrentUser(getCurrentUser());
-      setShowLogin(false);
-      setLoginRole(undefined);
-      toast.success('Вход выполнен успешно');
-      
-      // Set active tab based on role
-      if (role === 'admin') {
+  useEffect(() => {
+    // Set initial tab based on role
+    if (userRole) {
+      if (userRole === 'admin') {
         setActiveTab('dashboard');
-      } else if (role === 'cashier') {
+      } else if (userRole === 'cashier') {
         setActiveTab('cashier');
-      } else if (role === 'inventory') {
+      } else if (userRole === 'inventory') {
         setActiveTab('inventory');
-      } else if (role === 'employee') {
+      } else {
         setActiveTab('employee-work');
       }
-    } else {
-      toast.error('Неверные учетные данные');
     }
-  };
+  }, [userRole]);
 
   const handleLogout = () => {
-    logout();
-    setCurrentUser(null);
-    setActiveTab('dashboard');
-    setShowLogin(false);
-    setLoginRole(undefined);
+    authLogout();
     toast.info('Вы вышли из системы');
   };
 
   const handleBack = () => {
     // Go back to previous tab or logout if on main screen
-    if (activeTab !== 'dashboard' && activeTab !== 'cashier' && activeTab !== 'inventory' && activeTab !== 'employee-work') {
-      setActiveTab(currentUser?.role === 'admin' ? 'dashboard' : 
-                   currentUser?.role === 'cashier' ? 'cashier' : 
-                   currentUser?.role === 'inventory' ? 'inventory' : 'employee-work');
+    const mainTabs = { admin: 'dashboard', cashier: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
+    const mainTab = userRole ? mainTabs[userRole as keyof typeof mainTabs] : 'dashboard';
+    
+    if (activeTab !== mainTab) {
+      setActiveTab(mainTab as Tab);
     } else {
       handleLogout();
     }
@@ -91,82 +75,30 @@ const Index = () => {
     { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
     { id: 'import' as Tab, label: 'Импорт', icon: Upload, roles: ['admin'] },
-    { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee'] },
+    { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee', 'user'] },
   ];
 
   const visibleTabs = tabs.filter(tab => 
-    !currentUser || tab.roles.includes(currentUser.role)
+    userRole && tab.roles.includes(userRole)
   );
 
-  // Требуем авторизацию для всего приложения
-  if (!currentUser) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        {showLogin ? (
-          <LoginScreen
-            role={loginRole}
-            onLogin={handleLogin}
-            onCancel={() => setShowLogin(false)}
-          />
-        ) : (
-          <div className="flex items-center justify-center min-h-screen">
-            <Card className="p-8 max-w-md w-full mx-4">
-              <div className="text-center mb-6">
-                <Package className="h-16 w-16 text-primary mx-auto mb-4" />
-                <h1 className="text-2xl font-bold mb-2">Система Учета Товаров</h1>
-                <p className="text-muted-foreground">Выберите роль для входа</p>
-              </div>
-              <div className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className="w-full h-12 text-base" 
-                  onClick={() => handleLoginClick('admin')}
-                >
-                  <LayoutDashboard className="h-5 w-5 mr-2" />
-                  Войти как Админ
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full h-12 text-base" 
-                  onClick={() => handleLoginClick('cashier')}
-                >
-                  <ShoppingCart className="h-5 w-5 mr-2" />
-                  Войти как Кассир
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full h-12 text-base" 
-                  onClick={() => handleLoginClick('inventory')}
-                >
-                  <Package className="h-5 w-5 mr-2" />
-                  Войти как Склад
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full h-12 text-base" 
-                  onClick={() => handleLoginClick('employee')}
-                >
-                  <Users className="h-5 w-5 mr-2" />
-                  Работа
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
       </div>
     );
   }
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {showLogin && (
-        <LoginScreen
-          role={loginRole}
-          onLogin={handleLogin}
-          onCancel={() => setShowLogin(false)}
-        />
-      )}
-
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -183,8 +115,13 @@ const Index = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="text-right mr-2">
-              <p className="text-sm font-medium">{currentUser.cashierName || 'Пользователь'}</p>
-              <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
+              <p className="text-sm font-medium">{user?.email || 'Пользователь'}</p>
+              <p className="text-xs text-muted-foreground capitalize">
+                {userRole === 'admin' ? 'Администратор' :
+                 userRole === 'cashier' ? 'Кассир' :
+                 userRole === 'inventory' ? 'Склад' :
+                 'Сотрудник'}
+              </p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход">
               <LogOut className="h-5 w-5" />
@@ -230,8 +167,8 @@ const Index = () => {
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
         {activeTab === 'cancellations' && <CancellationsTab />}
-        {activeTab === 'employee-work' && currentUser.employeeId && (
-          <EmployeeWorkTab employeeId={currentUser.employeeId} />
+        {activeTab === 'employee-work' && user?.id && (
+          <EmployeeWorkTab employeeId={user.id} />
         )}
         {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">

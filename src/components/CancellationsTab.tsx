@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/lib/useAuth';
+import { getCurrentUser } from '@/lib/auth';
 
 interface CancellationItem {
   name: string;
@@ -25,7 +25,7 @@ interface CancellationRequest {
 }
 
 export const CancellationsTab = () => {
-  const { user } = useAuth();
+  const currentUser = getCurrentUser();
   const [requests, setRequests] = useState<CancellationRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -98,8 +98,8 @@ export const CancellationsTab = () => {
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: `Подтверждена отмена товара: ${barcode} (${quantity} шт)`
       });
 
@@ -122,8 +122,8 @@ export const CancellationsTab = () => {
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: `Отклонена отмена товара`
       });
 

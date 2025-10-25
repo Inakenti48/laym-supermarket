@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Users, Edit2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/lib/useAuth';
+import { getCurrentUser } from '@/lib/auth';
 
 interface Employee {
   id: string;
@@ -22,7 +22,7 @@ interface Employee {
 }
 
 export const EmployeesTab = () => {
-  const { user } = useAuth();
+  const currentUser = getCurrentUser();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -104,7 +104,7 @@ export const EmployeesTab = () => {
             schedule,
             hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
             login,
-            created_by: user?.id
+            created_by: null
           });
 
         if (error) throw error;
@@ -113,8 +113,8 @@ export const EmployeesTab = () => {
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: editingId 
           ? `Обновлён сотрудник: ${name}` 
           : `Добавлен сотрудник: ${name} (${customLogin || generateLogin()})`

@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/lib/useAuth';
+import { getCurrentUser } from '@/lib/auth';
 
 interface PaymentHistoryItem {
   productName: string;
@@ -39,7 +39,7 @@ interface Supplier {
 }
 
 export const SuppliersTab = () => {
-  const { user } = useAuth();
+  const currentUser = getCurrentUser();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -123,15 +123,15 @@ export const SuppliersTab = () => {
           address: newSupplier.address || null,
           debt: 0,
           payment_history: [],
-          created_by: user?.id
+          created_by: null
         });
 
       if (error) throw error;
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
       });
 
@@ -214,8 +214,8 @@ export const SuppliersTab = () => {
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
       });
 
@@ -290,8 +290,8 @@ export const SuppliersTab = () => {
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: user?.id,
-        user_name: user?.email || 'Неизвестно',
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
         message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
       });
 

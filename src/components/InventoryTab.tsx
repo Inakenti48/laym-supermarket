@@ -523,11 +523,6 @@ export const InventoryTab = () => {
                   <SelectItem value="__add_new__" className="text-primary font-medium">
                     + Добавить нового поставщика
                   </SelectItem>
-                  {suppliers.length === 0 && (
-                    <SelectItem value="" disabled>
-                      Нет поставщиков
-                    </SelectItem>
-                  )}
                   {suppliers.map((supplier) => (
                     <SelectItem key={supplier.id} value={supplier.name}>
                       {supplier.name}

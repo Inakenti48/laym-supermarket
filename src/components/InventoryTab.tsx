@@ -12,6 +12,7 @@ import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
@@ -24,6 +25,7 @@ interface Product {
   unit: 'шт' | 'кг';
   expiryDate?: string;
   photos: string[];
+  capturedImage?: string; // Временное фото из AI распознавания
 }
 
 export const InventoryTab = () => {
@@ -34,6 +36,7 @@ export const InventoryTab = () => {
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [capturedImage, setCapturedImage] = useState<string>(''); // Временное фото из AI
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -49,11 +52,16 @@ export const InventoryTab = () => {
     expiryDate: '',
   });
 
-  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string } | string) => {
+  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
     const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
+    
+    // Сохраняем capturedImage во временное состояние
+    if (barcodeData.capturedImage) {
+      setCapturedImage(barcodeData.capturedImage);
+    }
     
     // Проверка только если штрихкод не пустой
     if (sanitizedBarcode && sanitizedBarcode.length > 50) {
@@ -179,6 +187,7 @@ export const InventoryTab = () => {
       unit: currentProduct.unit,
       expiryDate: currentProduct.expiryDate || undefined,
       photos,
+      capturedImage, // Сохраняем временное фото
     };
 
     setProducts([...products, newProduct]);
@@ -197,10 +206,65 @@ export const InventoryTab = () => {
       expiryDate: '',
     });
     setPhotos([]);
+    setCapturedImage('');
     setSuggestedProduct(null);
   };
 
-  const saveAllProducts = () => {
+  const saveProductImage = async (barcode: string, productName: string, imageBase64: string) => {
+    try {
+      // Конвертируем base64 в blob
+      const base64Data = imageBase64.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      // Генерируем имя файла
+      const fileName = `${barcode}-${Date.now()}.jpg`;
+      const filePath = `products/${fileName}`;
+
+      // Загружаем в storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, blob, {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        return;
+      }
+
+      // Получаем публичный URL
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      // Сохраняем в базу данных
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .insert({
+          barcode,
+          product_name: productName,
+          image_url: urlData.publicUrl,
+          storage_path: filePath
+        });
+
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+      } else {
+        console.log('Product image saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving product image:', error);
+    }
+  };
+
+  const saveAllProducts = async () => {
     if (products.length === 0) {
       toast.error('Список товаров пуст');
       return;
@@ -209,7 +273,7 @@ export const InventoryTab = () => {
     let successCount = 0;
     let errorCount = 0;
 
-    products.forEach(product => {
+    for (const product of products) {
       try {
         const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
           barcode: product.barcode,
@@ -232,6 +296,11 @@ export const InventoryTab = () => {
         if (saved) {
           addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
           
+          // Если есть capturedImage, сохраняем в product_images
+          if (product.capturedImage) {
+            await saveProductImage(product.barcode, product.name, product.capturedImage);
+          }
+          
           if (suggestedProduct && 
               (suggestedProduct.purchasePrice !== product.purchasePrice || 
                suggestedProduct.retailPrice !== product.retailPrice)) {
@@ -247,7 +316,7 @@ export const InventoryTab = () => {
         console.error('Error saving product:', error);
         errorCount++;
       }
-    });
+    }
 
     if (successCount > 0) {
       toast.success(`Успешно добавлено товаров: ${successCount}`);

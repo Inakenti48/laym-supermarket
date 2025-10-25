@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { getEmployees, saveEmployee, updateEmployee, type Employee } from '@/lib/auth';
-import { saveTask } from '@/lib/employees';
-import { Plus, Users, Edit2 } from 'lucide-react';
+import { Plus, Users, Edit2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/useAuth';
+
+interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  work_conditions: string;
+  schedule: string;
+  hourly_rate: number | null;
+  login: string;
+  created_at: string;
+}
 
 export const EmployeesTab = () => {
-  const [employees, setEmployees] = useState<Employee[]>(getEmployees());
+  const { user } = useAuth();
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -20,6 +33,27 @@ export const EmployeesTab = () => {
   const [schedule, setSchedule] = useState<'full' | 'piece'>('full');
   const [hourlyRate, setHourlyRate] = useState('');
   const [customLogin, setCustomLogin] = useState('');
+
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  const loadEmployees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setEmployees(data || []);
+    } catch (error: any) {
+      console.error('Error loading employees:', error);
+      toast.error('Ошибка загрузки сотрудников');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generateLogin = () => {
     const timestamp = Date.now().toString().slice(-6);
@@ -30,47 +64,71 @@ export const EmployeesTab = () => {
     setEditingId(employee.id);
     setName(employee.name);
     setPosition(employee.position);
-    setWorkConditions(employee.workConditions);
-    setSchedule(employee.schedule);
-    setHourlyRate(employee.hourlyRate?.toString() || '');
+    setWorkConditions(employee.work_conditions);
+    setSchedule(employee.schedule as 'full' | 'piece');
+    setHourlyRate(employee.hourly_rate?.toString() || '');
     setCustomLogin(employee.login);
     setShowForm(true);
   };
 
-  const handleAddEmployee = () => {
+  const handleAddEmployee = async () => {
     if (!name || !position || !workConditions) {
       toast.error('Заполните все поля');
       return;
     }
 
-    if (editingId) {
-      // Обновление существующего сотрудника
-      updateEmployee(editingId, {
-        name,
-        position,
-        workConditions,
-        schedule,
-        hourlyRate: schedule === 'full' ? parseFloat(hourlyRate) : undefined,
-        login: customLogin || generateLogin()
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from('employees')
+          .update({
+            name,
+            position,
+            work_conditions: workConditions,
+            schedule,
+            hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
+            login: customLogin || generateLogin()
+          })
+          .eq('id', editingId);
+
+        if (error) throw error;
+        toast.success('Сотрудник обновлён');
+      } else {
+        const login = customLogin || generateLogin();
+        const { error } = await supabase
+          .from('employees')
+          .insert({
+            name,
+            position,
+            work_conditions: workConditions,
+            schedule,
+            hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
+            login,
+            created_by: user?.id
+          });
+
+        if (error) throw error;
+        toast.success(`Сотрудник добавлен. Логин: ${login}`);
+      }
+
+      // Добавляем лог
+      await supabase.from('system_logs').insert({
+        user_id: user?.id,
+        user_name: user?.email || 'Неизвестно',
+        message: editingId 
+          ? `Обновлён сотрудник: ${name}` 
+          : `Добавлен сотрудник: ${name} (${customLogin || generateLogin()})`
       });
-      setEmployees(getEmployees());
-      toast.success('Сотрудник обновлён');
-    } else {
-      // Добавление нового сотрудника
-      const login = customLogin || generateLogin();
-      const employee = saveEmployee({
-        name,
-        position,
-        workConditions,
-        schedule,
-        hourlyRate: schedule === 'full' ? parseFloat(hourlyRate) : undefined,
-        login
-      });
-      setEmployees(getEmployees());
-      toast.success(`Сотрудник добавлен. Логин: ${login}`);
+
+      resetForm();
+      loadEmployees();
+    } catch (error: any) {
+      console.error('Error saving employee:', error);
+      toast.error('Ошибка сохранения сотрудника');
     }
-    
-    // Reset form
+  };
+
+  const resetForm = () => {
     setEditingId(null);
     setName('');
     setPosition('');
@@ -81,20 +139,13 @@ export const EmployeesTab = () => {
     setShowForm(false);
   };
 
-  const handleAddTask = (employeeId: string, employeeName: string) => {
-    const title = prompt('Название задания:');
-    const description = prompt('Описание задания:');
-    
-    if (title && description) {
-      saveTask({
-        employeeId,
-        title,
-        description,
-        date: new Date().toISOString().split('T')[0]
-      });
-      toast.success('Задание добавлено');
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-6xl mx-auto space-y-4">
@@ -183,16 +234,7 @@ export const EmployeesTab = () => {
             <Button onClick={handleAddEmployee} size="sm" className="flex-1">
               {editingId ? 'Сохранить' : 'Создать'}
             </Button>
-            <Button onClick={() => {
-              setShowForm(false);
-              setEditingId(null);
-              setName('');
-              setPosition('');
-              setWorkConditions('');
-              setSchedule('full');
-              setHourlyRate('');
-              setCustomLogin('');
-            }} variant="outline" size="sm">
+            <Button onClick={resetForm} variant="outline" size="sm">
               Отмена
             </Button>
           </div>
@@ -200,15 +242,19 @@ export const EmployeesTab = () => {
       )}
 
       <div className="space-y-2">
-        {employees.map((employee) => (
-          <Card key={employee.id} className="p-3">
-            <div className="space-y-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-sm">{employee.name}</h3>
-                  <p className="text-xs text-muted-foreground">{employee.position}</p>
-                </div>
-                <div className="flex gap-2">
+        {employees.length === 0 ? (
+          <Card className="p-8 text-center text-muted-foreground">
+            Нет сотрудников
+          </Card>
+        ) : (
+          employees.map((employee) => (
+            <Card key={employee.id} className="p-3">
+              <div className="space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-sm">{employee.name}</h3>
+                    <p className="text-xs text-muted-foreground">{employee.position}</p>
+                  </div>
                   <Button 
                     size="sm" 
                     variant="ghost"
@@ -217,38 +263,30 @@ export const EmployeesTab = () => {
                   >
                     <Edit2 className="h-3 w-3" />
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleAddTask(employee.id, employee.name)}
-                    className="text-xs"
-                  >
-                    Добавить задание
-                  </Button>
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-muted-foreground">Логин:</span>
-                  <span className="ml-1 font-mono">{employee.login}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">График:</span>
-                  <span className="ml-1">{employee.schedule === 'full' ? 'Полный день' : 'Сдельная'}</span>
-                </div>
-                {employee.hourlyRate && (
+                
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Ставка:</span>
-                    <span className="ml-1">{employee.hourlyRate} ₽/час</span>
+                    <span className="text-muted-foreground">Логин:</span>
+                    <span className="ml-1 font-mono">{employee.login}</span>
                   </div>
-                )}
+                  <div>
+                    <span className="text-muted-foreground">График:</span>
+                    <span className="ml-1">{employee.schedule === 'full' ? 'Полный день' : 'Сдельная'}</span>
+                  </div>
+                  {employee.hourly_rate && (
+                    <div>
+                      <span className="text-muted-foreground">Ставка:</span>
+                      <span className="ml-1">{employee.hourly_rate} ₽/час</span>
+                    </div>
+                  )}
+                </div>
+                
+                <p className="text-xs text-muted-foreground">{employee.work_conditions}</p>
               </div>
-              
-              <p className="text-xs text-muted-foreground">{employee.workConditions}</p>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );

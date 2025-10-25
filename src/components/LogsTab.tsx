@@ -1,31 +1,82 @@
-import { useState } from 'react';
-import { Activity, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Activity, Calendar, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { getLogs } from '@/lib/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+interface SystemLog {
+  id: string;
+  message: string;
+  user_name: string | null;
+  created_at: string;
+}
 
 export const LogsTab = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [filteredLogs, setFilteredLogs] = useState(getLogs());
+  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  const loadLogs = async () => {
+    try {
+      let query = supabase
+        .from('system_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      if (startDate) {
+        query = query.gte('created_at', new Date(startDate).toISOString());
+      }
+      if (endDate) {
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', endDateTime.toISOString());
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (error: any) {
+      console.error('Error loading logs:', error);
+      toast.error('Ошибка загрузки логов');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFilter = () => {
-    const logs = getLogs(startDate, endDate);
-    setFilteredLogs(logs);
+    setLoading(true);
+    loadLogs();
   };
 
   const handleReset = () => {
     setStartDate('');
     setEndDate('');
-    setFilteredLogs(getLogs());
+    setLoading(true);
+    loadLogs();
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <Activity className="h-5 w-5" />
-        Журнал активности ({filteredLogs.length})
+        Журнал активности ({logs.length})
       </h3>
 
       <Card className="p-4 mb-4 bg-muted/50">
@@ -59,21 +110,23 @@ export const LogsTab = () => {
         </div>
       </Card>
 
-      {filteredLogs.length === 0 ? (
+      {logs.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           Нет записей в журнале
         </div>
       ) : (
         <div className="space-y-2 max-h-[600px] overflow-y-auto">
-          {filteredLogs.map((log) => (
+          {logs.map((log) => (
             <div key={log.id} className="p-3 bg-muted/50 rounded-lg">
               <div className="flex justify-between items-start mb-1">
                 <span className="font-medium text-sm">{log.message}</span>
-                <span className="text-xs text-muted-foreground">{log.timestamp}</span>
-              </div>
-              {log.user && (
                 <span className="text-xs text-muted-foreground">
-                  Пользователь: {log.user}
+                  {new Date(log.created_at).toLocaleString('ru-RU')}
+                </span>
+              </div>
+              {log.user_name && (
+                <span className="text-xs text-muted-foreground">
+                  Пользователь: {log.user_name}
                 </span>
               )}
             </div>

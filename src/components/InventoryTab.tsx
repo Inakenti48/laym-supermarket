@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Scan, Plus, Package, X, Camera, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,10 @@ import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
+import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
-import { findProductByBarcode, saveProduct, StoredProduct } from '@/lib/storage';
+import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -40,6 +41,8 @@ export const InventoryTab = () => {
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState({
     barcode: '',
@@ -50,7 +53,12 @@ export const InventoryTab = () => {
     quantity: '',
     unit: 'шт' as 'шт' | 'кг',
     expiryDate: '',
+    supplier: '',
   });
+
+  useEffect(() => {
+    setSuppliers(getSuppliers());
+  }, []);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
@@ -204,6 +212,7 @@ export const InventoryTab = () => {
       quantity: '',
       unit: 'шт',
       expiryDate: '',
+      supplier: '',
     });
     setPhotos([]);
     setCapturedImage('');
@@ -315,6 +324,7 @@ export const InventoryTab = () => {
           paidAmount: product.purchasePrice * product.quantity,
           debtAmount: 0,
           addedBy: currentUser?.role || 'unknown',
+          supplier: currentProduct.supplier || undefined,
         };
 
         const saved = saveProduct(productData, currentUser?.username || 'unknown');
@@ -384,6 +394,16 @@ export const InventoryTab = () => {
           }}
         />
       )}
+
+      {/* Quick Supplier Dialog */}
+      <QuickSupplierDialog
+        open={showSupplierDialog}
+        onClose={() => setShowSupplierDialog(false)}
+        onSupplierAdded={(newSupplier) => {
+          setSuppliers([...suppliers, newSupplier]);
+          setCurrentProduct({ ...currentProduct, supplier: newSupplier.name });
+        }}
+      />
 
       {/* Scanner and Import */}
       <div className="flex gap-2 flex-wrap">
@@ -482,6 +502,39 @@ export const InventoryTab = () => {
                 onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
                 placeholder="Например: Молочные продукты"
               />
+            </div>
+
+            <div>
+              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Поставщик</label>
+              <Select
+                value={currentProduct.supplier}
+                onValueChange={(value) => {
+                  if (value === '__add_new__') {
+                    setShowSupplierDialog(true);
+                  } else {
+                    setCurrentProduct({ ...currentProduct, supplier: value });
+                  }
+                }}
+              >
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Выберите поставщика" />
+                </SelectTrigger>
+                <SelectContent className="bg-background z-50">
+                  <SelectItem value="__add_new__" className="text-primary font-medium">
+                    + Добавить нового поставщика
+                  </SelectItem>
+                  {suppliers.length === 0 && (
+                    <SelectItem value="" disabled>
+                      Нет поставщиков
+                    </SelectItem>
+                  )}
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.name}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

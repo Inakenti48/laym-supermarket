@@ -13,6 +13,7 @@ export interface StoredProduct {
   paidAmount: number;
   debtAmount: number;
   addedBy: string;
+  supplier?: string;
   lastUpdated: string;
   priceHistory: Array<{
     date: string;
@@ -51,6 +52,7 @@ export const getStoredProducts = async (): Promise<StoredProduct[]> => {
       paidAmount: Number(product.paid_amount),
       debtAmount: Number(product.debt_amount),
       addedBy: product.created_by || '',
+      supplier: product.supplier || undefined,
       lastUpdated: product.updated_at,
       priceHistory: Array.isArray(product.price_history) 
         ? product.price_history.map((h: any) => ({
@@ -92,6 +94,7 @@ export const findProductByBarcode = async (barcode: string): Promise<StoredProdu
       paidAmount: Number(data.paid_amount),
       debtAmount: Number(data.debt_amount),
       addedBy: data.created_by || '',
+      supplier: data.supplier || undefined,
       lastUpdated: data.updated_at,
       priceHistory: Array.isArray(data.price_history)
         ? data.price_history.map((h: any) => ({
@@ -144,6 +147,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
           payment_type: product.paymentType,
           paid_amount: product.paidAmount,
           debt_amount: product.debtAmount,
+          supplier: product.supplier || null,
           price_history: newPriceHistory.map(h => ({
             date: h.date,
             purchase_price: h.purchasePrice,
@@ -189,6 +193,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
           payment_type: product.paymentType,
           paid_amount: product.paidAmount,
           debt_amount: product.debtAmount,
+          supplier: product.supplier || null,
           price_history: initialPriceHistory.map(h => ({
             date: h.date,
             purchase_price: h.purchasePrice,

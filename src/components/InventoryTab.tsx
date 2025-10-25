@@ -27,6 +27,7 @@ interface Product {
   expiryDate?: string;
   photos: string[];
   capturedImage?: string; // Временное фото из AI распознавания
+  supplier?: string; // Поставщик товара
 }
 
 export const InventoryTab = () => {
@@ -200,6 +201,7 @@ export const InventoryTab = () => {
       expiryDate: currentProduct.expiryDate || undefined,
       photos,
       capturedImage, // Сохраняем временное фото
+      supplier: currentProduct.supplier || undefined, // Сохраняем поставщика
     };
 
     setProducts([...products, newProduct]);
@@ -328,10 +330,10 @@ export const InventoryTab = () => {
           paidAmount: product.purchasePrice * product.quantity,
           debtAmount: 0,
           addedBy: currentUser?.role || 'unknown',
-          supplier: currentProduct.supplier || undefined,
+          supplier: product.supplier || undefined, // Берем поставщика из товара
         };
 
-        const saved = saveProduct(productData, currentUser?.username || 'unknown');
+        const saved = await saveProduct(productData, currentUser?.username || 'unknown');
         
         if (saved) {
           addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
@@ -403,8 +405,9 @@ export const InventoryTab = () => {
       <QuickSupplierDialog
         open={showSupplierDialog}
         onClose={() => setShowSupplierDialog(false)}
-        onSupplierAdded={(newSupplier) => {
-          setSuppliers([...suppliers, newSupplier]);
+        onSupplierAdded={async (newSupplier) => {
+          const updatedSuppliers = await getSuppliers();
+          setSuppliers(updatedSuppliers);
           setCurrentProduct({ ...currentProduct, supplier: newSupplier.name });
         }}
       />
@@ -657,7 +660,7 @@ export const InventoryTab = () => {
             )}
           </div>
 
-          {products.length === 0 ? (
+           {products.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               Товары не добавлены. Добавьте товары и нажмите "Занести товары"
             </div>
@@ -671,6 +674,9 @@ export const InventoryTab = () => {
                       <div className="text-xs sm:text-sm text-muted-foreground space-y-0.5">
                         <div>Штрихкод: {product.barcode}</div>
                         <div>Категория: {product.category}</div>
+                        {product.supplier && (
+                          <div>Поставщик: {product.supplier}</div>
+                        )}
                         {product.expiryDate && (
                           <div>Срок до: {new Date(product.expiryDate).toLocaleDateString('ru-RU')}</div>
                         )}
@@ -680,6 +686,14 @@ export const InventoryTab = () => {
                       </Badge>
                     </div>
                     <div className="text-right ml-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 mb-2"
+                        onClick={() => setProducts(products.filter(p => p.id !== product.id))}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                       <div className="font-semibold text-sm sm:text-base">
                         {product.purchasePrice * product.quantity}₽
                       </div>

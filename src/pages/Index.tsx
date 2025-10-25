@@ -55,6 +55,18 @@ const Index = () => {
       const user = getCurrentUser();
       setCurrentUser(user);
       setSelectedRole(null);
+      
+      // Set initial tab based on role after login
+      if (user?.role === 'admin') {
+        setActiveTab('dashboard');
+      } else if (user?.role === 'cashier') {
+        setActiveTab('cashier');
+      } else if (user?.role === 'inventory') {
+        setActiveTab('inventory');
+      } else {
+        setActiveTab('employee-work');
+      }
+      
       toast.success('Вход выполнен успешно');
     } else {
       toast.error('Неверный логин');

@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      product_images: {
+        Row: {
+          barcode: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          image_url: string
+          product_name: string
+          storage_path: string
+        }
+        Insert: {
+          barcode: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          image_url: string
+          product_name: string
+          storage_path: string
+        }
+        Update: {
+          barcode?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          image_url?: string
+          product_name?: string
+          storage_path?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

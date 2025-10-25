@@ -32,6 +32,7 @@ import {
   printReceiptBrowser,
   type ReceiptData 
 } from '@/lib/printer';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CartItem {
   id: string;
@@ -104,7 +105,61 @@ export const CashierTab = () => {
     }
   };
 
-  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string } | string) => {
+  const saveProductImage = async (barcode: string, productName: string, imageBase64: string) => {
+    try {
+      // Конвертируем base64 в blob
+      const base64Data = imageBase64.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      // Генерируем имя файла
+      const fileName = `${barcode}-${Date.now()}.jpg`;
+      const filePath = `products/${fileName}`;
+
+      // Загружаем в storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, blob, {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        return;
+      }
+
+      // Получаем публичный URL
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      // Сохраняем в базу данных
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .insert({
+          barcode,
+          product_name: productName,
+          image_url: urlData.publicUrl,
+          storage_path: filePath
+        });
+
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+      } else {
+        console.log('Product image saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving product image:', error);
+    }
+  };
+
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
@@ -130,12 +185,18 @@ export const CashierTab = () => {
         return;
       }
       
+      // Сохраняем фото товара в базу если есть
+      if (barcodeData.capturedImage) {
+        await saveProductImage(sanitizedBarcode, product.name, barcodeData.capturedImage);
+      }
+      
       addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}`);
     } else {
       toast.error('Товар не найден');
     }
     setShowScanner(false);
+    setShowAIScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {

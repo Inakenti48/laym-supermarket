@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string }) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string }) => void;
   mode?: 'product' | 'barcode';
 }
 
@@ -276,7 +276,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       if (mode === 'barcode') {
         if (result.barcode) {
           setNotification('✅ Штрихкод распознан!');
-          onProductFound(result);
+          onProductFound({ ...result, capturedImage: image });
           setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Штрихкод не найден');
@@ -285,7 +285,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       } else {
         if (result.name || result.category) {
           setNotification('✅ Товар распознан!');
-          onProductFound(result);
+          onProductFound({ ...result, capturedImage: image });
           setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Товар не распознан');
@@ -331,7 +331,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           if (mode === 'barcode') {
             if (result.barcode) {
               setNotification('✅ Штрихкод распознан!');
-              onProductFound(result);
+              onProductFound({ ...result, capturedImage: image });
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');
@@ -339,7 +339,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           } else {
             if (result.name || result.category) {
               setNotification('✅ Товар распознан!');
-              onProductFound(result);
+              onProductFound({ ...result, capturedImage: image });
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');

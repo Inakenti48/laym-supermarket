@@ -172,7 +172,7 @@ export const CashierTab = () => {
       
       // Проверка наличия
       if (product.quantity <= 0) {
-        toast.error(`Товар "${product.name}" отсутствует на складе`);
+        toast.error(`ТОВАР ЗАКОНЧИЛСЯ ПОЭТОМУ НЕ ПРОБИВАЮ`);
         return;
       }
       

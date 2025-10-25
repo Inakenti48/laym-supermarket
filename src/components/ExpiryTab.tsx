@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Package } from 'lucide-react';
+import { AlertTriangle, Package, Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { getExpiringProducts } from '@/lib/storage';
+import { Button } from '@/components/ui/button';
+import { getExpiringProducts, removeExpiredProduct } from '@/lib/storage';
+import { addLog } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
 
 export const ExpiryTab = () => {
@@ -29,6 +32,25 @@ export const ExpiryTab = () => {
     if (days <= 1) return 'destructive';
     if (days <= 2) return 'default';
     return 'secondary';
+  };
+
+  const handleRemoveExpired = async (product: StoredProduct) => {
+    try {
+      const removed = await removeExpiredProduct(product.barcode);
+      if (removed) {
+        const expiryDate = new Date(product.expiryDate!).toLocaleDateString('ru-RU');
+        const logMessage = `Убран товар с истекшим сроком: "${product.name}", срок годности: ${expiryDate}, количество: ${product.quantity} ${product.unit}`;
+        addLog(logMessage);
+        toast.success('Товар удален из прилавка');
+        
+        // Обновляем список
+        const updatedProducts = await getExpiringProducts(3);
+        setExpiringProducts(updatedProducts);
+      }
+    } catch (error) {
+      toast.error('Не удалось удалить товар');
+      console.error(error);
+    }
   };
 
   if (loading) {
@@ -77,6 +99,9 @@ export const ExpiryTab = () => {
                     <p className="text-sm text-muted-foreground">
                       <span className="font-medium">Штрихкод:</span> {product.barcode}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Количество:</span> {product.quantity} {product.unit}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge variant={getExpiryBadgeVariant(daysLeft)}>
@@ -85,6 +110,15 @@ export const ExpiryTab = () => {
                     <p className="text-sm text-muted-foreground">
                       Годен до: {expiryDate}
                     </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRemoveExpired(product)}
+                      className="mt-2"
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Сделано
+                    </Button>
                   </div>
                 </div>
               </div>

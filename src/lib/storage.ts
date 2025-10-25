@@ -144,6 +144,26 @@ export const updateProductQuantity = async (barcode: string, quantityChange: num
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
 };
 
+export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
+  const products = await getStoredProducts();
+  const product = await findProductByBarcode(barcode);
+  
+  if (!product) {
+    return null;
+  }
+  
+  // Обнуляем количество вместо полного удаления
+  const updatedProducts = products.map(p => {
+    if (p.barcode === barcode) {
+      return { ...p, quantity: 0 };
+    }
+    return p;
+  });
+  
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
+  return product;
+};
+
 // Система отмены товаров
 export interface CancellationRequest {
   id: string;

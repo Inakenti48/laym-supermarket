@@ -156,7 +156,7 @@ export const InventoryTab = () => {
   };
 
   const addProduct = async () => {
-    if (!currentProduct.barcode || !currentProduct.name || !currentProduct.category || 
+    if (!currentProduct.name || !currentProduct.category || 
         !currentProduct.purchasePrice || !currentProduct.quantity) {
       toast.error('Заполните все обязательные поля');
       return;

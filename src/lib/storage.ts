@@ -36,14 +36,17 @@ export const getStoredProducts = async (): Promise<StoredProduct[]> => {
 };
 
 export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
+  if (!barcode) return null;
   const products = await getStoredProducts();
   return products.find(p => p.barcode === barcode) || null;
 };
 
 export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): Promise<StoredProduct> => {
   const products = await getStoredProducts();
-  const existing = await findProductByBarcode(product.barcode);
   const now = new Date().toISOString();
+  
+  // Ищем существующий товар только если есть штрихкод
+  const existing = product.barcode ? await findProductByBarcode(product.barcode) : null;
   
   if (existing) {
     // Обновляем количество и цены существующего товара
@@ -81,6 +84,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
     const newProduct: StoredProduct = {
       ...product,
       id: Date.now().toString(),
+      barcode: product.barcode || `NO-BARCODE-${Date.now()}`, // Генерируем уникальный ID если нет штрихкода
       lastUpdated: now,
       priceHistory: [
         {

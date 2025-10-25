@@ -25,7 +25,7 @@ export const CSVImportDialog = ({ onClose, onImportComplete }: CSVImportDialogPr
 
     try {
       const text = await file.text();
-      const importResult = importCSVProducts(text, user.cashierName || 'admin');
+      const importResult = await importCSVProducts(text, user.cashierName || 'admin');
       setResult(importResult);
       
       if (importResult.imported > 0) {

@@ -248,7 +248,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    const allProducts = getAllProducts();
+    const allProducts = await getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {
       body: {

@@ -38,9 +38,9 @@ export const parseCSVLine = (line: string): CSVProduct | null => {
   };
 };
 
-export const importCSVProducts = (csvContent: string, userId: string): { imported: number; skipped: number; errors: number } => {
+export const importCSVProducts = async (csvContent: string, userId: string): Promise<{ imported: number; skipped: number; errors: number }> => {
   const lines = csvContent.split('\n');
-  const existingProducts = getStoredProducts();
+  const existingProducts = await getStoredProducts();
   const existingBarcodes = new Set(existingProducts.map(p => p.barcode));
   
   let imported = 0;
@@ -62,7 +62,7 @@ export const importCSVProducts = (csvContent: string, userId: string): { importe
       }
       
       // Сохраняем товар
-      saveProduct({
+      await saveProduct({
         barcode: product.barcode,
         name: product.name,
         category: product.category,

@@ -18,9 +18,9 @@ export const DashboardTab = () => {
   });
 
   useEffect(() => {
-    const calculateStats = () => {
+    const calculateStats = async () => {
       // Получаем все товары
-      const products = getAllProducts();
+      const products = await getAllProducts();
       const totalProducts = products.reduce((sum, p) => sum + p.quantity, 0);
       const totalPurchaseCost = products.reduce((sum, p) => sum + (p.purchasePrice * p.quantity), 0);
 
@@ -28,7 +28,7 @@ export const DashboardTab = () => {
       const lowStockCount = products.filter(p => p.quantity < 10).length;
 
       // Истекающие товары (в течение 30 дней)
-      const expiringProducts = getExpiringProducts(30);
+      const expiringProducts = await getExpiringProducts(30);
       const expiringCount = expiringProducts.length;
 
       // Активные сотрудники

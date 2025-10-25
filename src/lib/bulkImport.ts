@@ -16,7 +16,7 @@ export const bulkImportAllProducts = async (userId: string) => {
     try {
       const response = await fetch(file);
       const text = await response.text();
-      const result = importCSVProducts(text, userId);
+      const result = await importCSVProducts(text, userId);
       
       totalImported += result.imported;
       totalSkipped += result.skipped;

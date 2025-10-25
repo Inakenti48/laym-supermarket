@@ -1,10 +1,22 @@
+import { useState, useEffect } from 'react';
 import { AlertTriangle, Package } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { getExpiringProducts } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
+import type { StoredProduct } from '@/lib/storage';
 
 export const ExpiryTab = () => {
-  const expiringProducts = getExpiringProducts(3);
+  const [expiringProducts, setExpiringProducts] = useState<StoredProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      const products = await getExpiringProducts(3);
+      setExpiringProducts(products);
+      setLoading(false);
+    };
+    loadProducts();
+  }, []);
 
   const getDaysUntilExpiry = (expiryDate: string): number => {
     const now = new Date();
@@ -18,6 +30,16 @@ export const ExpiryTab = () => {
     if (days <= 2) return 'default';
     return 'secondary';
   };
+
+  if (loading) {
+    return (
+      <Card className="p-4 sm:p-6">
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-4 sm:p-6">
@@ -46,37 +68,25 @@ export const ExpiryTab = () => {
             
             return (
               <div key={product.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg border-l-4 border-warning">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
                   <div className="flex-1">
-                    <div className="font-medium text-sm sm:text-base">{product.name}</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground space-y-1 mt-1">
-                      <div>Штрихкод: {product.barcode}</div>
-                      <div>Категория: {product.category}</div>
-                      <div>Количество: {product.quantity} {product.unit}</div>
-                    </div>
+                    <h4 className="font-semibold text-base">{product.name}</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <span className="font-medium">Категория:</span> {product.category}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Штрихкод:</span> {product.barcode}
+                    </p>
                   </div>
-                  <div className="flex flex-col items-start sm:items-end gap-2">
-                    <Badge variant={getExpiryBadgeVariant(daysLeft)} className="text-xs">
-                      {daysLeft <= 0 ? 'Просрочен' : `${daysLeft} дн. до просрочки`}
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge variant={getExpiryBadgeVariant(daysLeft)}>
+                      {daysLeft === 0 ? 'Сегодня' : daysLeft === 1 ? 'Завтра' : `${daysLeft} дней`}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      Срок до: {expiryDate}
-                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      Годен до: {expiryDate}
+                    </p>
                   </div>
                 </div>
-                
-                {product.photos.length > 0 && (
-                  <div className="flex gap-2 mt-2 overflow-x-auto">
-                    {product.photos.slice(0, 3).map((photo, idx) => (
-                      <img
-                        key={idx}
-                        src={photo}
-                        alt={`${product.name} ${idx + 1}`}
-                        className="h-16 w-16 object-cover rounded border"
-                      />
-                    ))}
-                  </div>
-                )}
               </div>
             );
           })}

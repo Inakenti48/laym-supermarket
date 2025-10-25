@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,8 @@ import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
-import { 
+import { CartItem } from './CashierCartItem';
+import {
   findProductByBarcode, 
   isProductExpired, 
   updateProductQuantity,
@@ -86,13 +87,23 @@ export const CashierTab = () => {
   }, []);
 
   // Поиск товаров по названию
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim() || searchQuery.length < 2) return [];
-    const query = searchQuery.toLowerCase();
-    const allProducts = getAllProducts();
-    return allProducts
-      .filter(p => p.name.toLowerCase().includes(query))
-      .slice(0, 10); // Показываем только первые 10 результатов
+  const [searchResults, setSearchResults] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    const updateSearchResults = async () => {
+      if (!searchQuery.trim() || searchQuery.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      const query = searchQuery.toLowerCase();
+      const allProducts = await getAllProducts();
+      setSearchResults(
+        allProducts
+          .filter(p => p.name.toLowerCase().includes(query))
+          .slice(0, 10)
+      );
+    };
+    updateSearchResults();
   }, [searchQuery]);
 
   const handleConnectPrinter = async () => {
@@ -116,7 +127,7 @@ export const CashierTab = () => {
     }
 
     // Сначала ищем в основной базе
-    let product = findProductByBarcode(sanitizedBarcode);
+    let product = await findProductByBarcode(sanitizedBarcode);
     let isTemporary = false;
 
     // Если не найден в основной базе, ищем во временной
@@ -128,8 +139,8 @@ export const CashierTab = () => {
         .maybeSingle();
 
       if (tempProduct) {
-        // Находим товар по названию из временной базы в localStorage
-        const allProducts = getAllProducts();
+        // Находим товар по названию из временной базы в Supabase
+        const allProducts = await getAllProducts();
         product = allProducts.find(p => p.name === tempProduct.product_name);
         isTemporary = true;
       }
@@ -652,62 +663,14 @@ export const CashierTab = () => {
               </div>
             ) : (
               <div className="space-y-3">
-                {cart.map((item) => {
-                  const product = item.barcode ? findProductByBarcode(item.barcode) : null;
-                  const stockQuantity = product?.quantity || 0;
-                  
-                  return (
-                    <div key={item.id} className="flex items-center gap-3 py-3 border-b last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm sm:text-base truncate">{item.name}</div>
-                        <div className="text-xs sm:text-sm text-primary font-medium">{item.price.toFixed(2)} ₽</div>
-                        {product && (
-                          <div className="text-xs text-muted-foreground">
-                            Остаток: {stockQuantity} {product.unit}
-                            {stockQuantity < item.quantity && (
-                              <span className="text-red-500 ml-2">⚠️ Недостаточно!</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </Button>
-                        <Input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 0)}
-                          className="w-12 sm:w-14 h-8 sm:h-10 text-center text-sm sm:text-base"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg ml-1 sm:ml-2"
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </Button>
-                      </div>
-                      <div className="font-bold text-base sm:text-lg w-16 sm:w-20 text-right">
-                        {(item.price * item.quantity).toFixed(2)} ₽
-                      </div>
-                    </div>
-                  );
-                })}
+                {cart.map((item) => (
+                  <CartItem 
+                    key={item.id} 
+                    item={item}
+                    onUpdateQuantity={(id, quantity) => updateQuantity(id, quantity)}
+                    onRemove={(id) => removeFromCart(id)}
+                  />
+                ))}
               </div>
             )}
           </Card>

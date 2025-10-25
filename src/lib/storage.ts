@@ -24,38 +24,102 @@ export interface StoredProduct {
 
 const STORAGE_KEY = 'inventory_products';
 
-export const getStoredProducts = (): StoredProduct[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  if (!data) return [];
+import { supabase } from '@/integrations/supabase/client';
+
+export const getStoredProducts = async (): Promise<StoredProduct[]> => {
   try {
-    return JSON.parse(data);
-  } catch {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Преобразуем данные из Supabase в формат StoredProduct
+    return (data || []).map(product => ({
+      id: product.id,
+      barcode: product.barcode,
+      name: product.name,
+      category: product.category,
+      purchasePrice: Number(product.purchase_price),
+      retailPrice: Number(product.sale_price),
+      quantity: product.quantity,
+      unit: product.unit as 'шт' | 'кг',
+      expiryDate: product.expiry_date || undefined,
+      photos: [], // Фото загружаются отдельно
+      paymentType: product.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: Number(product.paid_amount),
+      debtAmount: Number(product.debt_amount),
+      addedBy: product.created_by || '',
+      lastUpdated: product.updated_at,
+      priceHistory: Array.isArray(product.price_history) 
+        ? product.price_history.map((h: any) => ({
+            date: h.date,
+            purchasePrice: Number(h.purchase_price || h.purchasePrice),
+            retailPrice: Number(h.retail_price || h.retailPrice),
+            changedBy: h.changed_by || h.changedBy
+          }))
+        : []
+    }));
+  } catch (error) {
+    console.error('Ошибка загрузки товаров:', error);
     return [];
   }
 };
 
-export const findProductByBarcode = (barcode: string): StoredProduct | null => {
-  const products = getStoredProducts();
-  return products.find(p => p.barcode === barcode) || null;
+export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('barcode', barcode)
+      .maybeSingle();
+    
+    if (error || !data) return null;
+    
+    return {
+      id: data.id,
+      barcode: data.barcode,
+      name: data.name,
+      category: data.category,
+      purchasePrice: Number(data.purchase_price),
+      retailPrice: Number(data.sale_price),
+      quantity: data.quantity,
+      unit: data.unit as 'шт' | 'кг',
+      expiryDate: data.expiry_date || undefined,
+      photos: [],
+      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: Number(data.paid_amount),
+      debtAmount: Number(data.debt_amount),
+      addedBy: data.created_by || '',
+      lastUpdated: data.updated_at,
+      priceHistory: Array.isArray(data.price_history)
+        ? data.price_history.map((h: any) => ({
+            date: h.date,
+            purchasePrice: Number(h.purchase_price || h.purchasePrice),
+            retailPrice: Number(h.retail_price || h.retailPrice),
+            changedBy: h.changed_by || h.changedBy
+          }))
+        : []
+    };
+  } catch (error) {
+    console.error('Ошибка поиска товара:', error);
+    return null;
+  }
 };
 
-export const saveProduct = (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): StoredProduct => {
-  const products = getStoredProducts();
-  const existing = products.find(p => p.barcode === product.barcode);
-  
-  const now = new Date().toISOString();
-  
-  if (existing) {
-    // Обновляем существующий товар
-    const priceChanged = 
-      existing.purchasePrice !== product.purchasePrice || 
-      existing.retailPrice !== product.retailPrice;
+export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): Promise<StoredProduct> => {
+  try {
+    const existing = await findProductByBarcode(product.barcode);
+    const now = new Date().toISOString();
     
-    const updatedProduct: StoredProduct = {
-      ...existing,
-      ...product,
-      lastUpdated: now,
-      priceHistory: priceChanged
+    if (existing) {
+      // Обновляем существующий товар
+      const priceChanged = 
+        existing.purchasePrice !== product.purchasePrice || 
+        existing.retailPrice !== product.retailPrice;
+      
+      const newPriceHistory = priceChanged
         ? [
             ...existing.priceHistory,
             {
@@ -65,41 +129,98 @@ export const saveProduct = (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 
               changedBy: userId,
             },
           ]
-        : existing.priceHistory,
-    };
-    
-    const filtered = products.filter(p => p.id !== existing.id);
-    filtered.push(updatedProduct);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    return updatedProduct;
-  } else {
-    // Создаем новый товар
-    const newProduct: StoredProduct = {
-      ...product,
-      id: Date.now().toString(),
-      lastUpdated: now,
-      priceHistory: [
+        : existing.priceHistory;
+      
+      const { data, error } = await supabase
+        .from('products')
+        .update({
+          name: product.name,
+          category: product.category,
+          purchase_price: product.purchasePrice,
+          sale_price: product.retailPrice,
+          quantity: product.quantity,
+          unit: product.unit,
+          expiry_date: product.expiryDate || null,
+          payment_type: product.paymentType,
+          paid_amount: product.paidAmount,
+          debt_amount: product.debtAmount,
+          price_history: newPriceHistory.map(h => ({
+            date: h.date,
+            purchase_price: h.purchasePrice,
+            retail_price: h.retailPrice,
+            changed_by: h.changedBy
+          }))
+        })
+        .eq('barcode', product.barcode)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        ...existing,
+        ...product,
+        id: data.id,
+        lastUpdated: now,
+        priceHistory: newPriceHistory
+      };
+    } else {
+      // Создаем новый товар
+      const initialPriceHistory = [
         {
           date: now,
           purchasePrice: product.purchasePrice,
           retailPrice: product.retailPrice,
           changedBy: userId,
         },
-      ],
-    };
-    
-    products.push(newProduct);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-    return newProduct;
+      ];
+      
+      const { data, error } = await supabase
+        .from('products')
+        .insert({
+          barcode: product.barcode,
+          name: product.name,
+          category: product.category,
+          purchase_price: product.purchasePrice,
+          sale_price: product.retailPrice,
+          quantity: product.quantity,
+          unit: product.unit,
+          expiry_date: product.expiryDate || null,
+          payment_type: product.paymentType,
+          paid_amount: product.paidAmount,
+          debt_amount: product.debtAmount,
+          price_history: initialPriceHistory.map(h => ({
+            date: h.date,
+            purchase_price: h.purchasePrice,
+            retail_price: h.retailPrice,
+            changed_by: h.changedBy
+          })),
+          created_by: userId
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        ...product,
+        id: data.id,
+        lastUpdated: now,
+        priceHistory: initialPriceHistory
+      };
+    }
+  } catch (error) {
+    console.error('Ошибка сохранения товара:', error);
+    throw error;
   }
 };
 
-export const getAllProducts = (): StoredProduct[] => {
+export const getAllProducts = async (): Promise<StoredProduct[]> => {
   return getStoredProducts();
 };
 
-export const getExpiringProducts = (daysBeforeExpiry: number = 3): StoredProduct[] => {
-  const products = getStoredProducts();
+export const getExpiringProducts = async (daysBeforeExpiry: number = 3): Promise<StoredProduct[]> => {
+  const products = await getStoredProducts();
   const now = new Date();
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + daysBeforeExpiry);
@@ -118,15 +239,23 @@ export const isProductExpired = (product: StoredProduct): boolean => {
   return expiryDate < now;
 };
 
-export const updateProductQuantity = (barcode: string, quantityChange: number): void => {
-  const products = getStoredProducts();
-  const updated = products.map(p => {
-    if (p.barcode === barcode) {
-      return { ...p, quantity: p.quantity + quantityChange };
+export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
+  try {
+    const product = await findProductByBarcode(barcode);
+    if (!product) {
+      throw new Error(`Товар с штрихкодом ${barcode} не найден`);
     }
-    return p;
-  });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    
+    const { error } = await supabase
+      .from('products')
+      .update({ quantity: product.quantity + quantityChange })
+      .eq('barcode', barcode);
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error('Ошибка обновления количества:', error);
+    throw error;
+  }
 };
 
 // Система отмены товаров

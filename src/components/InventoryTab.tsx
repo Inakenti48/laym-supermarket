@@ -52,7 +52,7 @@ export const InventoryTab = () => {
     expiryDate: '',
   });
 
-  const handleScan = (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
@@ -71,7 +71,7 @@ export const InventoryTab = () => {
 
     // Если есть штрихкод, ищем в базе
     if (sanitizedBarcode) {
-      const existing = findProductByBarcode(sanitizedBarcode);
+      const existing = await findProductByBarcode(sanitizedBarcode);
       
       if (existing) {
         setSuggestedProduct(existing);

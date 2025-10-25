@@ -128,14 +128,18 @@ export type Database = {
           category: string
           created_at: string
           created_by: string | null
+          debt_amount: number
           expiry_date: string | null
           id: string
           name: string
+          paid_amount: number
+          payment_type: string
           price_history: Json | null
           purchase_price: number
           quantity: number
           sale_price: number
           supplier: string | null
+          unit: string
           updated_at: string
         }
         Insert: {
@@ -143,14 +147,18 @@ export type Database = {
           category: string
           created_at?: string
           created_by?: string | null
+          debt_amount?: number
           expiry_date?: string | null
           id?: string
           name: string
+          paid_amount?: number
+          payment_type?: string
           price_history?: Json | null
           purchase_price: number
           quantity?: number
           sale_price: number
           supplier?: string | null
+          unit?: string
           updated_at?: string
         }
         Update: {
@@ -158,14 +166,18 @@ export type Database = {
           category?: string
           created_at?: string
           created_by?: string | null
+          debt_amount?: number
           expiry_date?: string | null
           id?: string
           name?: string
+          paid_amount?: number
+          payment_type?: string
           price_history?: Json | null
           purchase_price?: number
           quantity?: number
           sale_price?: number
           supplier?: string | null
+          unit?: string
           updated_at?: string
         }
         Relationships: []

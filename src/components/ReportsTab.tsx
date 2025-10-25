@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PhotoReportsTab } from './PhotoReportsTab';
 import { Card } from '@/components/ui/card';
@@ -17,8 +17,23 @@ import {
 
 export const ReportsTab = () => {
   const [activeTab, setActiveTab] = useState('products');
-  const products = getAllProducts();
-  const suppliers = getSuppliers();
+  const [products, setProducts] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [productsData, suppliersData] = await Promise.all([
+        getAllProducts(),
+        getSuppliers()
+      ]);
+      setProducts(productsData);
+      setSuppliers(suppliersData);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
 
   // Статистика товаров
   const totalProducts = products.length;

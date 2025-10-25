@@ -14,30 +14,14 @@ import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
 
-interface Product {
-  id: string;
-  barcode: string;
-  name: string;
-  category: string;
-  purchasePrice: number;
-  retailPrice: number;
-  quantity: number;
-  unit: 'шт' | 'кг';
-  expiryDate?: string;
-  photos: string[];
-  capturedImage?: string; // Временное фото из AI распознавания
-  supplier?: string; // Поставщик товара
-}
-
 export const InventoryTab = () => {
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
   
-  const [products, setProducts] = useState<Product[]>([]);
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [capturedImage, setCapturedImage] = useState<string>(''); // Временное фото из AI
+  const [capturedImage, setCapturedImage] = useState<string>('');
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -171,7 +155,7 @@ export const InventoryTab = () => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const addProduct = () => {
+  const addProduct = async () => {
     if (!currentProduct.barcode || !currentProduct.name || !currentProduct.category || 
         !currentProduct.purchasePrice || !currentProduct.quantity) {
       toast.error('Заполните все обязательные поля');
@@ -187,25 +171,44 @@ export const InventoryTab = () => {
     const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
     const quantity = parseFloat(currentProduct.quantity);
 
-    // Создаем товар для списка (пока не сохраняем в базу)
-    const newProduct: Product = {
-      id: `temp-${Date.now()}`, // Временный ID
-      barcode: currentProduct.barcode,
-      name: currentProduct.name,
-      category: currentProduct.category,
-      purchasePrice,
-      retailPrice,
-      quantity,
-      unit: currentProduct.unit,
-      expiryDate: currentProduct.expiryDate || undefined,
-      photos,
-      capturedImage, // Сохраняем временное фото
-      supplier: currentProduct.supplier || undefined, // Сохраняем поставщика
-    };
+    try {
+      // Сохраняем товар сразу в localStorage
+      const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
+        barcode: currentProduct.barcode,
+        name: currentProduct.name,
+        category: currentProduct.category,
+        purchasePrice,
+        retailPrice,
+        quantity,
+        unit: currentProduct.unit,
+        expiryDate: currentProduct.expiryDate || undefined,
+        photos,
+        paymentType: 'full',
+        paidAmount: purchasePrice * quantity,
+        debtAmount: 0,
+        addedBy: currentUser?.role || 'unknown',
+        supplier: currentProduct.supplier || undefined,
+      };
 
-    setProducts([...products, newProduct]);
-    
-    toast.success('Товар добавлен в список. Нажмите "Занести товары" для сохранения в базу');
+      const saved = await saveProduct(productData, currentUser?.username || 'unknown');
+      
+      if (saved) {
+        addLog(`Добавлен товар: ${currentProduct.name} (${quantity} ${currentProduct.unit})`);
+        
+        if (suggestedProduct && 
+            (suggestedProduct.purchasePrice !== purchasePrice || 
+             suggestedProduct.retailPrice !== retailPrice)) {
+          const priceDiff = purchasePrice - suggestedProduct.purchasePrice;
+          addLog(`Изменение цены "${currentProduct.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
+        }
+        
+        toast.success('✅ Товар сохранён и доступен на кассе!');
+      }
+    } catch (error) {
+      console.error('Error saving product:', error);
+      toast.error('Ошибка сохранения товара');
+      return;
+    }
 
     // Reset form
     setCurrentProduct({
@@ -224,65 +227,7 @@ export const InventoryTab = () => {
     setSuggestedProduct(null);
   };
 
-  const saveAllProducts = async () => {
-    if (products.length === 0) {
-      toast.error('Список товаров пуст');
-      return;
-    }
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const product of products) {
-      try {
-        const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
-          barcode: product.barcode,
-          name: product.name,
-          category: product.category,
-          purchasePrice: product.purchasePrice,
-          retailPrice: product.retailPrice,
-          quantity: product.quantity,
-          unit: product.unit,
-          expiryDate: product.expiryDate,
-          photos: product.photos,
-          paymentType: 'full',
-          paidAmount: product.purchasePrice * product.quantity,
-          debtAmount: 0,
-          addedBy: currentUser?.role || 'unknown',
-          supplier: product.supplier || undefined,
-        };
-
-        const saved = await saveProduct(productData, currentUser?.username || 'unknown');
-        
-        if (saved) {
-          addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
-          
-          if (suggestedProduct && 
-              (suggestedProduct.purchasePrice !== product.purchasePrice || 
-               suggestedProduct.retailPrice !== product.retailPrice)) {
-            const priceDiff = product.purchasePrice - suggestedProduct.purchasePrice;
-            addLog(`Изменение цены "${product.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
-          }
-          
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      } catch (error) {
-        console.error('Error saving product:', error);
-        errorCount++;
-      }
-    }
-
-    if (successCount > 0) {
-      toast.success(`Успешно добавлено товаров: ${successCount}`);
-      setProducts([]);
-    }
-    
-    if (errorCount > 0) {
-      toast.error(`Ошибок при добавлении: ${errorCount}`);
-    }
-  };
+  // Удалена функция saveAllProducts - товары теперь сохраняются сразу при добавлении
 
   return (
     <div className="space-y-4">
@@ -553,92 +498,9 @@ export const InventoryTab = () => {
 
             <Button onClick={addProduct} className="w-full">
               <Plus className="h-4 w-4 mr-2" />
-              Добавить товар
+              Сохранить товар
             </Button>
           </div>
-        </Card>
-
-        {/* Products List */}
-        <Card className="p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Список товаров ({products.length})
-            </h3>
-            {products.length > 0 && (
-              <Button 
-                onClick={saveAllProducts}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Package className="h-4 w-4 mr-2" />
-                Занести товары
-              </Button>
-            )}
-          </div>
-
-           {products.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              Товары не добавлены. Добавьте товары и нажмите "Занести товары"
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {products.map((product) => (
-                <div key={product.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg border-l-4 border-amber-500">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <div className="font-medium text-sm sm:text-base">{product.name}</div>
-                      <div className="text-xs sm:text-sm text-muted-foreground space-y-0.5">
-                        <div>Штрихкод: {product.barcode}</div>
-                        <div>Категория: {product.category}</div>
-                        {product.supplier && (
-                          <div>Поставщик: {product.supplier}</div>
-                        )}
-                        {product.expiryDate && (
-                          <div>Срок до: {new Date(product.expiryDate).toLocaleDateString('ru-RU')}</div>
-                        )}
-                      </div>
-                      <Badge variant="secondary" className="mt-2 text-xs">
-                        Ожидает подтверждения
-                      </Badge>
-                    </div>
-                    <div className="text-right ml-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 mb-2"
-                        onClick={() => setProducts(products.filter(p => p.id !== product.id))}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                      <div className="font-semibold text-sm sm:text-base">
-                        {product.purchasePrice * product.quantity}₽
-                      </div>
-                      <div className="text-xs sm:text-sm text-muted-foreground">
-                        {product.quantity} {product.unit} × {product.purchasePrice}₽
-                      </div>
-                      {isAdmin && (
-                        <Badge variant="secondary" className="mt-1 text-xs">
-                          Розница: {product.retailPrice}₽
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  {product.photos.length > 0 && (
-                    <div className="flex gap-2 mt-2 overflow-x-auto">
-                      {product.photos.map((photo, idx) => (
-                        <img
-                          key={idx}
-                          src={photo}
-                          alt={`${product.name} ${idx + 1}`}
-                          className="h-12 w-12 object-cover rounded border"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </Card>
       </div>
     </div>

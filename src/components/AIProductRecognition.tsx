@@ -472,14 +472,15 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   // Скрытый режим - только canvas и video без UI
   if (hidden) {
     return (
-      <div className="hidden">
-        <canvas ref={canvasRef} />
+      <div style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}>
+        <canvas ref={canvasRef} width="1" height="1" />
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          style={{ display: 'none' }}
+          width="1"
+          height="1"
         />
       </div>
     );

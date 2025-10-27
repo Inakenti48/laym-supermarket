@@ -527,7 +527,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
 
           {isProcessing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-              <div className="flex items-center gap-2 bg-black/70 text-white px-4 py-2 rounded-full">
+              <div className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-full shadow-lg">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span className="text-sm">Распознавание...</span>
               </div>
@@ -535,23 +535,23 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           )}
 
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-black/80 p-4 rounded-xl">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
               <div className="flex items-center gap-3 justify-center">
-                <span className="text-white text-sm font-medium">Штук:</span>
+                <span className="text-foreground text-sm font-medium">Штук:</span>
                 <Button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 bg-white"
+                  className="h-8 w-8"
                 >
                   -
                 </Button>
-                <span className="text-white text-lg font-bold min-w-[40px] text-center">{quantity}</span>
+                <span className="text-foreground text-lg font-bold min-w-[40px] text-center">{quantity}</span>
                 <Button
                   onClick={() => setQuantity(quantity + 1)}
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 bg-white"
+                  className="h-8 w-8"
                 >
                   +
                 </Button>

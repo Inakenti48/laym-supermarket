@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string }) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number }) => void;
   mode?: 'product' | 'barcode';
 }
 
@@ -21,6 +21,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const photo1Ref = useRef<string>('');
   const isMountedRef = useRef(true);
   const [cameraReady, setCameraReady] = useState(false);
+  const [recognizedProducts, setRecognizedProducts] = useState<Map<string, number>>(new Map());
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -35,7 +37,21 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const startCamera = async () => {
     try {
       setCameraReady(false);
-      console.log('Запрос доступа к камере...');
+      
+      // Проверяем сохраненное разрешение камеры
+      const cameraPermission = localStorage.getItem('camera_permission');
+      const permissionTimestamp = localStorage.getItem('camera_permission_timestamp');
+      const now = Date.now();
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      
+      // Если разрешение было дано в последние 24 часа, не показываем уведомление
+      const hasRecentPermission = cameraPermission === 'granted' && 
+                                   permissionTimestamp && 
+                                   (now - parseInt(permissionTimestamp)) < twentyFourHours;
+      
+      if (!hasRecentPermission) {
+        console.log('Запрос доступа к камере...');
+      }
       
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
@@ -44,6 +60,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           height: { ideal: 720 }
         }
       });
+      
+      // Сохраняем разрешение на 24 часа
+      localStorage.setItem('camera_permission', 'granted');
+      localStorage.setItem('camera_permission_timestamp', now.toString());
       
       console.log('Камера получена, настройка видео...');
       
@@ -310,7 +330,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       if (mode === 'barcode') {
         if (result.barcode) {
           setNotification('✅ Штрихкод распознан!');
-          onProductFound({ ...result, capturedImage: image });
+          
+          // Увеличиваем количество если товар уже был распознан
+          const productKey = result.barcode;
+          const currentQty = recognizedProducts.get(productKey) || 0;
+          const newQty = currentQty + quantity;
+          setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
+          
+          onProductFound({ ...result, capturedImage: image, quantity: newQty });
           setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Штрихкод не найден');
@@ -319,7 +346,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       } else {
         if (result.name || result.category) {
           setNotification('✅ Товар распознан!');
-          onProductFound({ ...result, capturedImage: image });
+          
+          // Увеличиваем количество если товар уже был распознан
+          const productKey = result.barcode || result.name || '';
+          const currentQty = recognizedProducts.get(productKey) || 0;
+          const newQty = currentQty + quantity;
+          setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
+          
+          onProductFound({ ...result, capturedImage: image, quantity: newQty });
           setTimeout(() => setNotification(''), 1000);
         } else {
           setNotification('❌ Товар не распознан');
@@ -365,7 +399,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           if (mode === 'barcode') {
             if (result.barcode) {
               setNotification('✅ Штрихкод распознан!');
-              onProductFound({ ...result, capturedImage: image });
+              
+              // Увеличиваем количество если товар уже был распознан
+              const productKey = result.barcode;
+              const currentQty = recognizedProducts.get(productKey) || 0;
+              const newQty = currentQty + quantity;
+              setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
+              
+              onProductFound({ ...result, capturedImage: image, quantity: newQty });
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');
@@ -373,7 +414,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           } else {
             if (result.name || result.category) {
               setNotification('✅ Товар распознан!');
-              onProductFound({ ...result, capturedImage: image });
+              
+              // Увеличиваем количество если товар уже был распознан
+              const productKey = result.barcode || result.name || '';
+              const currentQty = recognizedProducts.get(productKey) || 0;
+              const newQty = currentQty + quantity;
+              setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
+              
+              onProductFound({ ...result, capturedImage: image, quantity: newQty });
               setTimeout(() => setNotification(''), 1000);
             } else {
               setNotification('');
@@ -471,11 +519,31 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           )}
 
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-black/80 p-4 rounded-xl">
+              <div className="flex items-center gap-3 justify-center">
+                <span className="text-white text-sm font-medium">Штук:</span>
+                <Button
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 bg-white"
+                >
+                  -
+                </Button>
+                <span className="text-white text-lg font-bold min-w-[40px] text-center">{quantity}</span>
+                <Button
+                  onClick={() => setQuantity(quantity + 1)}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 bg-white"
+                >
+                  +
+                </Button>
+              </div>
               <Button
                 onClick={handleManualCapture}
                 size="lg"
-                className="rounded-full shadow-lg"
+                className="rounded-full shadow-lg w-full"
                 disabled={!cameraReady}
               >
                 <Camera className="h-5 w-5 mr-2" />

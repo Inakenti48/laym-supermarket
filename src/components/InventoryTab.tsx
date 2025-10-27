@@ -73,7 +73,7 @@ export const InventoryTab = () => {
     loadSuppliers();
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
@@ -122,7 +122,8 @@ export const InventoryTab = () => {
       ...currentProduct, 
       barcode: sanitizedBarcode,
       name: barcodeData.name || '',
-      category: barcodeData.category || ''
+      category: barcodeData.category || '',
+      quantity: barcodeData.quantity?.toString() || currentProduct.quantity
     });
     setPhotos(newPhotos);
     

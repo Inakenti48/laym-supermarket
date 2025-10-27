@@ -30,7 +30,7 @@ export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSup
         phone: phone.trim(),
         notes: '',
         totalDebt: 0,
-      }, currentUser?.username || 'unknown');
+      }, '');
 
       toast.success(`Поставщик "${name}" добавлен`);
       onSupplierAdded(newSupplier);

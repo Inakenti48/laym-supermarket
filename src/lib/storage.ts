@@ -409,7 +409,7 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
       address: supplier.notes || null,
       debt: supplier.totalDebt || 0,
       payment_history: [] as any,
-      created_by: userId
+      created_by: null
     })
     .select()
     .single();

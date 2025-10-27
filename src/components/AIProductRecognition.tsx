@@ -130,14 +130,30 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    
+    // Уменьшаем разрешение для ускорения (макс 800x600)
+    const maxWidth = 800;
+    const maxHeight = 600;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width;
+      width = maxWidth;
+    }
+    if (height > maxHeight) {
+      width = (width * maxHeight) / height;
+      height = maxHeight;
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
     
-    ctx.drawImage(video, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.8);
+    ctx.drawImage(video, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.5);
   };
 
   const saveToTemporaryStorage = async (imageBase64: string, barcode: string, productName: string): Promise<string | null> => {
@@ -246,20 +262,35 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       return { image: '', isSharp: false };
     }
     
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Уменьшаем разрешение для ускорения (макс 800x600)
+    const maxWidth = 800;
+    const maxHeight = 600;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width;
+      width = maxWidth;
+    }
+    if (height > maxHeight) {
+      width = (width * maxHeight) / height;
+      height = maxHeight;
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return { image: '', isSharp: false };
     
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, width, height);
     
     // Проверяем резкость
     const sharpness = checkImageSharpness(canvas);
-    const threshold = 400; // Более низкий порог для быстрого распознавания
+    const threshold = 300; // Снижаем порог для быстрого распознавания
     
-    // Сохраняем в высоком качестве (95%)
-    const image = canvas.toDataURL('image/jpeg', 0.95);
+    // Сохраняем в среднем качестве для скорости (50%)
+    const image = canvas.toDataURL('image/jpeg', 0.5);
     
     return {
       image,
@@ -423,7 +454,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         } finally {
           setIsProcessing(false);
         }
-      }, 1500);
+      }, 1000);
 
       return () => clearInterval(interval);
     }

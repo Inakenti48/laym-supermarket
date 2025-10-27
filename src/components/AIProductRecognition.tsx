@@ -8,9 +8,10 @@ import { getAllProducts } from '@/lib/storage';
 interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number }) => void;
   mode?: 'product' | 'barcode';
+  hidden?: boolean;
 }
 
-export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIProductRecognitionProps) => {
+export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden = false }: AIProductRecognitionProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -467,6 +468,22 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const getStepIndicator = () => {
     return mode === 'barcode' ? '📷 Распознавание штрихкода' : '📷 Распознавание товара';
   };
+
+  // Скрытый режим - только canvas и video без UI
+  if (hidden) {
+    return (
+      <div className="hidden">
+        <canvas ref={canvasRef} />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ display: 'none' }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">

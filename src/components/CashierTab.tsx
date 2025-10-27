@@ -390,6 +390,13 @@ export const CashierTab = () => {
         </div>
       )}
 
+      {/* Hidden background AI scanner - always working */}
+      <AIProductRecognition 
+        onProductFound={handleScan}
+        mode="product"
+        hidden={true}
+      />
+
       {/* Scanner */}
       <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
 

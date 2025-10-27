@@ -321,25 +321,30 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           }
         });
         
-        if (!matchError && matchData?.barcode) {
-          console.log('✅ Found matching product by photo:', matchData.barcode);
+        console.log('📦 Photo match response:', { matchData, matchError });
+        
+        // Проверяем правильную структуру ответа: matchData.result.barcode
+        if (!matchError && matchData?.result?.recognized && matchData?.result?.barcode) {
+          console.log('✅ Found matching product by photo:', matchData.result.barcode);
           
           // Проверяем что товар существует в базе
           const allProducts = await getAllProducts();
-          const product = allProducts.find(p => p.barcode === matchData.barcode);
+          const product = allProducts.find(p => p.barcode === matchData.result.barcode);
           
           if (product) {
             console.log('✅ Product found in database, using photo match result');
             return {
-              barcode: matchData.barcode,
+              barcode: matchData.result.barcode,
               name: product.name,
               category: product.category,
               photoUrl: undefined
             };
+          } else {
+            console.log('⚠️ Photo matched but product not in database');
           }
+        } else {
+          console.log('❌ No matching photo found or not recognized:', matchData?.result);
         }
-        
-        console.log('❌ No matching photo found, trying AI recognition...');
       }
     } catch (photoError) {
       console.error('Error during photo matching:', photoError);

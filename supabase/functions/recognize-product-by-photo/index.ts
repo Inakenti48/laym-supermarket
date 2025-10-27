@@ -193,8 +193,11 @@ ${productsInfo}
     console.log('AI recognized barcode:', recognizedBarcode);
 
     // Если распознан валидный штрихкод, ищем информацию о товаре
-    if (recognizedBarcode !== 'UNKNOWN') {
+    if (recognizedBarcode !== 'UNKNOWN' && recognizedBarcode.trim() !== '') {
       const productInfo = productImages?.find(img => img.barcode === recognizedBarcode);
+      
+      console.log('Looking for barcode:', recognizedBarcode);
+      console.log('Found product:', productInfo ? `YES (${productInfo.product_name})` : 'NO');
       
       if (productInfo) {
         return new Response(
@@ -210,6 +213,8 @@ ${productsInfo}
         );
       }
     }
+
+    console.log('Product not recognized or not found in database');
 
     // Товар не распознан
     return new Response(

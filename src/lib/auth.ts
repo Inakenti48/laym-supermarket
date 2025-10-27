@@ -51,7 +51,19 @@ export const login = async (
   if (isValid) {
     const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    addLog(`Вход в систему: ${role}${cashierName ? ` (${cashierName})` : ''}${employeeId ? ` (ID: ${employeeId})` : ''}`);
+    
+    // Log without showing actual login credentials
+    let logMessage = 'Вход в систему: ';
+    if (role === 'admin') {
+      logMessage += 'Администратор';
+    } else if (role === 'cashier' && cashierName) {
+      logMessage += `Кассир (${cashierName})`;
+    } else if (role === 'inventory') {
+      logMessage += 'Складской';
+    } else if (role === 'employee' && employeeId) {
+      logMessage += `Сотрудник (ID: ${employeeId})`;
+    }
+    addLog(logMessage);
     return true;
   }
   return false;
@@ -60,7 +72,18 @@ export const login = async (
 export const logout = () => {
   const user = getCurrentUser();
   if (user) {
-    addLog(`Выход из системы: ${user.role}${user.cashierName ? ` (${user.cashierName})` : ''}`);
+    // Log without showing actual login credentials
+    let logMessage = 'Выход из системы: ';
+    if (user.role === 'admin') {
+      logMessage += 'Администратор';
+    } else if (user.role === 'cashier' && user.cashierName) {
+      logMessage += `Кассир (${user.cashierName})`;
+    } else if (user.role === 'inventory') {
+      logMessage += 'Складской';
+    } else if (user.role === 'employee' && user.employeeId) {
+      logMessage += `Сотрудник (ID: ${user.employeeId})`;
+    }
+    addLog(logMessage);
   }
   localStorage.removeItem(STORAGE_KEY);
 };
@@ -97,11 +120,26 @@ export interface LogEntry {
 export const addLog = (message: string) => {
   const logs = getLogs();
   const user = getCurrentUser();
+  
+  // Format user display name without showing login credentials
+  let userDisplay = 'Система';
+  if (user) {
+    if (user.role === 'admin') {
+      userDisplay = 'Администратор';
+    } else if (user.role === 'cashier' && user.cashierName) {
+      userDisplay = `Кассир (${user.cashierName})`;
+    } else if (user.role === 'inventory') {
+      userDisplay = 'Складской';
+    } else if (user.role === 'employee' && user.employeeId) {
+      userDisplay = `Сотрудник (ID: ${user.employeeId})`;
+    }
+  }
+  
   const newLog: LogEntry = {
     id: Date.now().toString(),
     timestamp: new Date().toLocaleString('ru-RU'),
     message,
-    user: user ? `${user.role}${user.cashierName ? ` (${user.cashierName})` : ''}` : 'Система'
+    user: userDisplay
   };
   logs.unshift(newLog);
   localStorage.setItem(LOGS_KEY, JSON.stringify(logs.slice(0, 1000))); // Keep last 1000 logs

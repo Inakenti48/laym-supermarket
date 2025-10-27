@@ -96,7 +96,7 @@ export const migrateToSupabase = async (userId: string): Promise<MigrationResult
     }
 
     // 3. Мигрируем запросы на отмену
-    const cancellations = getCancellationRequests();
+    const cancellations = await getCancellationRequests();
     console.log(`Начинаем миграцию ${cancellations.length} запросов на отмену...`);
 
     for (const cancellation of cancellations) {
@@ -168,7 +168,7 @@ export const needsMigration = async (): Promise<boolean> => {
 export const exportLocalStorageData = async (): Promise<void> => {
   const allData = {
     products: await getStoredProducts(),
-    cancellations: getCancellationRequests(),
+    cancellations: await getCancellationRequests(),
     suppliers: await getSuppliers(),
     exportDate: new Date().toISOString(),
     version: '1.0',

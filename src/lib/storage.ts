@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 export interface StoredProduct {
   id: string;
   barcode: string;
@@ -23,33 +25,75 @@ export interface StoredProduct {
   }>;
 }
 
-const STORAGE_KEY = 'inventory_products';
-
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  if (!data) return [];
-  try {
-    return JSON.parse(data);
-  } catch {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching products:', error);
     return [];
   }
+  
+  return (data || []).map(p => ({
+    id: p.id,
+    barcode: p.barcode,
+    name: p.name,
+    category: p.category,
+    purchasePrice: Number(p.purchase_price),
+    retailPrice: Number(p.sale_price),
+    quantity: p.quantity,
+    unit: p.unit as 'шт' | 'кг',
+    expiryDate: p.expiry_date || undefined,
+    photos: [],
+    paymentType: p.payment_type as 'full' | 'partial' | 'debt',
+    paidAmount: Number(p.paid_amount),
+    debtAmount: Number(p.debt_amount),
+    addedBy: p.created_by || '',
+    supplier: p.supplier || undefined,
+    lastUpdated: p.updated_at,
+    priceHistory: (p.price_history as any) || []
+  }));
 };
 
 export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
   if (!barcode) return null;
-  const products = await getStoredProducts();
-  return products.find(p => p.barcode === barcode) || null;
+  
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('barcode', barcode)
+    .maybeSingle();
+  
+  if (error || !data) return null;
+  
+  return {
+    id: data.id,
+    barcode: data.barcode,
+    name: data.name,
+    category: data.category,
+    purchasePrice: Number(data.purchase_price),
+    retailPrice: Number(data.sale_price),
+    quantity: data.quantity,
+    unit: data.unit as 'шт' | 'кг',
+    expiryDate: data.expiry_date || undefined,
+    photos: [],
+    paymentType: data.payment_type as 'full' | 'partial' | 'debt',
+    paidAmount: Number(data.paid_amount),
+    debtAmount: Number(data.debt_amount),
+    addedBy: data.created_by || '',
+    supplier: data.supplier || undefined,
+    lastUpdated: data.updated_at,
+    priceHistory: (data.price_history as any) || []
+  };
 };
 
 export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): Promise<StoredProduct> => {
-  const products = await getStoredProducts();
   const now = new Date().toISOString();
-  
-  // Ищем существующий товар только если есть штрихкод
   const existing = product.barcode ? await findProductByBarcode(product.barcode) : null;
   
   if (existing) {
-    // Обновляем количество и цены существующего товара
     const priceChanged = 
       existing.purchasePrice !== product.purchasePrice || 
       existing.retailPrice !== product.retailPrice;
@@ -66,39 +110,100 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
         ]
       : existing.priceHistory;
     
-    const updated: StoredProduct = {
-      ...existing,
-      ...product,
-      quantity: existing.quantity + product.quantity,
-      lastUpdated: now,
-      priceHistory: newPriceHistory,
-    };
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        name: product.name,
+        category: product.category,
+        purchase_price: product.purchasePrice,
+        sale_price: product.retailPrice,
+        quantity: existing.quantity + product.quantity,
+        unit: product.unit,
+        expiry_date: product.expiryDate || null,
+        payment_type: product.paymentType,
+        paid_amount: product.paidAmount,
+        debt_amount: product.debtAmount,
+        supplier: product.supplier || null,
+        price_history: newPriceHistory as any,
+        updated_at: now
+      })
+      .eq('barcode', product.barcode)
+      .select()
+      .single();
     
-    const updatedProducts = products.map(p => 
-      p.barcode === product.barcode ? updated : p
-    );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
-    return updated;
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      barcode: data.barcode,
+      name: data.name,
+      category: data.category,
+      purchasePrice: Number(data.purchase_price),
+      retailPrice: Number(data.sale_price),
+      quantity: data.quantity,
+      unit: data.unit as 'шт' | 'кг',
+      expiryDate: data.expiry_date || undefined,
+      photos: [],
+      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: Number(data.paid_amount),
+      debtAmount: Number(data.debt_amount),
+      addedBy: data.created_by || '',
+      supplier: data.supplier || undefined,
+      lastUpdated: data.updated_at,
+      priceHistory: (data.price_history as any) || []
+    };
   } else {
-    // Создаем новый товар
-    const newProduct: StoredProduct = {
-      ...product,
-      id: Date.now().toString(),
-      barcode: product.barcode || `NO-BARCODE-${Date.now()}`, // Генерируем уникальный ID если нет штрихкода
-      lastUpdated: now,
-      priceHistory: [
-        {
-          date: now,
-          purchasePrice: product.purchasePrice,
-          retailPrice: product.retailPrice,
-          changedBy: userId,
-        },
-      ],
-    };
+    const newPriceHistory = [
+      {
+        date: now,
+        purchasePrice: product.purchasePrice,
+        retailPrice: product.retailPrice,
+        changedBy: userId,
+      },
+    ];
     
-    const updatedProducts = [...products, newProduct];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
-    return newProduct;
+    const { data, error } = await supabase
+      .from('products')
+      .insert({
+        barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
+        name: product.name,
+        category: product.category,
+        purchase_price: product.purchasePrice,
+        sale_price: product.retailPrice,
+        quantity: product.quantity,
+        unit: product.unit,
+        expiry_date: product.expiryDate || null,
+        payment_type: product.paymentType,
+        paid_amount: product.paidAmount,
+        debt_amount: product.debtAmount,
+        supplier: product.supplier || null,
+        created_by: userId,
+        price_history: newPriceHistory as any
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      barcode: data.barcode,
+      name: data.name,
+      category: data.category,
+      purchasePrice: Number(data.purchase_price),
+      retailPrice: Number(data.sale_price),
+      quantity: data.quantity,
+      unit: data.unit as 'шт' | 'кг',
+      expiryDate: data.expiry_date || undefined,
+      photos: [],
+      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: Number(data.paid_amount),
+      debtAmount: Number(data.debt_amount),
+      addedBy: data.created_by || '',
+      supplier: data.supplier || undefined,
+      lastUpdated: data.updated_at,
+      priceHistory: (data.price_history as any) || []
+    };
   }
 };
 
@@ -127,40 +232,43 @@ export const isProductExpired = (product: StoredProduct): boolean => {
 };
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
-  const products = await getStoredProducts();
   const product = await findProductByBarcode(barcode);
   
   if (!product) {
     throw new Error(`Товар с штрихкодом ${barcode} не найден`);
   }
   
-  const updatedProducts = products.map(p => {
-    if (p.barcode === barcode) {
-      return { ...p, quantity: p.quantity + quantityChange };
-    }
-    return p;
-  });
+  const { error } = await supabase
+    .from('products')
+    .update({ 
+      quantity: product.quantity + quantityChange,
+      updated_at: new Date().toISOString()
+    })
+    .eq('barcode', barcode);
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
+  if (error) throw error;
 };
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
-  const products = await getStoredProducts();
   const product = await findProductByBarcode(barcode);
   
   if (!product) {
     return null;
   }
   
-  // Обнуляем количество вместо полного удаления
-  const updatedProducts = products.map(p => {
-    if (p.barcode === barcode) {
-      return { ...p, quantity: 0 };
-    }
-    return p;
-  });
+  const { error } = await supabase
+    .from('products')
+    .update({ 
+      quantity: 0,
+      updated_at: new Date().toISOString()
+    })
+    .eq('barcode', barcode);
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProducts));
+  if (error) {
+    console.error('Error removing expired product:', error);
+    return null;
+  }
+  
   return product;
 };
 
@@ -173,65 +281,75 @@ export interface CancellationRequest {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-const CANCELLATIONS_KEY = 'cancellation_requests';
-
-export const getCancellationRequests = (): CancellationRequest[] => {
-  const data = localStorage.getItem(CANCELLATIONS_KEY);
-  if (!data) return [];
-  try {
-    return JSON.parse(data);
-  } catch {
+export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
+  const { data, error } = await supabase
+    .from('cancellation_requests')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching cancellation requests:', error);
     return [];
   }
+  
+  return (data || []).map(r => ({
+    id: r.id,
+    items: [{ barcode: r.barcode, name: r.product_name, quantity: r.quantity, price: 0 }],
+    cashier: r.requested_by || '',
+    requestedAt: r.created_at,
+    status: r.status as 'pending' | 'approved' | 'rejected'
+  }));
 };
 
-export const createCancellationRequest = (items: Array<{ barcode: string; name: string; quantity: number; price: number }>, cashier: string): CancellationRequest => {
-  const requests = getCancellationRequests();
+export const createCancellationRequest = async (items: Array<{ barcode: string; name: string; quantity: number; price: number }>, cashier: string): Promise<CancellationRequest> => {
+  const now = new Date().toISOString();
   const newRequest: CancellationRequest = {
-    id: Date.now().toString(),
+    id: '',
     items,
     cashier,
-    requestedAt: new Date().toISOString(),
+    requestedAt: now,
     status: 'pending'
   };
-  requests.push(newRequest);
-  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(requests));
+  
+  const { data: userData } = await supabase.auth.getUser();
+  
+  for (const item of items) {
+    await supabase.from('cancellation_requests').insert({
+      barcode: item.barcode,
+      product_name: item.name,
+      quantity: item.quantity,
+      reason: 'Отмена продажи',
+      status: 'pending',
+      requested_by: userData?.user?.id || null
+    });
+  }
+  
   return newRequest;
 };
 
-export const updateCancellationRequest = (id: string, status: 'approved' | 'rejected'): void => {
-  const requests = getCancellationRequests();
-  const updated = requests.map(r => {
-    if (r.id === id) {
-      return { ...r, status };
-    }
-    return r;
-  });
-  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(updated));
+export const updateCancellationRequest = async (id: string, status: 'approved' | 'rejected'): Promise<void> => {
+  const { data, error } = await supabase
+    .from('cancellation_requests')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single();
   
-  // Если отмена одобрена, возвращаем товары в склад
-  if (status === 'approved') {
-    const request = requests.find(r => r.id === id);
-    if (request) {
-      request.items.forEach(item => {
-        updateProductQuantity(item.barcode, item.quantity);
-      });
-    }
+  if (error) throw error;
+  
+  if (status === 'approved' && data) {
+    await updateProductQuantity(data.barcode, data.quantity);
   }
 };
 
-// Удаление старых запросов (старше 24 часов)
-export const cleanupOldCancellations = (): void => {
-  const requests = getCancellationRequests();
-  const now = new Date().getTime();
-  const dayInMs = 24 * 60 * 60 * 1000;
+export const cleanupOldCancellations = async (): Promise<void> => {
+  const dayAgo = new Date();
+  dayAgo.setDate(dayAgo.getDate() - 1);
   
-  const filtered = requests.filter(r => {
-    const requestTime = new Date(r.requestedAt).getTime();
-    return now - requestTime < dayInMs;
-  });
-  
-  localStorage.setItem(CANCELLATIONS_KEY, JSON.stringify(filtered));
+  await supabase
+    .from('cancellation_requests')
+    .delete()
+    .lt('created_at', dayAgo.toISOString());
 };
 
 // Поставщики
@@ -257,41 +375,75 @@ export interface Supplier {
 const SUPPLIERS_KEY = 'suppliers';
 
 export const getSuppliers = async (): Promise<Supplier[]> => {
-  const data = localStorage.getItem(SUPPLIERS_KEY);
-  if (!data) return [];
-  try {
-    return JSON.parse(data);
-  } catch {
+  const { data, error } = await supabase
+    .from('suppliers')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching suppliers:', error);
     return [];
   }
+  
+  return (data || []).map(s => ({
+    id: s.id,
+    name: s.name,
+    phone: s.phone || '',
+    notes: s.address || '',
+    totalDebt: Number(s.debt || 0),
+    paymentHistory: (s.payment_history as any) || [],
+    createdAt: s.created_at,
+    lastUpdated: s.updated_at
+  }));
 };
 
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
-  const suppliers = await getSuppliers();
   const now = new Date().toISOString();
   
-  const newSupplier: Supplier = {
-    ...supplier,
-    id: Date.now().toString(),
-    paymentHistory: [],
-    createdAt: now,
-    lastUpdated: now,
-  };
+  const { data, error } = await supabase
+    .from('suppliers')
+    .insert({
+      name: supplier.name,
+      phone: supplier.phone || null,
+      contact_person: supplier.name,
+      address: supplier.notes || null,
+      debt: supplier.totalDebt || 0,
+      payment_history: [] as any,
+      created_by: userId
+    })
+    .select()
+    .single();
   
-  const updatedSuppliers = [...suppliers, newSupplier];
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updatedSuppliers));
-  return newSupplier;
+  if (error) throw error;
+  
+  return {
+    id: data.id,
+    name: data.name,
+    phone: data.phone || '',
+    notes: data.address || '',
+    totalDebt: Number(data.debt || 0),
+    paymentHistory: [],
+    createdAt: data.created_at,
+    lastUpdated: data.updated_at
+  };
 };
 
 export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
-  const suppliers = await getSuppliers();
-  const updatedSuppliers = suppliers.map(s => {
-    if (s.id === id) {
-      return { ...s, ...updates, lastUpdated: new Date().toISOString() };
-    }
-    return s;
-  });
-  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(updatedSuppliers));
+  const updateData: any = {
+    updated_at: new Date().toISOString()
+  };
+  
+  if (updates.name) updateData.name = updates.name;
+  if (updates.phone !== undefined) updateData.phone = updates.phone || null;
+  if (updates.notes !== undefined) updateData.address = updates.notes || null;
+  if (updates.totalDebt !== undefined) updateData.debt = updates.totalDebt;
+  
+  const { error } = await supabase
+    .from('suppliers')
+    .update(updateData)
+    .eq('id', id);
+  
+  if (error) throw error;
 };
 
 export const addSupplierPayment = async (
@@ -314,14 +466,13 @@ export const paySupplierDebt = async (supplierId: string, amount: number, userId
   console.log('paySupplierDebt - not implemented yet');
 };
 
-// Экспорт всех данных для резервного копирования
-export const exportAllData = () => {
+export const exportAllData = async () => {
   const allData = {
-    products: getStoredProducts(),
-    cancellations: getCancellationRequests(),
-    suppliers: getSuppliers(),
+    products: await getStoredProducts(),
+    cancellations: await getCancellationRequests(),
+    suppliers: await getSuppliers(),
     exportDate: new Date().toISOString(),
-    version: '1.0'
+    version: '2.0'
   };
 
   const jsonString = JSON.stringify(allData, null, 2);
@@ -337,22 +488,11 @@ export const exportAllData = () => {
   URL.revokeObjectURL(url);
 };
 
-// Импорт данных из резервной копии
-export const importAllData = (jsonData: string) => {
+export const importAllData = async (jsonData: string) => {
   try {
     const data = JSON.parse(jsonData);
-    
-    if (data.products) {
-      localStorage.setItem('products', JSON.stringify(data.products));
-    }
-    if (data.cancellations) {
-      localStorage.setItem('cancellationRequests', JSON.stringify(data.cancellations));
-    }
-    if (data.suppliers) {
-      localStorage.setItem('suppliers', JSON.stringify(data.suppliers));
-    }
-    
-    return true;
+    console.log('Import from backup not implemented for Supabase');
+    return false;
   } catch (error) {
     console.error('Ошибка импорта данных:', error);
     return false;

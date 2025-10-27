@@ -289,20 +289,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     }
 
     const result = data?.result || {};
-    const barcode = result.barcode || '';
-    const name = result.name || '';
     
-    // Сохраняем во временную базу если есть штрихкод и название
-    let photoUrl: string | null = null;
-    if (barcode && name) {
-      photoUrl = await saveToTemporaryStorage(imageBase64, barcode, name);
-    }
-    
+    // Возвращаем результат без сохранения фото для ускорения
     return {
-      barcode,
-      name,
+      barcode: result.barcode || '',
+      name: result.name || '',
       category: result.category || '',
-      photoUrl: photoUrl || undefined
+      photoUrl: undefined
     };
   };
 
@@ -312,60 +305,55 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
     setIsProcessing(true);
 
     try {
-      setNotification(mode === 'barcode' ? '📸 Захват штрихкода...' : '📸 Захват товара...');
+      setNotification('📸 Захват...');
       
       const { image } = captureSharpImage();
       
       if (!image) {
-        setNotification('❌ Камера не готова');
-        setTimeout(() => setNotification(''), 1500);
+        setNotification('❌ Ошибка');
+        setTimeout(() => setNotification(''), 1000);
         return;
       }
-      
-      setNotification('✅ Анализирую...');
-      photo1Ref.current = image;
       
       const result = await recognizeProduct(image, mode);
       
       if (mode === 'barcode') {
         if (result.barcode) {
-          setNotification('✅ Штрихкод распознан!');
+          setNotification('✅ Готово!');
           
-          // Увеличиваем количество если товар уже был распознан
           const productKey = result.barcode;
           const currentQty = recognizedProducts.get(productKey) || 0;
           const newQty = currentQty + quantity;
           setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
           
           onProductFound({ ...result, capturedImage: image, quantity: newQty });
-          setTimeout(() => setNotification(''), 1000);
+          setTimeout(() => setNotification(''), 800);
         } else {
-          setNotification('❌ Штрихкод не найден');
-          setTimeout(() => setNotification(''), 1500);
+          setNotification('❌ Не найден');
+          setTimeout(() => setNotification(''), 1000);
         }
       } else {
         if (result.name || result.category) {
-          setNotification('✅ Товар распознан!');
+          setNotification('✅ Готово!');
           
-          // Увеличиваем количество если товар уже был распознан
           const productKey = result.barcode || result.name || '';
           const currentQty = recognizedProducts.get(productKey) || 0;
           const newQty = currentQty + quantity;
           setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
           
           onProductFound({ ...result, capturedImage: image, quantity: newQty });
-          setTimeout(() => setNotification(''), 1000);
+          setTimeout(() => setNotification(''), 800);
         } else {
-          setNotification('❌ Товар не распознан');
-          setTimeout(() => setNotification(''), 1500);
+          setNotification('❌ Не распознан');
+          setTimeout(() => setNotification(''), 1000);
         }
       }
     } catch (err: any) {
       console.error('Recognition error:', err);
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
-        toast.error('Слишком много запросов, подождите немного');
+        toast.error('Слишком много запросов');
       } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
-        toast.error('Требуется пополнить баланс Lovable AI');
+        toast.error('Требуется пополнить баланс');
       }
       setNotification('');
     } finally {
@@ -381,7 +369,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         setIsProcessing(true);
 
         try {
-          setNotification(mode === 'barcode' ? '📷 Ищу штрихкод...' : '📷 Ищу товар...');
+          setNotification(mode === 'barcode' ? '📷 Сканирую...' : '📷 Сканирую...');
           
           const { image, isSharp } = captureSharpImage();
           
@@ -391,14 +379,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
             return;
           }
           
-          setNotification('✅ Анализирую...');
-          photo1Ref.current = image;
-          
           const result = await recognizeProduct(image, mode);
           
           if (mode === 'barcode') {
             if (result.barcode) {
-              setNotification('✅ Штрихкод распознан!');
+              setNotification('✅ Распознан!');
               
               // Увеличиваем количество если товар уже был распознан
               const productKey = result.barcode;
@@ -407,13 +392,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
               setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
               
               onProductFound({ ...result, capturedImage: image, quantity: newQty });
-              setTimeout(() => setNotification(''), 1000);
+              setTimeout(() => setNotification(''), 800);
             } else {
               setNotification('');
             }
           } else {
             if (result.name || result.category) {
-              setNotification('✅ Товар распознан!');
+              setNotification('✅ Распознан!');
               
               // Увеличиваем количество если товар уже был распознан
               const productKey = result.barcode || result.name || '';
@@ -422,7 +407,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
               setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
               
               onProductFound({ ...result, capturedImage: image, quantity: newQty });
-              setTimeout(() => setNotification(''), 1000);
+              setTimeout(() => setNotification(''), 800);
             } else {
               setNotification('');
             }
@@ -438,7 +423,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
         } finally {
           setIsProcessing(false);
         }
-      }, 2000);
+      }, 1500);
 
       return () => clearInterval(interval);
     }

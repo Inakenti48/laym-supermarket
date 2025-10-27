@@ -79,20 +79,20 @@ serve(async (req) => {
         ).join('\n')
       : 'Нет сохраненных товаров';
 
-    const systemPrompt = `Ты - система распознавания товаров в магазине. 
-Тебе дано изображение товара и список известных товаров с их штрихкодами.
-Твоя задача - определить какой товар на изображении, сравнивая его с известными товарами.
+    const systemPrompt = `Ты - система быстрого распознавания товаров. 
 
-Известные товары:
+БАЗА ТОВАРОВ:
 ${productsInfo}
 
-КРИТИЧЕСКИ ВАЖНО:
-- Верни ТОЛЬКО штрихкод товара, который ты узнал на изображении
-- Если товар не распознан или не найден в списке, верни "UNKNOWN"
-- НЕ ПРИДУМЫВАЙ штрихкоды! Используй только те, что в списке выше
-- Формат ответа: просто штрихкод или "UNKNOWN"`;
+АЛГОРИТМ:
+1. Внимательно изучи изображение товара
+2. Сравни с товарами из базы (обращай внимание на бренд, упаковку, цвет, логотип)
+3. Если уверен на 90%+ что это один из товаров базы - верни его ТОЧНЫЙ штрихкод
+4. Если товара нет в базе или не уверен - верни "UNKNOWN"
 
-    // Вызываем Lovable AI для распознавания
+ВАЖНО: Используй ТОЛЬКО штрихкоды из списка выше. Не придумывай.`;
+
+    // Вызываем Lovable AI для быстрого распознавания
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -102,26 +102,40 @@ ${productsInfo}
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
+          { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Какой товар на этом изображении? Верни его штрихкод.'
+                text: 'Какой товар на изображении? Верни штрихкод из базы или UNKNOWN.'
               },
               {
                 type: 'image_url',
-                image_url: {
-                  url: imageBase64
-                }
+                image_url: { url: imageBase64 }
               }
             ]
           }
         ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "identify_product",
+            description: "Идентифицирует товар и возвращает его штрихкод",
+            parameters: {
+              type: "object",
+              properties: {
+                barcode: { 
+                  type: "string", 
+                  description: "Штрихкод товара из базы или UNKNOWN" 
+                }
+              },
+              required: ["barcode"],
+              additionalProperties: false
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "identify_product" } }
       }),
     });
 
@@ -147,7 +161,21 @@ ${productsInfo}
     }
 
     const aiData = await aiResponse.json();
-    const recognizedBarcode = aiData.choices[0]?.message?.content?.trim() || 'UNKNOWN';
+    
+    // Получаем structured output из tool call
+    let recognizedBarcode = 'UNKNOWN';
+    try {
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall?.function?.arguments) {
+        const parsed = JSON.parse(toolCall.function.arguments);
+        recognizedBarcode = parsed.barcode || 'UNKNOWN';
+      } else {
+        // Fallback
+        recognizedBarcode = aiData.choices[0]?.message?.content?.trim() || 'UNKNOWN';
+      }
+    } catch (e) {
+      console.error('Failed to parse barcode:', e);
+    }
 
     console.log('AI recognized barcode:', recognizedBarcode);
 

@@ -65,58 +65,32 @@ serve(async (req) => {
     console.log(`Recognition type: ${recognitionType}`);
 
     let systemPrompt = '';
-    let userPrompt = '';
 
     if (recognitionType === 'product') {
-      // Распознавание по лицевой стороне товара
-      systemPrompt = `Ты - эксперт по распознаванию товаров в супермаркете. Твоя задача - точно определить товар по фото его лицевой стороны.
+      systemPrompt = `Ты - эксперт по распознаванию товаров в магазине. Анализируй упаковку максимально точно.
 
-Список доступных товаров в базе (barcode|name|category):
+База товаров (barcode|name|category):
 ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')}
 
-КРИТИЧЕСКИ ВАЖНО ПРИ РАСПОЗНАВАНИИ:
-1. РАЗЛИЧАЙ ВКУСЫ И ВАРИАНТЫ: "Молоко шоколадное" ≠ "Молоко обычное", "Йогурт клубника" ≠ "Йогурт черника"
-2. ОБРАЩАЙ ВНИМАНИЕ НА:
-   - Вкус/аромат (шоколад, ваниль, клубника, и т.д.)
-   - Тип (обычное, лёгкое, премиум)
-   - Объём/размер упаковки
-   - Бренд и подбренд
-3. ВИЗУАЛЬНОЕ СРАВНЕНИЕ:
-   - Цвет упаковки (важно для вкусов)
-   - Логотипы и их расположение
-   - Шрифты и дизайн этикетки
-4. НЕ ПУТАЙ похожие товары одного бренда!
+АЛГОРИТМ:
+1. Прочитай ВСЕ надписи на упаковке (бренд, название, вкус, объем)
+2. Составь полное название включая вкус/вариант
+3. Определи категорию
+4. Сравни с базой: если найдено ТОЧНОЕ совпадение (включая вкус) - верни barcode
+5. Если совпадения нет - оставь barcode пустым, но заполни name и category
 
-Процесс распознавания:
-- Прочитай весь текст на упаковке
-- Определи точное название с вкусом/вариантом
-- Определи категорию товара
-- Проверь, ТОЧНО ЛИ такой товар (с таким же вкусом/вариантом) есть в базе
-- Если ДА и уверен на 95%+ - верни штрихкод
-- Если НЕТ или есть сомнения - верни пустой штрихкод, но заполни точное название и категорию
-
-Ответь СТРОГО в формате JSON:
-{"barcode": "штрихкод если точное совпадение или пусто", "name": "Точное название с вкусом/вариантом", "category": "Категория"}`;
-
-      userPrompt = 'Распознай товар ТОЧНО, учитывая вкус и вариант. Не путай похожие товары. Верни JSON.';
+ВАЖНО: Различай вкусы! "Coca-Cola" ≠ "Coca-Cola Zero", "Йогурт клубника" ≠ "Йогурт черника"`;
     } else {
-      // Распознавание штрихкода
-      systemPrompt = `Ты - эксперт по распознаванию штрихкодов и товаров. Твоя задача:
-1. ПРОЧИТАТЬ штрихкод (EAN-13, EAN-8, CODE-128, UPC и др.)
-2. ДОПОЛНИТЕЛЬНО прочитать название товара и категорию с упаковки (если видно)
+      systemPrompt = `Ты - эксперт по чтению штрихкодов. 
 
-ВАЖНО:
-- Основная задача - прочитать штрихкод
-- Дополнительно: если на фото видна упаковка с текстом - распознай название и категорию
-- Если штрихкода нет или нечитаем - возвращай пустой штрихкод
-- Название и категория могут быть пустыми, если текст не виден
+ЗАДАЧИ:
+1. Найди и прочитай штрихкод (EAN-13/8, CODE-128, UPC и т.д.)
+2. Дополнительно: если видно название и категорию - распознай их
 
-Ответь СТРОГО в формате JSON:
-{"barcode": "цифры штрихкода или пусто", "name": "Название товара если видно", "category": "Категория если видно"}`;
-
-      userPrompt = 'Прочитай штрихкод и дополнительно название товара с упаковки. Верни JSON.';
+Если штрихкод нечитаем - оставь barcode пустым.`;
     }
 
+    // Используем structured output через tool calling для надежного JSON
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -124,13 +98,18 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
-              { type: 'text', text: userPrompt },
+              { 
+                type: 'text', 
+                text: recognitionType === 'product' 
+                  ? 'Распознай товар с упаковки. Учитывай вкус и вариант.'
+                  : 'Прочитай штрихкод и дополнительную информацию с упаковки.'
+              },
               { 
                 type: 'image_url', 
                 image_url: { url: imageUrl }
@@ -138,6 +117,33 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
             ]
           }
         ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "recognize_product",
+            description: "Возвращает результат распознавания товара",
+            parameters: {
+              type: "object",
+              properties: {
+                barcode: { 
+                  type: "string", 
+                  description: "Штрихкод товара из базы или пустая строка" 
+                },
+                name: { 
+                  type: "string", 
+                  description: "Полное название товара с вкусом/вариантом" 
+                },
+                category: { 
+                  type: "string", 
+                  description: "Категория товара" 
+                }
+              },
+              required: ["barcode", "name", "category"],
+              additionalProperties: false
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "recognize_product" } }
       }),
     });
 
@@ -163,25 +169,24 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
     }
 
     const data = await response.json();
-    const rawResult = data.choices?.[0]?.message?.content?.trim() || '';
     
-    console.log(`Recognition result: ${rawResult}`);
-
+    // Получаем structured output из tool call
     let result;
-    if (recognitionType === 'product' || recognitionType === 'barcode') {
-      try {
+    try {
+      const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall?.function?.arguments) {
+        result = JSON.parse(toolCall.function.arguments);
+        console.log('Recognition result (structured):', result);
+      } else {
+        // Fallback на старый метод если нет tool call
+        const rawResult = data.choices?.[0]?.message?.content?.trim() || '';
+        console.log('Recognition result (fallback):', rawResult);
         const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          result = JSON.parse(jsonMatch[0]);
-        } else {
-          result = { barcode: '', name: '', category: '' };
-        }
-      } catch (e) {
-        console.error('Failed to parse recognition result:', e);
-        result = { barcode: '', name: '', category: '' };
+        result = jsonMatch ? JSON.parse(jsonMatch[0]) : { barcode: '', name: '', category: '' };
       }
-    } else {
-      result = { barcode: rawResult };
+    } catch (e) {
+      console.error('Failed to parse recognition result:', e);
+      result = { barcode: '', name: '', category: '' };
     }
 
     return new Response(JSON.stringify({ result }), {

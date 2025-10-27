@@ -67,27 +67,12 @@ serve(async (req) => {
     let systemPrompt = '';
 
     if (recognitionType === 'product') {
-      systemPrompt = `Ты - эксперт по распознаванию товаров в магазине. Анализируй упаковку максимально точно.
-
-База товаров (barcode|name|category):
+      systemPrompt = `Распознай товар. База (barcode|name|category):
 ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')}
 
-АЛГОРИТМ:
-1. Прочитай ВСЕ надписи на упаковке (бренд, название, вкус, объем)
-2. Составь полное название включая вкус/вариант
-3. Определи категорию
-4. Сравни с базой: если найдено ТОЧНОЕ совпадение (включая вкус) - верни barcode
-5. Если совпадения нет - оставь barcode пустым, но заполни name и category
-
-ВАЖНО: Различай вкусы! "Coca-Cola" ≠ "Coca-Cola Zero", "Йогурт клубника" ≠ "Йогурт черника"`;
+Прочитай упаковку, составь название с вкусом, определи категорию. Сравни с базой - если найдено точное совпадение, верни barcode, иначе оставь пустым.`;
     } else {
-      systemPrompt = `Ты - эксперт по чтению штрихкодов. 
-
-ЗАДАЧИ:
-1. Найди и прочитай штрихкод (EAN-13/8, CODE-128, UPC и т.д.)
-2. Дополнительно: если видно название и категорию - распознай их
-
-Если штрихкод нечитаем - оставь barcode пустым.`;
+      systemPrompt = `Прочитай штрихкод и при возможности название с категорией. Если штрихкод нечитаем - оставь пустым.`;
     }
 
     // Используем structured output через tool calling для надежного JSON
@@ -98,7 +83,7 @@ ${allProducts.map((p: any) => `${p.barcode}|${p.name}|${p.category}`).join('\n')
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-flash-lite',
         messages: [
           { role: 'system', content: systemPrompt },
           {

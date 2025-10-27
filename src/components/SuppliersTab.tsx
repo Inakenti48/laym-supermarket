@@ -45,26 +45,68 @@ export const SuppliersTab = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   
-  const [newSupplier, setNewSupplier] = useState({
-    name: '',
-    phone: '',
-    contact_person: '',
-    address: '',
+  const [newSupplier, setNewSupplier] = useState(() => {
+    const saved = localStorage.getItem('supplier_form_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return { name: '', phone: '', contact_person: '', address: '' };
+      }
+    }
+    return { name: '', phone: '', contact_person: '', address: '' };
   });
 
-  const [payment, setPayment] = useState({
-    supplierId: '',
-    productName: '',
-    productQuantity: '',
-    productPrice: '',
-    paymentType: 'full' as 'full' | 'partial' | 'debt',
-    paidAmount: '',
+  const [payment, setPayment] = useState(() => {
+    const saved = localStorage.getItem('payment_form_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {
+          supplierId: '',
+          productName: '',
+          productQuantity: '',
+          productPrice: '',
+          paymentType: 'full' as 'full' | 'partial' | 'debt',
+          paidAmount: '',
+        };
+      }
+    }
+    return {
+      supplierId: '',
+      productName: '',
+      productQuantity: '',
+      productPrice: '',
+      paymentType: 'full' as 'full' | 'partial' | 'debt',
+      paidAmount: '',
+    };
   });
 
-  const [debtPayment, setDebtPayment] = useState({
-    supplierId: '',
-    amount: '',
+  const [debtPayment, setDebtPayment] = useState(() => {
+    const saved = localStorage.getItem('debt_payment_form_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return { supplierId: '', amount: '' };
+      }
+    }
+    return { supplierId: '', amount: '' };
   });
+
+  // Сохраняем состояния форм при изменении
+  useEffect(() => {
+    localStorage.setItem('supplier_form_data', JSON.stringify(newSupplier));
+  }, [newSupplier]);
+
+  useEffect(() => {
+    localStorage.setItem('payment_form_data', JSON.stringify(payment));
+  }, [payment]);
+
+  useEffect(() => {
+    localStorage.setItem('debt_payment_form_data', JSON.stringify(debtPayment));
+  }, [debtPayment]);
 
   useEffect(() => {
     loadSuppliers();
@@ -139,6 +181,8 @@ export const SuppliersTab = () => {
       setNewSupplier({ name: '', phone: '', contact_person: '', address: '' });
       setShowAddForm(false);
       loadSuppliers();
+      // Очищаем сохраненное состояние формы
+      localStorage.removeItem('supplier_form_data');
     } catch (error: any) {
       console.error('Error adding supplier:', error);
       toast.error('Ошибка добавления поставщика');
@@ -229,6 +273,8 @@ export const SuppliersTab = () => {
         paidAmount: '',
       });
       loadSuppliers();
+      // Очищаем сохраненное состояние формы
+      localStorage.removeItem('payment_form_data');
     } catch (error: any) {
       console.error('Error adding payment:', error);
       toast.error('Ошибка добавления операции');
@@ -298,6 +344,8 @@ export const SuppliersTab = () => {
       toast.success('Долг погашен');
       setDebtPayment({ supplierId: '', amount: '' });
       loadSuppliers();
+      // Очищаем сохраненное состояние формы
+      localStorage.removeItem('debt_payment_form_data');
     } catch (error: any) {
       console.error('Error paying debt:', error);
       toast.error('Ошибка погашения долга');

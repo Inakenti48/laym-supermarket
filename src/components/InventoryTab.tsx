@@ -28,17 +28,42 @@ export const InventoryTab = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   
-  const [currentProduct, setCurrentProduct] = useState({
-    barcode: '',
-    name: '',
-    category: '',
-    purchasePrice: '',
-    retailPrice: '',
-    quantity: '',
-    unit: 'шт' as 'шт' | 'кг',
-    expiryDate: '',
-    supplier: '',
+  const [currentProduct, setCurrentProduct] = useState(() => {
+    const saved = localStorage.getItem('inventory_form_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {
+          barcode: '',
+          name: '',
+          category: '',
+          purchasePrice: '',
+          retailPrice: '',
+          quantity: '',
+          unit: 'шт' as 'шт' | 'кг',
+          expiryDate: '',
+          supplier: '',
+        };
+      }
+    }
+    return {
+      barcode: '',
+      name: '',
+      category: '',
+      purchasePrice: '',
+      retailPrice: '',
+      quantity: '',
+      unit: 'шт' as 'шт' | 'кг',
+      expiryDate: '',
+      supplier: '',
+    };
   });
+
+  // Сохраняем состояние формы при изменении
+  useEffect(() => {
+    localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
+  }, [currentProduct]);
 
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -225,6 +250,8 @@ export const InventoryTab = () => {
     setPhotos([]);
     setCapturedImage('');
     setSuggestedProduct(null);
+    // Очищаем сохраненное состояние формы
+    localStorage.removeItem('inventory_form_data');
   };
 
   // Удалена функция saveAllProducts - товары теперь сохраняются сразу при добавлении

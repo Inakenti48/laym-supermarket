@@ -57,7 +57,17 @@ const QUICK_ITEMS = [
 ];
 
 export const CashierTab = () => {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    const saved = localStorage.getItem('cashier_cart_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [showCalculator, setShowCalculator] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
@@ -73,6 +83,11 @@ export const CashierTab = () => {
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
   const user = getCurrentUser();
+
+  // Сохраняем корзину при изменении
+  useEffect(() => {
+    localStorage.setItem('cashier_cart_data', JSON.stringify(cart));
+  }, [cart]);
 
   // Закрытие результатов поиска при клике вне
   useEffect(() => {
@@ -326,6 +341,8 @@ export const CashierTab = () => {
     setShowCalculator(false);
     setShowPrintDialog(false);
     setPendingReceiptData(null);
+    // Очищаем сохраненную корзину
+    localStorage.removeItem('cashier_cart_data');
   };
 
   return (

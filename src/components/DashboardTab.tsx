@@ -27,8 +27,8 @@ export const DashboardTab = () => {
       // Подсчет товаров с низким остатком (менее 10 единиц)
       const lowStockCount = products.filter(p => p.quantity < 10).length;
 
-      // Истекающие товары (в течение 30 дней)
-      const expiringProducts = await getExpiringProducts(30);
+      // Истекающие товары (в течение 3 дней)
+      const expiringProducts = await getExpiringProducts(3);
       const expiringCount = expiringProducts.length;
 
       // Активные сотрудники
@@ -196,7 +196,7 @@ export const DashboardTab = () => {
                   <div>
                     <p className="font-medium">Истекающий срок годности</p>
                     <p className="text-sm text-muted-foreground">
-                      {stats.expiringCount} {stats.expiringCount === 1 ? 'товар истекает' : 'товаров истекают'} в ближайшие 30 дней
+                      {stats.expiringCount} {stats.expiringCount === 1 ? 'товар истекает' : 'товаров истекают'} в ближайшие 3 дня
                     </p>
                   </div>
                 </div>

@@ -259,8 +259,8 @@ export const InventoryTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* AI Product Recognition */}
-      {showAIScanner && (
+      {/* AI Product Recognition - только для админов */}
+      {isAdmin && showAIScanner && (
         <div className="fixed inset-0 bg-background z-50">
           <AIProductRecognition 
             onProductFound={handleScan}
@@ -306,28 +306,28 @@ export const InventoryTab = () => {
         <div className="flex-1 min-w-[200px]">
           <BarcodeScanner onScan={handleScan} />
         </div>
-        <Button 
-          onClick={() => {
-            setAiScanMode('product');
-            setShowAIScanner(true);
-          }} 
-          variant="outline"
-        >
-          <Camera className="h-4 w-4 mr-2" />
-          AI Лицевая
-        </Button>
-        <Button 
-          onClick={() => {
-            setAiScanMode('barcode');
-            setShowAIScanner(true);
-          }} 
-          variant="outline"
-        >
-          <Scan className="h-4 w-4 mr-2" />
-          AI Штрихкод
-        </Button>
         {isAdmin && (
           <>
+            <Button 
+              onClick={() => {
+                setAiScanMode('product');
+                setShowAIScanner(true);
+              }} 
+              variant="outline"
+            >
+              <Camera className="h-4 w-4 mr-2" />
+              AI Лицевая
+            </Button>
+            <Button 
+              onClick={() => {
+                setAiScanMode('barcode');
+                setShowAIScanner(true);
+              }} 
+              variant="outline"
+            >
+              <Scan className="h-4 w-4 mr-2" />
+              AI Штрихкод
+            </Button>
             <Button onClick={() => setShowImportDialog(true)} variant="outline">
               <Upload className="h-4 w-4 mr-2" />
               Импорт CSV

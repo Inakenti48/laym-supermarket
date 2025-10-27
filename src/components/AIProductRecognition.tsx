@@ -504,11 +504,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           
           {/* Индикатор загрузки камеры */}
           {!cameraReady && !error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-              <div className="text-center text-white p-6 bg-black/60 rounded-xl">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-white p-6 rounded-xl">
                 <Camera className="w-16 h-16 mx-auto mb-4 text-primary animate-pulse" />
-                <p className="text-xl font-bold mb-2">Запрос доступа к камере</p>
-                <p className="text-base text-gray-300 mb-4">Нажмите "Разрешить" в диалоге браузера</p>
+                <p className="text-xl font-bold mb-2 drop-shadow-lg">Запрос доступа к камере</p>
+                <p className="text-base text-gray-100 mb-4 drop-shadow-lg">Нажмите "Разрешить" в диалоге браузера</p>
                 <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
               </div>
             </div>

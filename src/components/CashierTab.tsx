@@ -369,27 +369,6 @@ export const CashierTab = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* AI Product Recognition */}
-      {showAIScanner && (
-        <div className="fixed inset-0 bg-background z-50">
-          <AIProductRecognition 
-            onProductFound={handleScan}
-            mode={aiScanMode}
-          />
-          <Button
-            onClick={() => {
-              setShowAIScanner(false);
-              setAiScanMode('product');
-            }}
-            variant="outline"
-            className="absolute top-4 right-4 z-50"
-          >
-            <X className="h-4 w-4 mr-2" />
-            Закрыть
-          </Button>
-        </div>
-      )}
-
       {/* Hidden background AI scanner - always working */}
       <AIProductRecognition 
         onProductFound={handleScan}

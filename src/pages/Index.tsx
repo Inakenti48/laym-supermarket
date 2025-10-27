@@ -133,7 +133,7 @@ const Index = () => {
                 <span className="md:hidden">1С Аналог</span>
                 <span className="hidden md:inline">Система Учета Товаров</span>
               </h1>
-              <p className="text-xs text-muted-foreground hidden sm:block">Управление складом и продажами</p>
+              <p className="text-xs text-muted-foreground hidden md:block">Управление складом и продажами</p>
             </div>
           </div>
           

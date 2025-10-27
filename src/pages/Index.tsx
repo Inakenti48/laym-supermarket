@@ -125,21 +125,24 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Package className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold">Система Учета Товаров</h1>
-              <p className="text-xs text-muted-foreground">Управление складом и продажами</p>
+        <div className="container mx-auto px-2 sm:px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Package className="h-6 w-6 sm:h-8 sm:w-8 text-primary flex-shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-xl font-bold truncate">
+                <span className="md:hidden">1С Аналог</span>
+                <span className="hidden md:inline">Система Учета Товаров</span>
+              </h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">Управление складом и продажами</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={handleBack} title="Назад">
-              <ArrowLeft className="h-5 w-5" />
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            <div className="text-right mr-2">
-              <p className="text-sm font-medium">{currentUser.username}</p>
+            <div className="text-right mr-1 sm:mr-2 hidden sm:block">
+              <p className="text-sm font-medium truncate max-w-[100px]">{currentUser.username}</p>
               <p className="text-xs text-muted-foreground capitalize">
                 {currentUser.role === 'admin' ? 'Администратор' :
                  currentUser.role === 'cashier' ? 'Кассир' :
@@ -147,8 +150,8 @@ const Index = () => {
                  'Сотрудник'}
               </p>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход">
-              <LogOut className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход" className="h-8 w-8 sm:h-10 sm:w-10">
+              <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </div>
         </div>

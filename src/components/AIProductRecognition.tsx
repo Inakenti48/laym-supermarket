@@ -304,6 +304,50 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
+    // STEP 1: Попытка найти похожую фотографию в базе
+    console.log('🔍 Step 1: Searching for similar photo in database...');
+    
+    try {
+      const { data: existingPhotos, error: photosError } = await supabase
+        .from('product_images')
+        .select('barcode, product_name, image_url');
+      
+      if (!photosError && existingPhotos && existingPhotos.length > 0) {
+        console.log(`📸 Found ${existingPhotos.length} photos in database, trying to match...`);
+        
+        const { data: matchData, error: matchError } = await supabase.functions.invoke('recognize-product-by-photo', {
+          body: { 
+            imageBase64: imageBase64
+          }
+        });
+        
+        if (!matchError && matchData?.barcode) {
+          console.log('✅ Found matching product by photo:', matchData.barcode);
+          
+          // Проверяем что товар существует в базе
+          const allProducts = await getAllProducts();
+          const product = allProducts.find(p => p.barcode === matchData.barcode);
+          
+          if (product) {
+            console.log('✅ Product found in database, using photo match result');
+            return {
+              barcode: matchData.barcode,
+              name: product.name,
+              category: product.category,
+              photoUrl: undefined
+            };
+          }
+        }
+        
+        console.log('❌ No matching photo found, trying AI recognition...');
+      }
+    } catch (photoError) {
+      console.error('Error during photo matching:', photoError);
+      console.log('Continuing with AI recognition...');
+    }
+    
+    // STEP 2: Если не нашли по фото - используем AI распознавание
+    console.log('🤖 Step 2: Using AI recognition...');
     const allProducts = await getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {

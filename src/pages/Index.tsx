@@ -141,15 +141,6 @@ const Index = () => {
             <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            <div className="text-right mr-1 sm:mr-2 hidden sm:block">
-              <p className="text-sm font-medium truncate max-w-[100px]">{currentUser.username}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {currentUser.role === 'admin' ? 'Администратор' :
-                 currentUser.role === 'cashier' ? 'Кассир' :
-                 currentUser.role === 'inventory' ? 'Склад' :
-                 'Сотрудник'}
-              </p>
-            </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход" className="h-8 w-8 sm:h-10 sm:w-10">
               <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>

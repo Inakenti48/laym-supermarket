@@ -177,7 +177,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
         paid_amount: product.paidAmount,
         debt_amount: product.debtAmount,
         supplier: product.supplier || null,
-        created_by: userId,
+        created_by: null,
         price_history: newPriceHistory as any
       })
       .select()

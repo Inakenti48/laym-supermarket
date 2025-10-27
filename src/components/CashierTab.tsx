@@ -191,11 +191,24 @@ export const CashierTab = () => {
         return;
       }
       
-      // Звуковой сигнал успешного сканирования
+      // Звуковой сигнал успешного сканирования - типичный звук кассового сканера
       try {
-        const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS46+mgUBELTKXh8LdkHAU7k9nyz3ksBS2Bz/LaiTcIF2O66+mjUREKSqPg8bllHAU8lNn0z3ouBSyCz/LaiTcIF2K46+mjURIKSaPg8btmHQU9ldr1z3ovBTCBz/LbiTcIGGK46+mjUhIKSaLf8btmHQU+ltr1z3ovBTGB0PLbiTgIGGG36+mjUxIJSKHe8btnHQU/l9v10HwvBTKB0fPbiTgIGF+16+mjVBIJRp/d8r1oHQVAmd330HwwBTSB0fPcijgIGF616+mjVBIJRZ3b8r5pHQVBm9730H4wBTWC0vPcizgIF1615OqkVRIJRJzb8sFqHQVDnN/30H4xBTaC0/PdjDkIF1615OqlVhIJQpra8sJrHQVEnt/40IAxBTeC1PPdjDkIFlmz5OqmWBIJP5jZ88NsHQVFn+D40YEyBTiC1PPejTkIFliy5OqnWRIJPpfY88RtHQVGoOH40YIzBTmC1vPejTkIFVev5OqnWhIJO5TW8sVuHQVHouL40oM0BTqD1/PfjToIFFet5eutWxIJOpLU8sdvHQVIpOL50oQ1BTuD2PPfjToIE1Wt4+utXRMIOZDT8slwHQVKpuP50oU2BjyD2fTgjToIElSs4+uuXxMIOY3R8spxHQVLqOT50oY3BjyE2/TgjToIEFKq4uquYRQINojP8styHQVMquX51Ic4BjyE3PThjToID1Go4OmtZBQINoTO8sxzHQVNrOf51Ig5Bz2E3fTijDoIDk+m4OitZhQIMoLL8s10HQVOs+j61Ik6Bz6E3vTijDoIDE2k4OataBYIMn/K8s51HQVPtej61Io7Bz6F4PTijDoICkqh3+WnahgIL3nH8sx2HQVRtun61YpACECF4fXijDoHCEee3eSmbRkILHXE8Mx3HQVS');
-        beep.volume = 1.0; // Максимальная громкость
-        await beep.play();
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Настройка звука сканера: короткий высокий beep
+        oscillator.frequency.value = 2800; // Высокая частота
+        oscillator.type = 'square';
+        
+        gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
       } catch (e) {
         console.log('Не удалось воспроизвести звук:', e);
       }

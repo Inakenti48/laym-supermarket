@@ -23,6 +23,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
   const [cameraReady, setCameraReady] = useState(false);
   const [recognizedProducts, setRecognizedProducts] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
+  const [hasPermission, setHasPermission] = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -49,6 +50,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
                                    permissionTimestamp && 
                                    (now - parseInt(permissionTimestamp)) < twentyFourHours;
       
+      setHasPermission(hasRecentPermission);
+      
       if (!hasRecentPermission) {
         console.log('Запрос доступа к камере...');
       }
@@ -64,6 +67,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
       // Сохраняем разрешение на 24 часа
       localStorage.setItem('camera_permission', 'granted');
       localStorage.setItem('camera_permission_timestamp', now.toString());
+      setHasPermission(true);
       
       console.log('Камера получена, настройка видео...');
       
@@ -503,7 +507,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product' }: AIPro
           />
           
           {/* Индикатор загрузки камеры */}
-          {!cameraReady && !error && (
+          {!cameraReady && !error && !hasPermission && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center text-white p-6 rounded-xl">
                 <Camera className="w-16 h-16 mx-auto mb-4 text-primary animate-pulse" />

@@ -12,10 +12,14 @@ let printerPort: any | null = null;
 // Различные команды открытия денежного ящика для разных моделей принтеров
 export const DRAWER_COMMANDS = {
   STANDARD: `${ESC}p\x00\x32\x78`, // ESC p 0 50 120 - стандартная команда
-  EPSON: `${ESC}p\x00\x19\xFA`, // ESC p 0 25 250 - для Epson
+  EPSON_1: `${ESC}p\x00\x19\xFA`, // ESC p 0 25 250 - для Epson вариант 1
+  EPSON_2: `${ESC}p\x00\x64\xFF`, // ESC p 0 100 255 - для Epson вариант 2
   STAR: `${ESC}p\x00\x40\xF0`, // ESC p 0 64 240 - для Star
-  VARIANT_1: `${ESC}p\x01\x19\xFA`, // ESC p 1 25 250 - вариант для 2-го ящика
-  VARIANT_2: '\x10\x14\x01\x00\x05', // DLE DC4 fn a t - альтернативная команда
+  DRAWER_2: `${ESC}p\x01\x19\xFA`, // ESC p 1 25 250 - для 2-го ящика
+  SHORT_PULSE: `${ESC}p\x00\x0A\x0A`, // ESC p 0 10 10 - короткий импульс
+  LONG_PULSE: `${ESC}p\x00\xFF\xFF`, // ESC p 0 255 255 - длинный импульс
+  DLE_COMMAND: '\x10\x14\x01\x00\x05', // DLE DC4 fn a t - альтернативная команда
+  XPRINTER: `${ESC}p\x00\x3C\x96`, // ESC p 0 60 150 - для XPrinter
 };
 
 // Текущая выбранная команда
@@ -87,10 +91,20 @@ export const testDrawer = async (): Promise<boolean> => {
       throw new Error('Принтер не подключен');
     }
     
-    await writeToPort(commands.INIT + currentDrawerCommand);
+    console.log('📦 Отправка команды открытия ящика:', currentDrawerCommand.split('').map(c => c.charCodeAt(0).toString(16)).join(' '));
+    
+    // Отправляем команду 3 раза для надежности
+    await writeToPort(commands.INIT);
+    await writeToPort(currentDrawerCommand);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await writeToPort(currentDrawerCommand);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await writeToPort(currentDrawerCommand);
+    
+    console.log('✅ Команда открытия ящика отправлена');
     return true;
   } catch (error) {
-    console.error('Ошибка открытия ящика:', error);
+    console.error('❌ Ошибка открытия ящика:', error);
     return false;
   }
 };
@@ -143,7 +157,11 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     // Инициализация
     receipt += commands.INIT;
     
-    // Открыть кассовый ящик сразу используя выбранную команду
+    console.log('📦 Печать чека с открытием ящика. Команда:', currentDrawerCommand.split('').map(c => c.charCodeAt(0).toString(16)).join(' '));
+    
+    // Открыть кассовый ящик сразу используя выбранную команду - отправляем 2 раза
+    receipt += currentDrawerCommand;
+    receipt += commands.FEED;
     receipt += currentDrawerCommand;
     
     // Заголовок

@@ -93,8 +93,6 @@ export const CashierTab = () => {
   const [editMode, setEditMode] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
-  const [scannerActive, setScannerActive] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -241,7 +239,6 @@ export const CashierTab = () => {
       toast.error('Товар не распознан. Попробуйте еще раз или добавьте вручную');
       setShowAIScanner(false);
     }
-    setShowScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {
@@ -439,8 +436,8 @@ export const CashierTab = () => {
         hidden={true}
       />
 
-      {/* Scanner */}
-      <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
+      {/* Scanner - всегда активен */}
+      <BarcodeScanner onScan={handleScan} autoFocus={true} />
 
       {/* Printer Connection */}
       {!printerConnected && (
@@ -628,20 +625,6 @@ export const CashierTab = () => {
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <ShoppingCart className="h-5 w-5 text-primary" />
-                  <span className="font-medium text-sm sm:text-base">Сканер активен</span>
-                </div>
-                <Switch
-                  checked={scannerActive}
-                  onCheckedChange={(checked) => {
-                    setScannerActive(checked);
-                    if (checked) setShowScanner(true);
-                  }}
-                />
-              </div>
-              
               {/* AI Scanning Buttons */}
               <div className="grid grid-cols-2 gap-2">
                 <Button

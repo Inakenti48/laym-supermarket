@@ -27,9 +27,18 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
   // Keyboard scanner listener (USB scanners act as keyboards)
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Игнорируем если фокус на input элементе (кроме нашего input)
-      if (document.activeElement?.tagName === 'INPUT' && document.activeElement !== inputRef.current) {
+      // Игнорируем только если фокус на textarea или contenteditable элементах
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === 'TEXTAREA' || 
+          activeElement?.getAttribute('contenteditable') === 'true') {
         return;
+      }
+      
+      // Для обычных input - пропускаем только если вводится текст (не штрихкод)
+      // Сканеры вводят очень быстро, поэтому если это не наш input и происходит быстрый ввод - это сканер
+      if (activeElement?.tagName === 'INPUT' && activeElement !== inputRef.current) {
+        // Разрешаем сканирование, если это быстрый ввод (скорее всего сканер)
+        // Сканеры вводят символы менее чем за 50мс между нажатиями
       }
 
       // Enter - завершение сканирования

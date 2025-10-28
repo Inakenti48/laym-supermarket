@@ -145,16 +145,6 @@ export const CashierTab = () => {
     // Если есть штрихкод - ищем по штрихкоду только в основной базе
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
       product = await findProductByBarcode(sanitizedBarcode);
-      
-      // Если товар не найден по штрихкоду и это не фото-скан, автоматически открываем камеру
-      if (!product && !isFromPhotoScan) {
-        toast.info('Штрихкод не найден. Сфотографируйте товар для распознавания', {
-          duration: 3000,
-        });
-        setShowAIScanner(true);
-        setAiScanMode('product');
-        return;
-      }
     }
     
     // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию

@@ -36,6 +36,9 @@ import {
   isPrinterConnected, 
   printReceipt as printToDevice,
   printReceiptBrowser,
+  testDrawer,
+  setDrawerCommand,
+  DRAWER_COMMANDS,
   type ReceiptData 
 } from '@/lib/printer';
 import { supabase } from '@/integrations/supabase/client';
@@ -99,6 +102,8 @@ export const CashierTab = () => {
   const [printerConnected, setPrinterConnected] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showDrawerSettings, setShowDrawerSettings] = useState(false);
+  const [selectedDrawerCommand, setSelectedDrawerCommand] = useState<keyof typeof DRAWER_COMMANDS>('STANDARD');
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
@@ -156,6 +161,25 @@ export const CashierTab = () => {
     } else {
       toast.error('Не удалось подключить принтер');
     }
+  };
+
+  const handleTestDrawer = async () => {
+    if (!printerConnected) {
+      toast.error('Сначала подключите принтер');
+      return;
+    }
+    const success = await testDrawer();
+    if (success) {
+      toast.success('Команда открытия ящика отправлена');
+    } else {
+      toast.error('Ошибка открытия ящика. Попробуйте другую команду');
+    }
+  };
+
+  const handleChangeDrawerCommand = (command: keyof typeof DRAWER_COMMANDS) => {
+    setSelectedDrawerCommand(command);
+    setDrawerCommand(command);
+    toast.success('Команда открытия ящика изменена');
   };
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
@@ -457,11 +481,51 @@ export const CashierTab = () => {
 
       {printerConnected && (
         <Card className="p-3 bg-green-50 border-green-200">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
-            <Printer className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-green-800">Принтер чеков подключен</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+              <Printer className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-800">Принтер чеков подключен</span>
+            </div>
+            <Button 
+              onClick={() => setShowDrawerSettings(!showDrawerSettings)} 
+              size="sm" 
+              variant="outline"
+            >
+              Настройка ящика
+            </Button>
           </div>
+          
+          {showDrawerSettings && (
+            <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
+              <div className="text-sm font-medium text-green-800">Команда открытия денежного ящика:</div>
+              <div className="space-y-2">
+                {Object.keys(DRAWER_COMMANDS).map((key) => (
+                  <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="drawer-command"
+                      checked={selectedDrawerCommand === key}
+                      onChange={() => handleChangeDrawerCommand(key as keyof typeof DRAWER_COMMANDS)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-green-900">{key}</span>
+                  </label>
+                ))}
+              </div>
+              <Button 
+                onClick={handleTestDrawer} 
+                size="sm" 
+                className="w-full"
+              >
+                Тест открытия ящика
+              </Button>
+              <p className="text-xs text-green-700">
+                💡 Если ящик не открывается, попробуйте разные команды и нажмите "Тест". 
+                Работающая команда будет автоматически использоваться при печати чека.
+              </p>
+            </div>
+          )}
         </Card>
       )}
 

@@ -138,6 +138,8 @@ export const CashierTab = () => {
     const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
     const productName = barcodeData.name?.trim() || '';
     
+    console.log('🎯 handleScan получил данные:', { sanitizedBarcode, productName, barcodeData });
+    
     let product = null;
     let isTemporary = false;
     const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
@@ -145,6 +147,7 @@ export const CashierTab = () => {
     // Если есть штрихкод - ищем по штрихкоду только в основной базе
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
       product = await findProductByBarcode(sanitizedBarcode);
+      console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, '-> найден:', !!product);
     }
     
     // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию
@@ -155,10 +158,14 @@ export const CashierTab = () => {
         productName.toLowerCase().includes(p.name.toLowerCase())
       );
       
+      console.log('🔍 Поиск по названию:', productName, '-> найден:', !!product);
+      
       if (product) {
         toast.info(`Товар найден по названию: ${product.name}`);
       }
     }
+    
+    console.log('📦 Итоговый результат поиска товара:', product ? product.name : 'НЕ НАЙДЕН');
 
     if (product) {
       // Проверка просрочки

@@ -19,7 +19,7 @@ const commands = {
   SIZE_NORMAL: `${GS}!0`,
   SIZE_DOUBLE: `${GS}!17`,
   CUT: `${GS}V66\x00`,
-  OPEN_DRAWER: '\x1B\x70\x00\x19\xFA', // ESC p 0 25 250 - открытие кассового ящика
+  OPEN_DRAWER: `${ESC}p\x00\x32\x78`, // ESC p m t1 t2 - стандартная команда открытия ящика
   FEED: '\n',
 };
 
@@ -100,6 +100,9 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     // Инициализация
     receipt += commands.INIT;
     
+    // Открыть кассовый ящик сразу
+    receipt += commands.OPEN_DRAWER;
+    
     // Заголовок
     receipt += commands.ALIGN_CENTER;
     receipt += commands.SIZE_DOUBLE;
@@ -112,13 +115,16 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     
     // Информация о чеке
     receipt += commands.ALIGN_LEFT;
+    receipt += commands.BOLD_ON;
     receipt += `Чек: ${data.receiptNumber}` + commands.FEED;
     receipt += `Дата: ${data.date}` + commands.FEED;
     receipt += `Время: ${data.time}` + commands.FEED;
     receipt += `Кассир: ${data.cashier}` + commands.FEED;
+    receipt += commands.BOLD_OFF;
     receipt += '--------------------------------' + commands.FEED;
     
     // Товары
+    receipt += commands.BOLD_ON;
     data.items.forEach(item => {
       const name = item.name.padEnd(20);
       const qty = `${item.quantity}x`.padStart(4);
@@ -126,6 +132,7 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
       receipt += `${name}${qty}${price}` + commands.FEED;
       receipt += `  Итого: ${item.total}₽` + commands.FEED;
     });
+    receipt += commands.BOLD_OFF;
     
     receipt += '--------------------------------' + commands.FEED;
     
@@ -141,14 +148,13 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     
     // Футер
     receipt += commands.ALIGN_CENTER;
+    receipt += commands.BOLD_ON;
     receipt += 'Спасибо за покупку!' + commands.FEED;
     receipt += 'Приходите еще!' + commands.FEED;
+    receipt += commands.BOLD_OFF;
     receipt += commands.FEED;
     receipt += commands.FEED;
     receipt += commands.FEED;
-    
-    // Открыть кассовый ящик
-    receipt += commands.OPEN_DRAWER;
     
     // Отрезать чек
     receipt += commands.CUT;

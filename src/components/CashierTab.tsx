@@ -140,6 +140,7 @@ export const CashierTab = () => {
     
     let product = null;
     let isTemporary = false;
+    const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
 
     // Если есть штрихкод - ищем по штрихкоду
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
@@ -160,6 +161,16 @@ export const CashierTab = () => {
           product = allProducts.find(p => p.name === tempProduct.product_name);
           isTemporary = true;
         }
+      }
+      
+      // Если товар не найден по штрихкоду и это не фото-скан, автоматически открываем камеру
+      if (!product && !isFromPhotoScan) {
+        toast.info('Штрихкод не найден. Сфотографируйте товар для распознавания', {
+          duration: 3000,
+        });
+        setShowAIScanner(true);
+        setAiScanMode('product');
+        return;
       }
     }
     
@@ -215,12 +226,13 @@ export const CashierTab = () => {
       
       addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}${isTemporary ? ' (из временной базы)' : ''}`);
-    } else if (!productName) {
-      // Показываем ошибку только если AI вообще ничего не распознал
-      toast.error('Товар не найден');
+      setShowAIScanner(false);
+    } else if (isFromPhotoScan) {
+      // Если это был фото-скан и товар не найден
+      toast.error('Товар не распознан. Попробуйте еще раз или добавьте вручную');
+      setShowAIScanner(false);
     }
     setShowScanner(false);
-    setShowAIScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {

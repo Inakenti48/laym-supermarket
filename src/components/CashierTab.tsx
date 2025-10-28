@@ -1,9 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan, Edit2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +48,13 @@ interface CartItem {
   barcode?: string;
 }
 
-const QUICK_ITEMS = [
+interface QuickItem {
+  name: string;
+  price: number;
+  imageUrl?: string;
+}
+
+const DEFAULT_QUICK_ITEMS: QuickItem[] = [
   { name: 'Хлеб', price: 50 },
   { name: 'Молоко', price: 80 },
   { name: 'Яйца', price: 120 },
@@ -68,6 +79,18 @@ export const CashierTab = () => {
     }
     return [];
   });
+  const [quickItems, setQuickItems] = useState<QuickItem[]>(() => {
+    const saved = localStorage.getItem('quick_items_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_QUICK_ITEMS;
+      }
+    }
+    return DEFAULT_QUICK_ITEMS;
+  });
+  const [editMode, setEditMode] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
@@ -82,12 +105,18 @@ export const CashierTab = () => {
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
+  const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const user = getCurrentUser();
 
   // Сохраняем корзину при изменении
   useEffect(() => {
     localStorage.setItem('cashier_cart_data', JSON.stringify(cart));
   }, [cart]);
+
+  // Сохраняем быстрые товары при изменении
+  useEffect(() => {
+    localStorage.setItem('quick_items_data', JSON.stringify(quickItems));
+  }, [quickItems]);
 
   // Закрытие результатов поиска при клике вне
   useEffect(() => {
@@ -359,6 +388,26 @@ export const CashierTab = () => {
     localStorage.removeItem('cashier_cart_data');
   };
 
+  const handleImageUpload = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Пожалуйста, выберите файл изображения');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageUrl = e.target?.result as string;
+      setQuickItems(prev => prev.map((item, i) => 
+        i === index ? { ...item, imageUrl } : item
+      ));
+      toast.success('Фото загружено');
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-4">
       {/* Print Confirmation Dialog */}
@@ -574,29 +623,6 @@ export const CashierTab = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Quick items */}
-        <div className="lg:col-span-1">
-          <Card className="p-4">
-            <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
-              <Plus className="h-5 w-5" />
-              Быстрые товары
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {QUICK_ITEMS.map((item, idx) => (
-                <Button
-                  key={idx}
-                  variant="outline"
-                  className="h-16 sm:h-20 flex flex-col items-center justify-center gap-1 text-xs sm:text-sm"
-                  onClick={() => addToCart(item.name, item.price)}
-                >
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-muted-foreground">{item.price}₽</span>
-                </Button>
-              ))}
-            </div>
-          </Card>
-        </div>
-
         {/* Cart */}
         <div className="lg:col-span-2 space-y-4">
           {/* Scanner and Search */}
@@ -771,6 +797,90 @@ export const CashierTab = () => {
               <Printer className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               Завершить продажу
             </Button>
+          </Card>
+        </div>
+
+        {/* Quick items - справа */}
+        <div className="lg:col-span-1">
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2 text-sm sm:text-base">
+                <Plus className="h-5 w-5" />
+                Быстрые товары
+              </h3>
+              <Button
+                variant={editMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEditMode(!editMode)}
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {quickItems.map((item, idx) => (
+                <div key={idx} className="relative">
+                  {editMode ? (
+                    <div className="border rounded-lg p-2 space-y-2">
+                      <div className="text-xs font-medium truncate">{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{item.price}₽</div>
+                      <input
+                        ref={el => fileInputRefs.current[idx] = el}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(idx, e)}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={() => fileInputRefs.current[idx]?.click()}
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        {item.imageUrl ? 'Изменить' : 'Фото'}
+                      </Button>
+                      {item.imageUrl && (
+                        <div className="relative h-12 rounded overflow-hidden">
+                          <img 
+                            src={item.imageUrl} 
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="h-16 sm:h-20 w-full flex flex-col items-center justify-center gap-1 text-xs sm:text-sm"
+                          onClick={() => addToCart(item.name, item.price)}
+                        >
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-muted-foreground">{item.price}₽</span>
+                        </Button>
+                      </HoverCardTrigger>
+                      {item.imageUrl && (
+                        <HoverCardContent side="left" className="w-64">
+                          <div className="space-y-2">
+                            <div className="font-semibold">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">Цена: {item.price}₽</div>
+                            <div className="rounded-lg overflow-hidden">
+                              <img 
+                                src={item.imageUrl} 
+                                alt={item.name}
+                                className="w-full h-40 object-cover"
+                              />
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      )}
+                    </HoverCard>
+                  )}
+                </div>
+              ))}
+            </div>
           </Card>
         </div>
       </div>

@@ -19,6 +19,7 @@ const commands = {
   SIZE_NORMAL: `${GS}!0`,
   SIZE_DOUBLE: `${GS}!17`,
   CUT: `${GS}V66\x00`,
+  OPEN_DRAWER: '\x1B\x70\x00\x19\xFA', // ESC p 0 25 250 - открытие кассового ящика
   FEED: '\n',
 };
 
@@ -145,6 +146,9 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     receipt += commands.FEED;
     receipt += commands.FEED;
     receipt += commands.FEED;
+    
+    // Открыть кассовый ящик
+    receipt += commands.OPEN_DRAWER;
     
     // Отрезать чек
     receipt += commands.CUT;

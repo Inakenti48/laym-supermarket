@@ -142,26 +142,9 @@ export const CashierTab = () => {
     let isTemporary = false;
     const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
 
-    // Если есть штрихкод - ищем по штрихкоду
+    // Если есть штрихкод - ищем по штрихкоду только в основной базе
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
-      // Сначала ищем в основной базе
       product = await findProductByBarcode(sanitizedBarcode);
-
-      // Если не найден в основной базе, ищем во временной
-      if (!product) {
-        const { data: tempProduct } = await supabase
-          .from('vremenno_product_foto')
-          .select('*')
-          .eq('barcode', sanitizedBarcode)
-          .maybeSingle();
-
-        if (tempProduct) {
-          // Находим товар по названию из временной базы в Supabase
-          const allProducts = await getAllProducts();
-          product = allProducts.find(p => p.name === tempProduct.product_name);
-          isTemporary = true;
-        }
-      }
       
       // Если товар не найден по штрихкоду и это не фото-скан, автоматически открываем камеру
       if (!product && !isFromPhotoScan) {

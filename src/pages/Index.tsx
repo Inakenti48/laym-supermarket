@@ -111,15 +111,8 @@ const Index = () => {
 
   const handleLogout = async () => {
     await logout();
-    // Возвращаемся к гостевому режиму
-    setCurrentUser({
-      username: 'Гость',
-      role: 'inventory' as UserRole,
-      loginTime: new Date().toISOString()
-    });
-    setSelectedRole(null);
-    setActiveTab('inventory');
-    toast.info('Вы вышли из системы');
+    // Перезагружаем страницу для полного сброса состояния
+    window.location.reload();
   };
 
   const handleBack = () => {

@@ -72,7 +72,10 @@ export async function syncToCloud(showToast: boolean = false): Promise<{
 
         const { data, error } = await supabase
           .from('products')
-          .insert(productData)
+          .upsert(productData, { 
+            onConflict: 'barcode',
+            ignoreDuplicates: false 
+          })
           .select()
           .single();
 
@@ -105,11 +108,16 @@ export async function syncToCloud(showToast: boolean = false): Promise<{
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) break;
 
+        const supplierData = {
+          ...item.data,
+          created_by: user.id,
+        };
+
         const { data, error } = await supabase
           .from('suppliers')
-          .insert({
-            ...item.data,
-            created_by: user.id,
+          .upsert(supplierData, { 
+            onConflict: 'name',
+            ignoreDuplicates: false 
           })
           .select()
           .single();
@@ -142,11 +150,16 @@ export async function syncToCloud(showToast: boolean = false): Promise<{
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) break;
 
+        const employeeData = {
+          ...item.data,
+          created_by: user.id,
+        };
+
         const { data, error } = await supabase
           .from('employees')
-          .insert({
-            ...item.data,
-            created_by: user.id,
+          .upsert(employeeData, { 
+            onConflict: 'login',
+            ignoreDuplicates: false 
           })
           .select()
           .single();

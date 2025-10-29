@@ -56,38 +56,68 @@ export const login = async (
     const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     
-    // Создаем анонимную сессию в Supabase для работы с базой данных
+    // Создаем сессию в Supabase для работы с базой данных
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        // Используем специальный email для системных пользователей
-        const email = `${role}-${username}@system.local`;
-        const password = `${username}-${role}-system-password`;
-        
-        // Пытаемся войти или создать пользователя
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+      // Используем специальный email для системных пользователей
+      const email = `${role}-${username}@system.local`;
+      const password = `${username}-${role}-system-password-2025`;
+      
+      // Сначала выходим из текущей сессии, если есть
+      await supabase.auth.signOut();
+      
+      // Пытаемся войти
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (signInError) {
+        console.log('Пользователь не найден, создаем нового...');
+        // Если пользователь не существует, создаем его
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              role: role,
+              username: username
+            }
+          }
         });
         
-        if (signInError) {
-          // Если пользователь не существует, создаем его
-          const { error: signUpError } = await supabase.auth.signUp({
+        if (signUpError) {
+          console.error('❌ Ошибка создания пользователя Supabase:', signUpError);
+          throw new Error('Не удалось создать сессию. Повторите попытку.');
+        } else {
+          console.log('✅ Создан пользователь Supabase:', email);
+          
+          // Сразу входим после регистрации
+          const { error: signInAfterSignUpError } = await supabase.auth.signInWithPassword({
             email,
             password,
           });
           
-          if (signUpError) {
-            console.error('Ошибка создания сессии Supabase:', signUpError);
-          } else {
-            console.log('✅ Создана сессия Supabase для:', email);
+          if (signInAfterSignUpError) {
+            console.error('❌ Ошибка входа после регистрации:', signInAfterSignUpError);
+            throw new Error('Пользователь создан, но вход не выполнен. Попробуйте снова.');
           }
-        } else {
-          console.log('✅ Вход в Supabase выполнен:', email);
+          console.log('✅ Вход выполнен после регистрации');
         }
+      } else {
+        console.log('✅ Вход в Supabase выполнен:', email);
       }
-    } catch (error) {
-      console.error('Ошибка авторизации Supabase:', error);
+      
+      // Проверяем, что сессия действительно создана
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Сессия не создана. Проверьте настройки Supabase.');
+      }
+      console.log('✅ Сессия Supabase активна');
+    } catch (error: any) {
+      console.error('❌ Критическая ошибка авторизации Supabase:', error);
+      // Не прерываем вход, но выводим предупреждение
+      alert('Предупреждение: Не удалось создать сессию для работы с базой данных. Некоторые функции могут быть недоступны.');
     }
     
     // Log without showing actual login credentials

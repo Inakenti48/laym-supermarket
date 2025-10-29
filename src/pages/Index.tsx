@@ -167,24 +167,24 @@ const Index = () => {
     userRole && tab.roles.includes(userRole)
   );
 
-  // Показываем экран авторизации
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Package className="h-16 w-16 text-primary mx-auto mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Загрузка...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!userRole) {
-    return <AuthScreen onSuccess={checkAuth} />;
-  }
-
   return (
     <div className="min-h-screen bg-background">
+      {/* Показываем форму входа если не авторизован */}
+      {!userRole && !loading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <AuthScreen onSuccess={checkAuth} />
+        </div>
+      )}
+
+      {/* Загрузка */}
+      {loading && (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <Package className="h-16 w-16 text-primary mx-auto mb-4 animate-pulse" />
+            <p className="text-muted-foreground">Загрузка...</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
         <div className="container mx-auto px-2 sm:px-4 h-16 flex items-center justify-between">

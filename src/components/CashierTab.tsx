@@ -133,6 +133,41 @@ export const CashierTab = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Подписка на реалтайм обновления товаров
+  useEffect(() => {
+    const channel = supabase
+      .channel('products_changes_cashier')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          console.log('🔄 Products updated on another device - refreshing search results');
+          // Обновляем результаты поиска если есть активный поиск
+          if (searchQuery.trim() && searchQuery.length >= 2) {
+            const updateSearchResults = async () => {
+              const query = searchQuery.toLowerCase();
+              const allProducts = await getAllProducts();
+              setSearchResults(
+                allProducts
+                  .filter(p => p.name.toLowerCase().includes(query))
+                  .slice(0, 10)
+              );
+            };
+            updateSearchResults();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [searchQuery]);
+
   // Поиск товаров по названию
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
 

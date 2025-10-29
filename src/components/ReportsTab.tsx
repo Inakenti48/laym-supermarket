@@ -6,6 +6,7 @@ import { FileText, Image, TrendingUp } from 'lucide-react';
 import { getAllProducts } from '@/lib/storage';
 import { getSuppliers } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Table,
   TableBody,
@@ -40,6 +41,44 @@ export const ReportsTab = () => {
       }
     };
     loadData();
+
+    // Подписка на реалтайм обновления товаров и поставщиков
+    const productsChannel = supabase
+      .channel('products_changes_reports')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          console.log('🔄 Products updated on another device - reloading reports');
+          loadData();
+        }
+      )
+      .subscribe();
+
+    const suppliersChannel = supabase
+      .channel('suppliers_changes_reports')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'suppliers'
+        },
+        () => {
+          console.log('🔄 Suppliers updated on another device - reloading reports');
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(suppliersChannel);
+    };
   }, [activeTab]);
 
   // Статистика товаров

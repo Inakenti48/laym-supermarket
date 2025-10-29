@@ -13,6 +13,7 @@ import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier, saveProductImage } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 export const InventoryTab = () => {
   const currentUser = getCurrentUser();
@@ -71,6 +72,58 @@ export const InventoryTab = () => {
       setSuppliers(loadedSuppliers);
     };
     loadSuppliers();
+
+    // Подписка на реалтайм обновления товаров и фото
+    const productsChannel = supabase
+      .channel('products_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          console.log('🔄 Products updated on another device');
+        }
+      )
+      .subscribe();
+
+    const imagesChannel = supabase
+      .channel('product_images_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_images'
+        },
+        () => {
+          console.log('🔄 Product images updated on another device');
+        }
+      )
+      .subscribe();
+
+    const suppliersChannel = supabase
+      .channel('suppliers_changes_inventory')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'suppliers'
+        },
+        () => {
+          loadSuppliers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(imagesChannel);
+      supabase.removeChannel(suppliersChannel);
+    };
   }, []);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number } | string) => {

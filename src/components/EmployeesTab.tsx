@@ -75,6 +75,27 @@ export const EmployeesTab = () => {
 
   useEffect(() => {
     loadEmployees();
+
+    // Подписка на реалтайм обновления сотрудников
+    const channel = supabase
+      .channel('employees_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'employees'
+        },
+        () => {
+          console.log('🔄 Employees updated on another device');
+          loadEmployees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadEmployees = async () => {

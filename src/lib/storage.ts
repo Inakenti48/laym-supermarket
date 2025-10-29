@@ -334,7 +334,7 @@ export const getExpiringProducts = async (daysBeforeExpiry: number = 3): Promise
   targetDate.setDate(targetDate.getDate() + daysBeforeExpiry);
   
   return products.filter(product => {
-    if (!product.expiryDate) return false;
+    if (!product.expiryDate || product.quantity <= 0) return false;
     const expiryDate = new Date(product.expiryDate);
     return expiryDate >= now && expiryDate <= targetDate;
   });

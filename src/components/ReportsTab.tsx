@@ -23,17 +23,28 @@ export const ReportsTab = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true);
-      const [productsData, suppliersData] = await Promise.all([
-        getAllProducts(),
-        getSuppliers()
-      ]);
-      setProducts(productsData);
-      setSuppliers(suppliersData);
-      setLoading(false);
+      try {
+        setLoading(true);
+        console.log('📊 Загрузка данных для отчётов...');
+        const [productsData, suppliersData] = await Promise.all([
+          getAllProducts(),
+          getSuppliers()
+        ]);
+        console.log(`✅ Загружено товаров: ${productsData.length}, поставщиков: ${suppliersData.length}`);
+        setProducts(productsData);
+        setSuppliers(suppliersData);
+      } catch (error) {
+        console.error('❌ Ошибка загрузки данных отчётов:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
-  }, []);
+    
+    // Обновляем данные каждые 5 секунд
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   // Статистика товаров
   const totalProducts = products.length;
@@ -85,6 +96,15 @@ export const ReportsTab = () => {
         </TabsList>
 
         <TabsContent value="products" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Загрузка данных...</p>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Общая статистика */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
@@ -165,9 +185,20 @@ export const ReportsTab = () => {
               </Table>
             </div>
           </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="suppliers" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Загрузка данных...</p>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Статистика поставщиков */}
           <div className="grid gap-4 md:grid-cols-2">
             <Card className="p-4">
@@ -220,6 +251,8 @@ export const ReportsTab = () => {
               </div>
             )}
           </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="photos">

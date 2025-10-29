@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
-export type AppRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
+export type AppRole = 'admin' | 'cashier' | 'inventory' | 'employee';
 
 interface AuthUser {
   user: User;

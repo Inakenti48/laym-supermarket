@@ -31,7 +31,7 @@ export const UserManagementTab = () => {
       return;
     }
 
-    if ((formData.role === 'cashier' || formData.role === 'cashier2') && !formData.cashierName) {
+    if (formData.role === 'cashier' && !formData.cashierName) {
       toast.error('Укажите имя кассира');
       return;
     }
@@ -115,15 +115,14 @@ export const UserManagementTab = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Администратор</SelectItem>
-                    <SelectItem value="cashier">Касса 1</SelectItem>
-                    <SelectItem value="cashier2">Касса 2</SelectItem>
+                    <SelectItem value="cashier">Кассир</SelectItem>
                     <SelectItem value="inventory">Складской</SelectItem>
                     <SelectItem value="employee">Сотрудник</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {(formData.role === 'cashier' || formData.role === 'cashier2') && (
+              {formData.role === 'cashier' && (
                 <div className="space-y-2">
                   <Label htmlFor="cashierName">Имя кассира *</Label>
                   <Input

@@ -32,6 +32,13 @@ export const saveProductImage = async (
   imageBase64: string
 ): Promise<boolean> => {
   try {
+    // Проверяем авторизацию
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('User not authenticated');
+      return false;
+    }
+
     // Конвертируем base64 в blob
     const base64Data = imageBase64.split(',')[1];
     const byteCharacters = atob(base64Data);
@@ -96,7 +103,8 @@ export const saveProductImage = async (
           barcode,
           product_name: productName,
           image_url: urlData.publicUrl,
-          storage_path: filePath
+          storage_path: filePath,
+          created_by: user.id
         });
 
       if (dbError) {

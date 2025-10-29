@@ -82,7 +82,7 @@ export const signUp = async (
       .from('user_roles')
       .insert([{
         user_id: data.user.id,
-        role: role as any // Временно используем any, пока типы не обновятся
+        role: role
       }]);
 
     if (roleError) {

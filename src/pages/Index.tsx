@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, UserPlus, WifiOff, Shield
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle
 } from 'lucide-react';
 import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
@@ -13,196 +13,85 @@ import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
-import { UserManagementTab } from '@/components/UserManagementTab';
-import { AuthScreen } from '@/components/AuthScreen';
+import { RoleSelector } from '@/components/RoleSelector';
+import { LoginScreen } from '@/components/LoginScreen';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { getCurrentAuthUser, signOut, getUserRole, AppRole } from '@/lib/supabaseAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { setupAutoSync, syncOfflineSales, isOnline } from '@/lib/offlineSync';
+import { getCurrentUser, login, logout, UserRole } from '@/lib/auth';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'users';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [online, setOnline] = useState(isOnline());
-
-  const handleRoleLogin = async (role: AppRole) => {
-    try {
-      // Получаем пользователей с этой ролью
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', role)
-        .limit(1)
-        .single();
-
-      if (!roleData) {
-        toast.error('Пользователь с этой ролью не найден');
-        return false;
-      }
-
-      // Получаем информацию о пользователе
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('user_id')
-        .eq('user_id', roleData.user_id)
-        .single();
-
-      if (!profileData) {
-        toast.error('Профиль не найден');
-        return false;
-      }
-
-      // Вызываем edge function для авторизации
-      const { data, error } = await supabase.functions.invoke('passwordless-signin', {
-        body: { user_id: profileData.user_id }
-      });
-
-      if (error || !data?.access_token) {
-        toast.error('Ошибка входа');
-        console.error('Ошибка входа:', error);
-        return false;
-      }
-
-      // Устанавливаем сессию
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
-
-      if (sessionError) {
-        toast.error('Ошибка создания сессии');
-        console.error('Ошибка сессии:', sessionError);
-        return false;
-      }
-
-      toast.success('Вход выполнен успешно');
-      return true;
-    } catch (error) {
-      console.error('Ошибка входа:', error);
-      toast.error('Ошибка подключения');
-      return false;
-    }
-  };
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [currentUser, setCurrentUser] = useState(getCurrentUser());
 
   useEffect(() => {
-    checkAuth();
+    const user = getCurrentUser();
+    setCurrentUser(user);
     
-    // Подписка на изменения авторизации
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        loadUserRole(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        setUserRole(null);
-        setLoading(false);
-      }
-    });
-
-    // Настройка автосинхронизации
-    setupAutoSync((result) => {
-      toast.success(`Синхронизировано продаж: ${result.synced}`);
-      if (result.failed > 0) {
-        toast.error(`Ошибок синхронизации: ${result.failed}`);
-      }
-    });
-
-    // Отслеживание состояния интернета
-    const handleOnline = () => {
-      setOnline(true);
-      toast.success('Соединение восстановлено');
-    };
-    const handleOffline = () => {
-      setOnline(false);
-      toast.warning('Работа в офлайн-режиме');
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      subscription.unsubscribe();
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  const checkAuth = async () => {
-    setLoading(true);
-    const authUser = await getCurrentAuthUser();
-    if (authUser?.user) {
-      const role = await getUserRole(authUser.user.id);
-      setUserRole(role);
-      
-      // Устанавливаем начальную вкладку
-      if (role === 'admin') {
+    // Set initial tab based on role
+    if (user?.role) {
+      if (user.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (role === 'cashier' || role === 'cashier2') {
+      } else if (user.role === 'cashier' || user.role === 'cashier2') {
         setActiveTab('cashier');
-      } else if (role === 'inventory') {
+      } else if (user.role === 'inventory') {
         setActiveTab('inventory');
       } else {
         setActiveTab('employee-work');
       }
     }
-    setLoading(false);
+  }, []);
+
+  const handleSelectRole = (role: UserRole) => {
+    setSelectedRole(role);
   };
 
-  const loadUserRole = async (userId: string) => {
-    const role = await getUserRole(userId);
-    setUserRole(role);
-    
-    if (role === 'admin') {
-      setActiveTab('dashboard');
-    } else if (role === 'cashier' || role === 'cashier2') {
-      setActiveTab('cashier');
-    } else if (role === 'inventory') {
-      setActiveTab('inventory');
+  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
+    const success = await login(username, role, cashierName);
+    if (success) {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+      setSelectedRole(null);
+      
+      // Set initial tab based on role after login
+      if (user?.role === 'admin') {
+        setActiveTab('dashboard');
+      } else if (user?.role === 'cashier') {
+        setActiveTab('cashier');
+      } else if (user?.role === 'inventory') {
+        setActiveTab('inventory');
+      } else {
+        setActiveTab('employee-work');
+      }
+      
+      toast.success('Вход выполнен успешно');
     } else {
-      setActiveTab('employee-work');
+      toast.error('Неверный логин');
     }
   };
 
+  const handleCancelLogin = () => {
+    setSelectedRole(null);
+  };
+
   const handleLogout = async () => {
-    await signOut();
-    setUserRole(null);
+    await logout();
+    setCurrentUser(null);
+    setSelectedRole(null);
     toast.info('Вы вышли из системы');
   };
 
   const handleBack = () => {
-    const mainTabs: Record<AppRole, Tab> = { 
-      admin: 'dashboard', 
-      cashier: 'cashier', 
-      cashier2: 'cashier', 
-      inventory: 'inventory', 
-      employee: 'employee-work' 
-    };
-    const mainTab = userRole ? mainTabs[userRole] : 'dashboard';
+    const mainTabs = { admin: 'dashboard', cashier: 'cashier', cashier2: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
+    const mainTab = currentUser?.role ? mainTabs[currentUser.role as keyof typeof mainTabs] : 'dashboard';
     
     if (activeTab !== mainTab) {
-      setActiveTab(mainTab);
+      setActiveTab(mainTab as Tab);
     } else {
       handleLogout();
-    }
-  };
-
-  const handleManualSync = async () => {
-    toast.loading('Синхронизация...');
-    const result = await syncOfflineSales();
-    toast.dismiss();
-    
-    if (result.synced > 0) {
-      toast.success(`Синхронизировано продаж: ${result.synced}`);
-    }
-    if (result.failed > 0) {
-      toast.error(`Ошибок синхронизации: ${result.failed}`);
-    }
-    if (result.synced === 0 && result.failed === 0) {
-      toast.info('Нет данных для синхронизации');
     }
   };
 
@@ -215,140 +104,22 @@ const Index = () => {
     { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },
     { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
-    { id: 'users' as Tab, label: 'Пользователи', icon: UserPlus, roles: ['admin'] },
     { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
     { id: 'import' as Tab, label: 'Импорт', icon: Upload, roles: ['admin'] },
-    { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee'] },
+    { id: 'employee-work' as Tab, label: 'Мои задания', icon: Activity, roles: ['employee', 'user'] },
   ];
 
   const visibleTabs = tabs.filter(tab => 
-    userRole && tab.roles.includes(userRole)
+    currentUser?.role && tab.roles.includes(currentUser.role)
   );
 
-  // Главная страница для неавторизованных пользователей - выбор роли
-  if (!userRole && !loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl">
-          <div className="text-center mb-8">
-            <Package className="h-16 w-16 text-primary mx-auto mb-4" />
-            <h1 className="text-4xl font-bold mb-2">Система Учета Товаров</h1>
-            <p className="text-muted-foreground">Выберите роль для входа</p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Администратор */}
-            <div
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
-              onClick={async () => {
-                setLoading(true);
-                // Здесь будет логика входа как админ
-                const result = await handleRoleLogin('admin');
-                if (result) checkAuth();
-                else setLoading(false);
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Shield className="w-8 h-8 text-primary" />
-                </div>
-                <h3 className="font-semibold">Администратор</h3>
-                <p className="text-sm text-muted-foreground">Полный доступ</p>
-              </div>
-            </div>
-
-            {/* Касса 1 */}
-            <div
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
-              onClick={async () => {
-                setLoading(true);
-                const result = await handleRoleLogin('cashier');
-                if (result) checkAuth();
-                else setLoading(false);
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <ShoppingCart className="w-8 h-8 text-secondary" />
-                </div>
-                <h3 className="font-semibold">Касса 1</h3>
-                <p className="text-sm text-muted-foreground">Работа с кассой</p>
-              </div>
-            </div>
-
-            {/* Касса 2 */}
-            <div
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
-              onClick={async () => {
-                setLoading(true);
-                const result = await handleRoleLogin('cashier2');
-                if (result) checkAuth();
-                else setLoading(false);
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <ShoppingCart className="w-8 h-8 text-green-500" />
-                </div>
-                <h3 className="font-semibold">Касса 2</h3>
-                <p className="text-sm text-muted-foreground">Вторая касса</p>
-              </div>
-            </div>
-
-            {/* Складской */}
-            <div
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
-              onClick={async () => {
-                setLoading(true);
-                const result = await handleRoleLogin('inventory');
-                if (result) checkAuth();
-                else setLoading(false);
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Package className="w-8 h-8 text-accent-foreground" />
-                </div>
-                <h3 className="font-semibold">Складской</h3>
-                <p className="text-sm text-muted-foreground">Управление товарами</p>
-              </div>
-            </div>
-
-            {/* Сотрудник */}
-            <div
-              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
-              onClick={async () => {
-                setLoading(true);
-                const result = await handleRoleLogin('employee');
-                if (result) checkAuth();
-                else setLoading(false);
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Users className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="font-semibold">Сотрудник</h3>
-                <p className="text-sm text-muted-foreground">Выполнение заданий</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Загрузка
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Package className="h-16 w-16 text-primary mx-auto mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Загрузка...</p>
-        </div>
-      </div>
-    );
+  // Show role selector if not logged in
+  if (!currentUser) {
+    if (selectedRole) {
+      return <LoginScreen role={selectedRole} onLogin={handleLogin} onCancel={handleCancelLogin} />;
+    }
+    return <RoleSelector onSelectRole={handleSelectRole} />;
   }
 
   return (
@@ -368,17 +139,6 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-            {!online && (
-              <Badge variant="destructive" className="hidden sm:flex">
-                <WifiOff className="h-3 w-3 mr-1" />
-                Офлайн
-              </Badge>
-            )}
-            {(userRole === 'cashier' || userRole === 'cashier2') && (
-              <Button variant="outline" size="sm" onClick={handleManualSync} disabled={!online} className="hidden sm:flex">
-                Синхронизация
-              </Button>
-            )}
             <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
@@ -425,10 +185,11 @@ const Index = () => {
         {activeTab === 'expiry' && <ExpiryTab />}
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'employees' && <EmployeesTab />}
-        {activeTab === 'users' && <UserManagementTab />}
         {activeTab === 'cancellations' && <CancellationsTab />}
-        {activeTab === 'employee-work' && <EmployeeWorkTab employeeId="" />}
-        {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'users', 'employee-work', 'cancellations'].includes(activeTab) && (
+        {activeTab === 'employee-work' && currentUser.employeeId && (
+          <EmployeeWorkTab employeeId={currentUser.employeeId} />
+        )}
+        {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'employee-work', 'cancellations'].includes(activeTab) && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
             <p className="text-muted-foreground">

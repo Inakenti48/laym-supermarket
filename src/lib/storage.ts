@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { saveLogLocally } from './localDatabase';
 
 export interface StoredProduct {
   id: string;
@@ -298,7 +299,32 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
     
     if (error) {
       console.error('❌ Ошибка Supabase при вставке товара:', error);
-      throw error;
+      
+      // Сохраняем локально при ошибке
+      console.log('💾 Сохранение товара локально для последующей синхронизации...');
+      const { saveProductLocally } = await import('./localDatabase');
+      const localId = await saveProductLocally(productToInsert);
+      
+      // Возвращаем локальный товар
+      return {
+        id: localId,
+        barcode: productToInsert.barcode,
+        name: productToInsert.name,
+        category: productToInsert.category,
+        purchasePrice: productToInsert.purchase_price,
+        retailPrice: productToInsert.sale_price,
+        quantity: productToInsert.quantity,
+        unit: productToInsert.unit as 'шт' | 'кг',
+        expiryDate: productToInsert.expiry_date || undefined,
+        photos: product.photos || [],
+        paymentType: productToInsert.payment_type as 'full' | 'partial' | 'debt',
+        paidAmount: productToInsert.paid_amount,
+        debtAmount: productToInsert.debt_amount,
+        addedBy: userId,
+        supplier: productToInsert.supplier || undefined,
+        lastUpdated: now,
+        priceHistory: newPriceHistory
+      };
     }
     
     console.log('✅ Товар успешно вставлен в базу:', data.id);

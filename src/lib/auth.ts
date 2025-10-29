@@ -98,6 +98,8 @@ export const login = async (
         // После создания пользователя с auto-confirm сессия уже создана
         if (signUpData.session) {
           console.log('✅ Сессия создана автоматически после регистрации');
+        } else {
+          console.warn('⚠️ Сессия не создана после регистрации, проверьте настройки auto-confirm');
         }
       } else {
         console.log('✅ Вход в Supabase выполнен:', signInData.user?.id);
@@ -105,15 +107,26 @@ export const login = async (
       
       // Проверяем, что сессия действительно создана
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
+      if (sessionError) {
         console.error('❌ Ошибка получения сессии:', sessionError);
-        throw new Error('Сессия не создана');
+        throw sessionError;
       }
+      
+      if (!session) {
+        console.error('❌ Сессия не создана');
+        throw new Error('Не удалось создать сессию. Проверьте настройки Supabase Auth.');
+      }
+      
       console.log('✅ Сессия Supabase активна:', session.user.id);
     } catch (error: any) {
       console.error('❌ Критическая ошибка авторизации Supabase:', error);
-      // Не прерываем вход, но выводим предупреждение
-      alert('Предупреждение: Не удалось создать сессию для работы с базой данных. Некоторые функции могут быть недоступны.\n\nОшибка: ' + (error.message || 'Неизвестная ошибка'));
+      console.error('Детали ошибки:', {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
+      // Не блокируем вход - пользователь сможет работать офлайн
+      console.warn('⚠️ Работа продолжена в локальном режиме');
     }
     
     // Log without showing actual login credentials

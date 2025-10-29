@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUser } from '@/lib/auth';
-import { getPendingSuppliersCount, syncSuppliersToCloud, setupSuppliersAutoSync } from '@/lib/suppliersOffline';
 
 interface PaymentHistoryItem {
   productName: string;
@@ -43,10 +42,8 @@ export const SuppliersTab = () => {
   const currentUser = getCurrentUser();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
   
   const [newSupplier, setNewSupplier] = useState(() => {
     const saved = localStorage.getItem('supplier_form_data');
@@ -113,19 +110,6 @@ export const SuppliersTab = () => {
 
   useEffect(() => {
     loadSuppliers();
-    checkPendingSuppliers();
-
-    // Настройка автоматической синхронизации
-    setupSuppliersAutoSync((result) => {
-      if (result.synced > 0) {
-        toast.success(`Синхронизировано ${result.synced} поставщиков`);
-        loadSuppliers();
-        checkPendingSuppliers();
-      }
-      if (result.failed > 0) {
-        toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
-      }
-    });
 
     // Подписка на реалтайм обновления
     const channel = supabase
@@ -148,29 +132,6 @@ export const SuppliersTab = () => {
     };
   }, []);
 
-  const checkPendingSuppliers = async () => {
-    const count = await getPendingSuppliersCount();
-    setPendingCount(count);
-  };
-
-  const handleManualSync = async () => {
-    toast.loading('Синхронизация...');
-    const result = await syncSuppliersToCloud();
-    toast.dismiss();
-    
-    if (result.synced > 0) {
-      toast.success(`Синхронизировано ${result.synced} поставщиков`);
-      loadSuppliers();
-      checkPendingSuppliers();
-    }
-    if (result.failed > 0) {
-      toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
-    }
-    if (result.synced === 0 && result.failed === 0) {
-      toast.info('Нет данных для синхронизации');
-    }
-  };
-
   const loadSuppliers = async () => {
     try {
       const { data, error } = await supabase
@@ -189,93 +150,42 @@ export const SuppliersTab = () => {
   };
 
   const handleAddSupplier = async () => {
-    if (saving) return;
-    
-    setSaving(true);
-    toast.loading('Добавление поставщика...');
-    
+    if (!newSupplier.name || !newSupplier.phone) {
+      toast.error('Заполните название и телефон поставщика');
+      return;
+    }
+
     try {
-      // Валидация
-      if (!newSupplier.name?.trim()) {
-        toast.dismiss();
-        toast.error('Введите название поставщика');
-        return;
-      }
-      
-      if (!newSupplier.phone?.trim()) {
-        toast.dismiss();
-        toast.error('Введите телефон поставщика');
-        return;
-      }
-
-      // Проверка авторизации
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.error('❌ Ошибка авторизации:', {
-          message: authError.message,
-          code: authError.status
-        });
-        toast.dismiss();
-        toast.error('Ошибка авторизации. Войдите в систему.');
-        return;
-      }
-      
-      if (!user) {
-        console.warn('⚠️ Пользователь не авторизован');
-        toast.dismiss();
-        toast.error('Необходима авторизация');
-        return;
-      }
-
-      const supplierData = {
-        name: newSupplier.name.trim(),
-        phone: newSupplier.phone.trim(),
-        contact_person: newSupplier.contact_person?.trim() || null,
-        address: newSupplier.address?.trim() || null,
-        debt: 0,
-        payment_history: [],
-        created_by: user.id
-      };
-      
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('suppliers')
-        .insert(supplierData)
-        .select()
-        .single();
+        .insert({
+          name: newSupplier.name,
+          phone: newSupplier.phone,
+          contact_person: newSupplier.contact_person || null,
+          address: newSupplier.address || null,
+          debt: 0,
+          payment_history: [],
+          created_by: null
+        });
 
       if (error) throw error;
 
       // Добавляем лог
-      try {
-        await supabase.from('system_logs').insert({
-          user_id: user.id,
-          user_name: currentUser?.username || 'Неизвестно',
-          message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
-        });
-      } catch (logError) {
-        console.warn('Ошибка записи лога:', logError);
-      }
+      await supabase.from('system_logs').insert({
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
+        message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
+      });
 
-      toast.dismiss();
-      toast.success('Поставщик успешно добавлен');
+      toast.success('Поставщик добавлен');
       setNewSupplier({ name: '', phone: '', contact_person: '', address: '' });
       setShowAddForm(false);
       loadSuppliers();
+      // Очищаем сохраненное состояние формы
       localStorage.removeItem('supplier_form_data');
     } catch (error: any) {
-      toast.dismiss();
-      
-      let errorMessage = 'Ошибка добавления поставщика';
-      if (error.code === '23505') {
-        errorMessage = 'Поставщик с такими данными уже существует';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast.error(errorMessage);
-      console.error('Ошибка добавления поставщика:', error);
-    } finally {
-      setSaving(false);
+      console.error('Error adding supplier:', error);
+      toast.error('Ошибка добавления поставщика');
     }
   };
 
@@ -347,18 +257,11 @@ export const SuppliersTab = () => {
         `Долг (${totalCost}₽)`;
 
       // Добавляем лог
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('system_logs').insert({
-            user_id: user.id,
-            user_name: currentUser?.username || 'Неизвестно',
-            message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
-          });
-        }
-      } catch (logError) {
-        console.warn('⚠️ Не удалось записать лог:', logError);
-      }
+      await supabase.from('system_logs').insert({
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
+        message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
+      });
 
       toast.success('Операция добавлена');
       setPayment({
@@ -432,18 +335,11 @@ export const SuppliersTab = () => {
       if (updateError) throw updateError;
 
       // Добавляем лог
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from('system_logs').insert({
-            user_id: user.id,
-            user_name: currentUser?.username || 'Неизвестно',
-            message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
-          });
-        }
-      } catch (logError) {
-        console.warn('⚠️ Не удалось записать лог:', logError);
-      }
+      await supabase.from('system_logs').insert({
+        user_id: null,
+        user_name: currentUser?.username || 'Неизвестно',
+        message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
+      });
 
       toast.success('Долг погашен');
       setDebtPayment({ supplierId: '', amount: '' });
@@ -468,28 +364,14 @@ export const SuppliersTab = () => {
     <div className="space-y-6">
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Поставщики ({suppliers.length})
-            </h3>
-            {pendingCount > 0 && (
-              <div className="text-sm text-orange-500 mt-1">
-                {pendingCount} не синхронизировано
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {pendingCount > 0 && (
-              <Button variant="outline" onClick={handleManualSync}>
-                Синхронизировать ({pendingCount})
-              </Button>
-            )}
-            <Button onClick={() => setShowAddForm(!showAddForm)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить поставщика
-            </Button>
-          </div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Поставщики ({suppliers.length})
+          </h3>
+          <Button onClick={() => setShowAddForm(!showAddForm)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Добавить поставщика
+          </Button>
         </div>
 
         {showAddForm && (
@@ -530,11 +412,8 @@ export const SuppliersTab = () => {
                 />
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleAddSupplier} disabled={saving}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Сохранить
-                </Button>
-                <Button variant="outline" onClick={() => setShowAddForm(false)} disabled={saving}>Отмена</Button>
+                <Button onClick={handleAddSupplier}>Сохранить</Button>
+                <Button variant="outline" onClick={() => setShowAddForm(false)}>Отмена</Button>
               </div>
             </div>
           </Card>

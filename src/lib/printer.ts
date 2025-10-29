@@ -9,22 +9,6 @@ export interface PrinterConfig {
 
 let printerPort: any | null = null;
 
-// Различные команды открытия денежного ящика для разных моделей принтеров
-export const DRAWER_COMMANDS = {
-  STANDARD: `${ESC}p\x00\x32\x78`, // ESC p 0 50 120 - стандартная команда
-  EPSON_1: `${ESC}p\x00\x19\xFA`, // ESC p 0 25 250 - для Epson вариант 1
-  EPSON_2: `${ESC}p\x00\x64\xFF`, // ESC p 0 100 255 - для Epson вариант 2
-  STAR: `${ESC}p\x00\x40\xF0`, // ESC p 0 64 240 - для Star
-  DRAWER_2: `${ESC}p\x01\x19\xFA`, // ESC p 1 25 250 - для 2-го ящика
-  SHORT_PULSE: `${ESC}p\x00\x0A\x0A`, // ESC p 0 10 10 - короткий импульс
-  LONG_PULSE: `${ESC}p\x00\xFF\xFF`, // ESC p 0 255 255 - длинный импульс
-  DLE_COMMAND: '\x10\x14\x01\x00\x05', // DLE DC4 fn a t - альтернативная команда
-  XPRINTER: `${ESC}p\x00\x3C\x96`, // ESC p 0 60 150 - для XPrinter
-};
-
-// Текущая выбранная команда
-let currentDrawerCommand = DRAWER_COMMANDS.STANDARD;
-
 // ESC/POS команды
 const commands = {
   INIT: `${ESC}@`,
@@ -70,45 +54,6 @@ export const isPrinterConnected = (): boolean => {
   return printerPort !== null;
 };
 
-// Установить команду открытия ящика
-export const setDrawerCommand = (commandKey: keyof typeof DRAWER_COMMANDS) => {
-  currentDrawerCommand = DRAWER_COMMANDS[commandKey];
-  localStorage.setItem('drawer_command', commandKey);
-};
-
-// Загрузить сохраненную команду
-export const loadSavedDrawerCommand = () => {
-  const saved = localStorage.getItem('drawer_command') as keyof typeof DRAWER_COMMANDS;
-  if (saved && DRAWER_COMMANDS[saved]) {
-    currentDrawerCommand = DRAWER_COMMANDS[saved];
-  }
-};
-
-// Тестовое открытие ящика
-export const testDrawer = async (): Promise<boolean> => {
-  try {
-    if (!printerPort) {
-      throw new Error('Принтер не подключен');
-    }
-    
-    console.log('📦 Отправка команды открытия ящика:', currentDrawerCommand.split('').map(c => c.charCodeAt(0).toString(16)).join(' '));
-    
-    // Отправляем команду 3 раза для надежности
-    await writeToPort(commands.INIT);
-    await writeToPort(currentDrawerCommand);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await writeToPort(currentDrawerCommand);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await writeToPort(currentDrawerCommand);
-    
-    console.log('✅ Команда открытия ящика отправлена');
-    return true;
-  } catch (error) {
-    console.error('❌ Ошибка открытия ящика:', error);
-    return false;
-  }
-};
-
 const writeToPort = async (data: string): Promise<void> => {
   if (!printerPort) {
     throw new Error('Принтер не подключен');
@@ -149,20 +94,10 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
       throw new Error('Принтер не подключен. Нажмите "Подключить принтер"');
     }
 
-    // Загружаем сохраненную команду при первом использовании
-    loadSavedDrawerCommand();
-
     let receipt = '';
     
     // Инициализация
     receipt += commands.INIT;
-    
-    console.log('📦 Печать чека с открытием ящика. Команда:', currentDrawerCommand.split('').map(c => c.charCodeAt(0).toString(16)).join(' '));
-    
-    // Открыть кассовый ящик сразу используя выбранную команду - отправляем 2 раза
-    receipt += currentDrawerCommand;
-    receipt += commands.FEED;
-    receipt += currentDrawerCommand;
     
     // Заголовок
     receipt += commands.ALIGN_CENTER;
@@ -176,16 +111,13 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     
     // Информация о чеке
     receipt += commands.ALIGN_LEFT;
-    receipt += commands.BOLD_ON;
     receipt += `Чек: ${data.receiptNumber}` + commands.FEED;
     receipt += `Дата: ${data.date}` + commands.FEED;
     receipt += `Время: ${data.time}` + commands.FEED;
     receipt += `Кассир: ${data.cashier}` + commands.FEED;
-    receipt += commands.BOLD_OFF;
     receipt += '--------------------------------' + commands.FEED;
     
     // Товары
-    receipt += commands.BOLD_ON;
     data.items.forEach(item => {
       const name = item.name.padEnd(20);
       const qty = `${item.quantity}x`.padStart(4);
@@ -193,7 +125,6 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
       receipt += `${name}${qty}${price}` + commands.FEED;
       receipt += `  Итого: ${item.total}₽` + commands.FEED;
     });
-    receipt += commands.BOLD_OFF;
     
     receipt += '--------------------------------' + commands.FEED;
     
@@ -209,10 +140,8 @@ export const printReceipt = async (data: ReceiptData): Promise<boolean> => {
     
     // Футер
     receipt += commands.ALIGN_CENTER;
-    receipt += commands.BOLD_ON;
     receipt += 'Спасибо за покупку!' + commands.FEED;
     receipt += 'Приходите еще!' + commands.FEED;
-    receipt += commands.BOLD_OFF;
     receipt += commands.FEED;
     receipt += commands.FEED;
     receipt += commands.FEED;

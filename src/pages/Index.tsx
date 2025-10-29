@@ -14,6 +14,7 @@ import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { RoleSelector } from '@/components/RoleSelector';
+import { LoginScreen } from '@/components/LoginScreen';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -34,7 +35,7 @@ const Index = () => {
     if (user?.role) {
       if (user.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (user.role === 'cashier' || user.role === 'cashier2') {
+      } else if (user.role === 'cashier') {
         setActiveTab('cashier');
       } else if (user.role === 'inventory') {
         setActiveTab('inventory');
@@ -45,12 +46,11 @@ const Index = () => {
   }, []);
 
   const handleSelectRole = (role: UserRole) => {
-    // Автоматический вход без логина
-    handleLogin('user', role, undefined, undefined, true);
+    setSelectedRole(role);
   };
 
-  const handleLogin = async (username: string, role: UserRole, cashierName?: string, employeeId?: string, skipPasswordCheck?: boolean) => {
-    const success = await login(username, role, cashierName, employeeId, skipPasswordCheck);
+  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
+    const success = await login(username, role, cashierName);
     if (success) {
       const user = getCurrentUser();
       setCurrentUser(user);
@@ -59,7 +59,7 @@ const Index = () => {
       // Set initial tab based on role after login
       if (user?.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (user?.role === 'cashier' || user?.role === 'cashier2') {
+      } else if (user?.role === 'cashier') {
         setActiveTab('cashier');
       } else if (user?.role === 'inventory') {
         setActiveTab('inventory');
@@ -68,18 +68,24 @@ const Index = () => {
       }
       
       toast.success('Вход выполнен успешно');
+    } else {
+      toast.error('Неверный логин');
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
+  const handleCancelLogin = () => {
+    setSelectedRole(null);
+  };
+
+  const handleLogout = () => {
+    logout();
     setCurrentUser(null);
     setSelectedRole(null);
     toast.info('Вы вышли из системы');
   };
 
   const handleBack = () => {
-    const mainTabs = { admin: 'dashboard', cashier: 'cashier', cashier2: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
+    const mainTabs = { admin: 'dashboard', cashier: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
     const mainTab = currentUser?.role ? mainTabs[currentUser.role as keyof typeof mainTabs] : 'dashboard';
     
     if (activeTab !== mainTab) {
@@ -92,8 +98,7 @@ const Index = () => {
   const tabs = [
     { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
     { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
-    { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
-    { id: 'cashier' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['cashier2'] },
+    { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart, roles: ['admin', 'cashier'] },
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
     { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },
@@ -110,6 +115,9 @@ const Index = () => {
 
   // Show role selector if not logged in
   if (!currentUser) {
+    if (selectedRole) {
+      return <LoginScreen role={selectedRole} onLogin={handleLogin} onCancel={handleCancelLogin} />;
+    }
     return <RoleSelector onSelectRole={handleSelectRole} />;
   }
 
@@ -167,7 +175,7 @@ const Index = () => {
       </nav>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 space-y-4">
+      <main className="container mx-auto px-4 py-6">
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'cashier' && <CashierTab />}
         {activeTab === 'inventory' && <InventoryTab />}

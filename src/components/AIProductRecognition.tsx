@@ -136,9 +136,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Увеличиваем разрешение для лучшего качества (макс 1024x768)
-    const maxWidth = 1024;
-    const maxHeight = 768;
+    // Уменьшаем разрешение для ускорения (макс 800x600)
+    const maxWidth = 800;
+    const maxHeight = 600;
     let width = video.videoWidth;
     let height = video.videoHeight;
     
@@ -157,11 +157,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
     
-    // Улучшаем качество рендеринга
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, width, height);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return canvas.toDataURL('image/jpeg', 0.5);
   };
 
   const saveToTemporaryStorage = async (imageBase64: string, barcode: string, productName: string): Promise<string | null> => {
@@ -270,9 +267,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       return { image: '', isSharp: false };
     }
     
-    // Увеличиваем разрешение для лучшего качества (макс 1024x768)
-    const maxWidth = 1024;
-    const maxHeight = 768;
+    // Уменьшаем разрешение для ускорения (макс 800x600)
+    const maxWidth = 800;
+    const maxHeight = 600;
     let width = video.videoWidth;
     let height = video.videoHeight;
     
@@ -291,19 +288,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const ctx = canvas.getContext('2d');
     if (!ctx) return { image: '', isSharp: false };
     
-    // Улучшаем качество рендеринга
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, width, height);
     
-    // Проверяем резкость - реалистичный порог
+    // Проверяем резкость
     const sharpness = checkImageSharpness(canvas);
-    const threshold = 50; // Снижен порог для работы в реальных условиях
+    const threshold = 300; // Снижаем порог для быстрого распознавания
     
-    // Сохраняем в высоком качестве (85%)
-    const image = canvas.toDataURL('image/jpeg', 0.85);
-    
-    console.log(`📊 Четкость изображения: ${Math.round(sharpness)} (требуется: ${threshold})`);
+    // Сохраняем в среднем качестве для скорости (50%)
+    const image = canvas.toDataURL('image/jpeg', 0.5);
     
     return {
       image,
@@ -312,7 +304,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
+    // STEP 1: Попытка найти похожую фотографию в базе
     console.log('🔍 Step 1: Searching for similar photo in database...');
     
     try {
@@ -331,33 +323,21 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         console.log('📦 Photo match response:', { matchData, matchError });
         
-        // Проверяем правильную структуру ответа
+        // Проверяем правильную структуру ответа: matchData.result.barcode
         if (!matchError && matchData?.result?.recognized && matchData?.result?.barcode) {
           console.log('✅ Found matching product by photo:', matchData.result.barcode);
           
-          // Ищем товар по штрихкоду ИЛИ по названию
+          // Проверяем что товар существует в базе
           const allProducts = await getAllProducts();
-          let product = allProducts.find(p => p.barcode === matchData.result.barcode);
-          
-          // Если не нашли по штрихкоду, ищем по названию
-          if (!product && matchData.result.name) {
-            product = allProducts.find(p => 
-              p.name.toLowerCase() === matchData.result.name.toLowerCase() ||
-              p.name.toLowerCase().includes(matchData.result.name.toLowerCase()) ||
-              matchData.result.name.toLowerCase().includes(p.name.toLowerCase())
-            );
-            if (product) {
-              console.log('✅ Product found by NAME match:', product.name);
-            }
-          }
+          const product = allProducts.find(p => p.barcode === matchData.result.barcode);
           
           if (product) {
             console.log('✅ Product found in database, using photo match result');
             return {
-              barcode: product.barcode || matchData.result.barcode,
+              barcode: matchData.result.barcode,
               name: product.name,
               category: product.category,
-              photoUrl: imageBase64 // Возвращаем изображение для сохранения
+              photoUrl: undefined
             };
           } else {
             console.log('⚠️ Photo matched but product not in database');
@@ -395,12 +375,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
     const result = data?.result || {};
     
-    // Возвращаем результат с захваченным изображением для сохранения
+    // Возвращаем результат без сохранения фото для ускорения
     return {
       barcode: result.barcode || '',
       name: result.name || '',
       category: result.category || '',
-      photoUrl: imageBase64  // Передаем изображение для последующего сохранения
+      photoUrl: undefined
     };
   };
 

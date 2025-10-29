@@ -209,45 +209,6 @@ export type Database = {
         }
         Relationships: []
       }
-      sales: {
-        Row: {
-          cashier_name: string
-          cashier_role: string
-          created_at: string
-          created_by: string | null
-          id: string
-          items: Json
-          offline_id: string | null
-          payment_method: string
-          synced: boolean | null
-          total: number
-        }
-        Insert: {
-          cashier_name: string
-          cashier_role: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          items: Json
-          offline_id?: string | null
-          payment_method: string
-          synced?: boolean | null
-          total: number
-        }
-        Update: {
-          cashier_name?: string
-          cashier_role?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          items?: Json
-          offline_id?: string | null
-          payment_method?: string
-          synced?: boolean | null
-          total?: number
-        }
-        Relationships: []
-      }
       suppliers: {
         Row: {
           address: string | null

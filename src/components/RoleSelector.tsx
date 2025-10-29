@@ -16,17 +16,10 @@ const roles = [
   },
   {
     role: 'cashier' as UserRole,
-    title: 'Касса 1',
+    title: 'Кассир',
     description: 'Работа с кассой',
     icon: ShoppingCart,
     color: 'text-secondary'
-  },
-  {
-    role: 'cashier2' as UserRole,
-    title: 'Касса 2',
-    description: 'Вторая касса',
-    icon: ShoppingCart,
-    color: 'text-green-500'
   },
   {
     role: 'inventory' as UserRole,
@@ -53,7 +46,7 @@ export const RoleSelector = ({ onSelectRole }: RoleSelectorProps) => {
           <p className="text-muted-foreground">Выберите роль для входа</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {roles.map((roleInfo) => {
             const Icon = roleInfo.icon;
             return (

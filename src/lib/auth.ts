@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'cashier' | 'inventory' | 'employee';
+export type UserRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
 
 interface User {
   role: UserRole;
@@ -36,6 +36,8 @@ export const login = async (
       return false;
     }
     isValid = username === '2030';
+  } else if (role === 'cashier2') {
+    isValid = username === '1111';
   } else if (role === 'inventory') {
     isValid = username === '4050';
   } else if (role === 'employee') {
@@ -58,6 +60,8 @@ export const login = async (
       logMessage += 'Администратор';
     } else if (role === 'cashier' && cashierName) {
       logMessage += `Кассир (${cashierName})`;
+    } else if (role === 'cashier2') {
+      logMessage += 'Касса 2';
     } else if (role === 'inventory') {
       logMessage += 'Складской';
     } else if (role === 'employee' && employeeId) {
@@ -78,6 +82,8 @@ export const logout = () => {
       logMessage += 'Администратор';
     } else if (user.role === 'cashier' && user.cashierName) {
       logMessage += `Кассир (${user.cashierName})`;
+    } else if (user.role === 'cashier2') {
+      logMessage += 'Касса 2';
     } else if (user.role === 'inventory') {
       logMessage += 'Складской';
     } else if (user.role === 'employee' && user.employeeId) {
@@ -128,6 +134,8 @@ export const addLog = (message: string) => {
       userDisplay = 'Администратор';
     } else if (user.role === 'cashier' && user.cashierName) {
       userDisplay = `Кассир (${user.cashierName})`;
+    } else if (user.role === 'cashier2') {
+      userDisplay = 'Касса 2';
     } else if (user.role === 'inventory') {
       userDisplay = 'Складской';
     } else if (user.role === 'employee' && user.employeeId) {

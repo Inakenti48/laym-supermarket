@@ -36,7 +36,7 @@ const Index = () => {
     if (user?.role) {
       if (user.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (user.role === 'cashier') {
+      } else if (user.role === 'cashier' || user.role === 'cashier2') {
         setActiveTab('cashier');
       } else if (user.role === 'inventory') {
         setActiveTab('inventory');
@@ -86,7 +86,7 @@ const Index = () => {
   };
 
   const handleBack = () => {
-    const mainTabs = { admin: 'dashboard', cashier: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
+    const mainTabs = { admin: 'dashboard', cashier: 'cashier', cashier2: 'cashier', inventory: 'inventory', user: 'employee-work', employee: 'employee-work' };
     const mainTab = currentUser?.role ? mainTabs[currentUser.role as keyof typeof mainTabs] : 'dashboard';
     
     if (activeTab !== mainTab) {
@@ -99,7 +99,8 @@ const Index = () => {
   const tabs = [
     { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
     { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
-    { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+    { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+    { id: 'cashier' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['cashier2'] },
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
     { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin', 'inventory'] },

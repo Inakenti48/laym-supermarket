@@ -79,6 +79,12 @@ export const InventoryTab = () => {
     
     const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
     
+    // ВАЖНО: Если все поля пустые, не обрабатываем результат
+    if (!sanitizedBarcode && !barcodeData.name && !barcodeData.category) {
+      console.log('AI вернул пустые значения, пропускаем');
+      return;
+    }
+    
     // Сохраняем capturedImage во временное состояние
     if (barcodeData.capturedImage) {
       setCapturedImage(barcodeData.capturedImage);

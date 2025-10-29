@@ -245,6 +245,8 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       priceHistory: (data.price_history as any) || []
     };
   } else {
+    console.log('💾 Создание нового товара в базе данных...');
+    
     const newPriceHistory = [
       {
         date: now,
@@ -254,30 +256,52 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       },
     ];
     
-    const { data: { user } } = await supabase.auth.getUser();
+    // Получаем текущего пользователя
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError) {
+      console.error('❌ Ошибка получения пользователя:', authError);
+      throw new Error('Пользователь не авторизован. Пожалуйста, войдите в систему.');
+    }
+    
+    if (!user) {
+      console.error('❌ Пользователь не найден');
+      throw new Error('Пользователь не авторизован. Пожалуйста, войдите в систему.');
+    }
+    
+    console.log('✅ Пользователь авторизован:', user.id);
+    
+    const productToInsert = {
+      barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
+      name: product.name,
+      category: product.category,
+      purchase_price: product.purchasePrice,
+      sale_price: product.retailPrice,
+      quantity: product.quantity,
+      unit: product.unit,
+      expiry_date: product.expiryDate || null,
+      payment_type: product.paymentType,
+      paid_amount: product.paidAmount,
+      debt_amount: product.debtAmount,
+      supplier: product.supplier || null,
+      created_by: user.id,
+      price_history: newPriceHistory as any
+    };
+    
+    console.log('📦 Данные для вставки:', JSON.stringify(productToInsert, null, 2));
     
     const { data, error } = await supabase
       .from('products')
-      .insert({
-        barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
-        name: product.name,
-        category: product.category,
-        purchase_price: product.purchasePrice,
-        sale_price: product.retailPrice,
-        quantity: product.quantity,
-        unit: product.unit,
-        expiry_date: product.expiryDate || null,
-        payment_type: product.paymentType,
-        paid_amount: product.paidAmount,
-        debt_amount: product.debtAmount,
-        supplier: product.supplier || null,
-        created_by: user?.id,
-        price_history: newPriceHistory as any
-      })
+      .insert(productToInsert)
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Ошибка Supabase при вставке товара:', error);
+      throw error;
+    }
+    
+    console.log('✅ Товар успешно вставлен в базу:', data.id);
     
     return {
       id: data.id,

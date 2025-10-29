@@ -257,6 +257,16 @@ export const InventoryTab = () => {
   };
 
   const addProduct = async () => {
+    // Проверка авторизации
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
+      console.error('❌ Пользователь не авторизован');
+      return;
+    }
+    
+    console.log('✅ Пользователь авторизован:', user.id);
+    
     if (!currentProduct.name || !currentProduct.category || 
         !currentProduct.purchasePrice || !currentProduct.quantity) {
       toast.error('Заполните все обязательные поля');

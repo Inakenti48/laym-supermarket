@@ -100,7 +100,7 @@ export const saveProductImage = async (
           product_name: productName,
           image_url: urlData.publicUrl,
           storage_path: filePath,
-          created_by: user?.id || null
+          created_by: user?.id
         });
 
       if (dbError) {
@@ -254,6 +254,8 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       },
     ];
     
+    const { data: { user } } = await supabase.auth.getUser();
+    
     const { data, error } = await supabase
       .from('products')
       .insert({
@@ -269,7 +271,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
         paid_amount: product.paidAmount,
         debt_amount: product.debtAmount,
         supplier: product.supplier || null,
-        created_by: null,
+        created_by: user?.id,
         price_history: newPriceHistory as any
       })
       .select()
@@ -492,6 +494,8 @@ export const getSuppliers = async (): Promise<Supplier[]> => {
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
   const now = new Date().toISOString();
   
+  const { data: { user } } = await supabase.auth.getUser();
+  
   const { data, error } = await supabase
     .from('suppliers')
     .insert({
@@ -501,7 +505,7 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
       address: supplier.notes || null,
       debt: supplier.totalDebt || 0,
       payment_history: [] as any,
-      created_by: null
+      created_by: user?.id
     })
     .select()
     .single();

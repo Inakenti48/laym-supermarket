@@ -40,10 +40,6 @@ export const ReportsTab = () => {
       }
     };
     loadData();
-    
-    // Обновляем данные каждые 5 секунд
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
   }, [activeTab]);
 
   // Статистика товаров

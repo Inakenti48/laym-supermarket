@@ -30,6 +30,7 @@ const Index = () => {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(isOnline());
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -167,24 +168,92 @@ const Index = () => {
     userRole && tab.roles.includes(userRole)
   );
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Показываем форму входа если не авторизован */}
-      {!userRole && !loading && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <AuthScreen onSuccess={checkAuth} />
-        </div>
-      )}
+  // Главная страница для неавторизованных пользователей
+  if (!userRole && !loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+        <div className="container mx-auto px-4 py-16">
+          <div className="max-w-4xl mx-auto text-center space-y-8">
+            {/* Логотип и заголовок */}
+            <div className="space-y-4">
+              <Package className="h-24 w-24 text-primary mx-auto" />
+              <h1 className="text-5xl font-bold">Система Учета Товаров</h1>
+              <p className="text-xl text-muted-foreground">
+                Современное решение для управления складом и продажами
+              </p>
+            </div>
 
-      {/* Загрузка */}
-      {loading && (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <Package className="h-16 w-16 text-primary mx-auto mb-4 animate-pulse" />
-            <p className="text-muted-foreground">Загрузка...</p>
+            {/* Кнопка входа */}
+            <div className="flex justify-center">
+              <Button 
+                size="lg" 
+                className="text-lg px-8 py-6"
+                onClick={() => setShowAuthDialog(true)}
+              >
+                Войти в систему
+              </Button>
+            </div>
+
+            {/* Информационные секции */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
+              <div className="p-6 bg-card rounded-lg shadow-sm border">
+                <Package className="h-12 w-12 text-primary mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Управление товарами</h3>
+                <p className="text-muted-foreground">Полный контроль над складскими запасами</p>
+              </div>
+              
+              <div className="p-6 bg-card rounded-lg shadow-sm border">
+                <ShoppingCart className="h-12 w-12 text-primary mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Кассовые операции</h3>
+                <p className="text-muted-foreground">Быстрая и удобная работа с кассой</p>
+              </div>
+              
+              <div className="p-6 bg-card rounded-lg shadow-sm border">
+                <FileText className="h-12 w-12 text-primary mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Отчетность</h3>
+                <p className="text-muted-foreground">Детальная аналитика и отчеты</p>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Диалог входа */}
+        {showAuthDialog && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-card rounded-lg shadow-xl max-w-4xl w-full p-6 relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-4 right-4"
+                onClick={() => setShowAuthDialog(false)}
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+              <AuthScreen onSuccess={() => {
+                setShowAuthDialog(false);
+                checkAuth();
+              }} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Загрузка
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Package className="h-16 w-16 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
         <div className="container mx-auto px-2 sm:px-4 h-16 flex items-center justify-between">

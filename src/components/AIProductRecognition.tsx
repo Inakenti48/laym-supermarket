@@ -136,9 +136,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Уменьшаем разрешение для ускорения (макс 800x600)
-    const maxWidth = 800;
-    const maxHeight = 600;
+    // Увеличиваем разрешение для лучшего качества (макс 1024x768)
+    const maxWidth = 1024;
+    const maxHeight = 768;
     let width = video.videoWidth;
     let height = video.videoHeight;
     
@@ -157,8 +157,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
     
+    // Улучшаем качество рендеринга
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, width, height);
-    return canvas.toDataURL('image/jpeg', 0.5);
+    return canvas.toDataURL('image/jpeg', 0.85);
   };
 
   const saveToTemporaryStorage = async (imageBase64: string, barcode: string, productName: string): Promise<string | null> => {
@@ -267,9 +270,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       return { image: '', isSharp: false };
     }
     
-    // Уменьшаем разрешение для ускорения (макс 800x600)
-    const maxWidth = 800;
-    const maxHeight = 600;
+    // Увеличиваем разрешение для лучшего качества (макс 1024x768)
+    const maxWidth = 1024;
+    const maxHeight = 768;
     let width = video.videoWidth;
     let height = video.videoHeight;
     
@@ -288,14 +291,19 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     const ctx = canvas.getContext('2d');
     if (!ctx) return { image: '', isSharp: false };
     
+    // Улучшаем качество рендеринга
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, width, height);
     
-    // Проверяем резкость
+    // Проверяем резкость - увеличиваем порог для лучшего качества
     const sharpness = checkImageSharpness(canvas);
-    const threshold = 300; // Снижаем порог для быстрого распознавания
+    const threshold = 600; // Увеличен порог для более четких изображений
     
-    // Сохраняем в среднем качестве для скорости (50%)
-    const image = canvas.toDataURL('image/jpeg', 0.5);
+    // Сохраняем в высоком качестве (85%)
+    const image = canvas.toDataURL('image/jpeg', 0.85);
+    
+    console.log(`📊 Четкость изображения: ${Math.round(sharpness)} (требуется: ${threshold})`);
     
     return {
       image,

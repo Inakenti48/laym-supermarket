@@ -42,6 +42,7 @@ export const SuppliersTab = () => {
   const currentUser = getCurrentUser();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   
@@ -150,45 +151,33 @@ export const SuppliersTab = () => {
   };
 
   const handleAddSupplier = async () => {
-    console.log('🔄 Начало добавления поставщика...');
+    if (saving) return;
     
-    // Валидация
-    if (!newSupplier.name?.trim()) {
-      toast.error('❌ Введите название поставщика');
-      console.error('❌ Название поставщика пустое');
-      return;
-    }
+    setSaving(true);
+    toast.loading('Добавление поставщика...');
     
-    if (!newSupplier.phone?.trim()) {
-      toast.error('❌ Введите телефон поставщика');
-      console.error('❌ Телефон поставщика пустой');
-      return;
-    }
-
-    // Проверка соединения
-    if (!navigator.onLine) {
-      toast.error('⚠️ Нет соединения с интернетом. Поставщик будет сохранен локально.');
-      console.warn('⚠️ Нет интернет-соединения');
-    }
-
-    // Проверка авторизации
-    console.log('🔐 Проверка авторизации...');
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      console.error('❌ Ошибка получения пользователя:', authError);
-      toast.error('❌ Ошибка авторизации');
-      return;
-    }
-    
-    if (!user) {
-      toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
-      console.error('❌ Пользователь не авторизован');
-      return;
-    }
-    
-    console.log('✅ Пользователь авторизован:', user.id);
-
     try {
+      // Валидация
+      if (!newSupplier.name?.trim()) {
+        toast.dismiss();
+        toast.error('Введите название поставщика');
+        return;
+      }
+      
+      if (!newSupplier.phone?.trim()) {
+        toast.dismiss();
+        toast.error('Введите телефон поставщика');
+        return;
+      }
+
+      // Проверка авторизации
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        toast.dismiss();
+        toast.error('Ошибка авторизации. Войдите в систему.');
+        return;
+      }
+
       const supplierData = {
         name: newSupplier.name.trim(),
         phone: newSupplier.phone.trim(),
@@ -199,25 +188,13 @@ export const SuppliersTab = () => {
         created_by: user.id
       };
       
-      console.log('💾 Сохранение поставщика в БД:', supplierData);
-      
       const { data, error } = await supabase
         .from('suppliers')
         .insert(supplierData)
         .select()
         .single();
 
-      if (error) {
-        console.error('❌ Ошибка БД при сохранении поставщика:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
-      }
-      
-      console.log('✅ Поставщик сохранен в БД:', data);
+      if (error) throw error;
 
       // Добавляем лог
       try {
@@ -226,35 +203,30 @@ export const SuppliersTab = () => {
           user_name: currentUser?.username || 'Неизвестно',
           message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
         });
-        console.log('✅ Лог операции записан');
       } catch (logError) {
-        console.warn('⚠️ Не удалось записать лог:', logError);
+        console.warn('Ошибка записи лога:', logError);
       }
 
-      toast.success('✅ Поставщик успешно добавлен');
+      toast.dismiss();
+      toast.success('Поставщик успешно добавлен');
       setNewSupplier({ name: '', phone: '', contact_person: '', address: '' });
       setShowAddForm(false);
       loadSuppliers();
       localStorage.removeItem('supplier_form_data');
     } catch (error: any) {
-      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении поставщика:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        stack: error.stack
-      });
+      toast.dismiss();
       
-      let errorMessage = 'Неизвестная ошибка';
-      if (error.message?.includes('duplicate')) {
-        errorMessage = 'Поставщик с таким названием уже существует';
-      } else if (error.code === '23505') {
+      let errorMessage = 'Ошибка добавления поставщика';
+      if (error.code === '23505') {
         errorMessage = 'Поставщик с такими данными уже существует';
       } else if (error.message) {
         errorMessage = error.message;
       }
       
-      toast.error(`❌ Ошибка: ${errorMessage}`);
+      toast.error(errorMessage);
+      console.error('Ошибка добавления поставщика:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -483,8 +455,11 @@ export const SuppliersTab = () => {
                 />
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleAddSupplier}>Сохранить</Button>
-                <Button variant="outline" onClick={() => setShowAddForm(false)}>Отмена</Button>
+                <Button onClick={handleAddSupplier} disabled={saving}>
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Сохранить
+                </Button>
+                <Button variant="outline" onClick={() => setShowAddForm(false)} disabled={saving}>Отмена</Button>
               </div>
             </div>
           </Card>

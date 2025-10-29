@@ -155,6 +155,14 @@ export const SuppliersTab = () => {
       return;
     }
 
+    // Проверка авторизации
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
+      console.error('❌ Пользователь не авторизован');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('suppliers')
@@ -165,14 +173,14 @@ export const SuppliersTab = () => {
           address: newSupplier.address || null,
           debt: 0,
           payment_history: [],
-          created_by: null
+          created_by: user.id
         });
 
       if (error) throw error;
 
       // Добавляем лог
       await supabase.from('system_logs').insert({
-        user_id: null,
+        user_id: user.id,
         user_name: currentUser?.username || 'Неизвестно',
         message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
       });
@@ -257,8 +265,9 @@ export const SuppliersTab = () => {
         `Долг (${totalCost}₽)`;
 
       // Добавляем лог
+      const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('system_logs').insert({
-        user_id: null,
+        user_id: user?.id || null,
         user_name: currentUser?.username || 'Неизвестно',
         message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
       });
@@ -335,8 +344,9 @@ export const SuppliersTab = () => {
       if (updateError) throw updateError;
 
       // Добавляем лог
+      const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('system_logs').insert({
-        user_id: null,
+        user_id: user?.id || null,
         user_name: currentUser?.username || 'Неизвестно',
         message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
       });

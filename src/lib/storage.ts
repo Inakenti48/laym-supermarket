@@ -249,6 +249,12 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
   } else {
     console.log('💾 Создание нового товара - сохранение локально и на сервер...');
     
+    // Проверяем авторизацию сразу
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Пользователь не авторизован');
+    }
+    
     const newPriceHistory = [
       {
         date: now,
@@ -271,7 +277,8 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       paid_amount: product.paidAmount,
       debt_amount: product.debtAmount,
       supplier: product.supplier || null,
-      price_history: newPriceHistory as any
+      price_history: newPriceHistory as any,
+      created_by: user.id
     };
     
     // Сохраняем локально сразу
@@ -281,17 +288,9 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
     // Асинхронно сохраняем на сервер
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.log('⚠️ Нет пользователя для сохранения на сервер');
-          return;
-        }
-        
-        const productWithUser = { ...productToInsert, created_by: user.id };
-        
         const { data, error } = await supabase
           .from('products')
-          .insert(productWithUser)
+          .insert(productToInsert)
           .select()
           .single();
         
@@ -525,6 +524,10 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
   
   const { data: { user } } = await supabase.auth.getUser();
   
+  if (!user) {
+    throw new Error('Пользователь не авторизован');
+  }
+  
   const { data, error } = await supabase
     .from('suppliers')
     .insert({
@@ -534,7 +537,7 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
       address: supplier.notes || null,
       debt: supplier.totalDebt || 0,
       payment_history: [] as any,
-      created_by: user?.id
+      created_by: user.id
     })
     .select()
     .single();

@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 export type UserRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
 
 interface User {
@@ -54,6 +56,40 @@ export const login = async (
     const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     
+    // Создаем анонимную сессию в Supabase для работы с базой данных
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Используем специальный email для системных пользователей
+        const email = `${role}-${username}@system.local`;
+        const password = `${username}-${role}-system-password`;
+        
+        // Пытаемся войти или создать пользователя
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (signInError) {
+          // Если пользователь не существует, создаем его
+          const { error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+          });
+          
+          if (signUpError) {
+            console.error('Ошибка создания сессии Supabase:', signUpError);
+          } else {
+            console.log('✅ Создана сессия Supabase для:', email);
+          }
+        } else {
+          console.log('✅ Вход в Supabase выполнен:', email);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка авторизации Supabase:', error);
+    }
+    
     // Log without showing actual login credentials
     let logMessage = 'Вход в систему: ';
     if (role === 'admin') {
@@ -73,7 +109,7 @@ export const login = async (
   return false;
 };
 
-export const logout = () => {
+export const logout = async () => {
   const user = getCurrentUser();
   if (user) {
     // Log without showing actual login credentials
@@ -91,6 +127,14 @@ export const logout = () => {
     }
     addLog(logMessage);
   }
+  
+  // Выходим из Supabase
+  try {
+    await supabase.auth.signOut();
+  } catch (error) {
+    console.error('Ошибка выхода из Supabase:', error);
+  }
+  
   localStorage.removeItem(STORAGE_KEY);
 };
 

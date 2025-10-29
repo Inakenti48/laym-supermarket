@@ -25,15 +25,20 @@ export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSup
     }
 
     try {
-      const newSupplier = await saveSupplier({
+      const result = await saveSupplier({
         name: name.trim(),
         phone: phone.trim(),
         notes: '',
         totalDebt: 0,
       }, '');
 
-      toast.success(`Поставщик "${name}" добавлен`);
-      onSupplierAdded(newSupplier);
+      if ('isOffline' in result) {
+        toast.warning(`Поставщик "${name}" сохранен локально`);
+      } else {
+        toast.success(`Поставщик "${name}" добавлен`);
+        onSupplierAdded(result);
+      }
+      
       setName('');
       setPhone('');
       onClose();

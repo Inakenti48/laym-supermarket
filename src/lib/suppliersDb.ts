@@ -1,4 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import { saveSupplierOffline, syncSuppliersToCloud } from './suppliersOffline';
+import { toast } from 'sonner';
 
 export interface Supplier {
   id: string;
@@ -46,33 +48,13 @@ export const getSuppliers = async (): Promise<Supplier[]> => {
 };
 
 /**
- * Сохранить нового поставщика в базу данных
+ * Сохранить нового поставщика (с резервным локальным хранилищем)
  */
 export const saveSupplier = async (
   supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, 
   userId: string
-): Promise<Supplier> => {
-  console.log('💾 Сохранение поставщика в Supabase...', {
-    name: supplier.name,
-    phone: supplier.phone
-  });
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
-  if (authError) {
-    console.error('❌ Ошибка получения пользователя:', {
-      message: authError.message,
-      code: authError.status
-    });
-    throw new Error('Ошибка авторизации');
-  }
-  
-  if (!user) {
-    console.warn('⚠️ Пользователь не авторизован');
-    throw new Error('Пользователь не авторизован');
-  }
-  
-  console.log('✅ Пользователь авторизован:', user.id);
+): Promise<Supplier | { isOffline: true; localId: string }> => {
+  console.log('💾 Сохранение поставщика:', supplier.name);
   
   const supplierData = {
     name: supplier.name,
@@ -81,33 +63,70 @@ export const saveSupplier = async (
     address: supplier.notes || null,
     debt: supplier.totalDebt || 0,
     payment_history: [] as any,
-    created_by: user.id
+    created_by: userId
   };
   
-  console.log('☁️ Сохранение в базу данных...');
-  const { data, error } = await supabase
-    .from('suppliers')
-    .insert(supplierData)
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('❌ Ошибка сохранения поставщика:', error);
-    throw error;
+  try {
+    // Пытаемся сохранить в основную БД
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError) {
+      console.error('❌ Ошибка авторизации, сохраняем локально:', authError.message);
+      const localId = await saveSupplierOffline(supplierData);
+      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
+      return { isOffline: true, localId };
+    }
+    
+    if (!user) {
+      console.warn('⚠️ Пользователь не авторизован, сохраняем локально');
+      const localId = await saveSupplierOffline(supplierData);
+      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
+      return { isOffline: true, localId };
+    }
+    
+    console.log('✅ Пользователь авторизован:', user.id);
+    
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert(supplierData)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('❌ Ошибка сохранения в Supabase, сохраняем локально:', error);
+      const localId = await saveSupplierOffline(supplierData);
+      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
+      return { isOffline: true, localId };
+    }
+    
+    console.log('✅ Поставщик сохранен в Supabase:', data.id);
+    
+    // Пытаемся синхронизировать локальные данные
+    syncSuppliersToCloud().catch(err => 
+      console.warn('⚠️ Фоновая синхронизация не удалась:', err)
+    );
+    
+    return {
+      id: data.id,
+      name: data.name,
+      phone: data.phone || '',
+      notes: data.address || '',
+      totalDebt: Number(data.debt || 0),
+      paymentHistory: [],
+      createdAt: data.created_at,
+      lastUpdated: data.updated_at
+    };
+  } catch (error: any) {
+    console.error('❌ Критическая ошибка, сохраняем локально:', error);
+    try {
+      const localId = await saveSupplierOffline(supplierData);
+      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
+      return { isOffline: true, localId };
+    } catch (offlineError) {
+      console.error('❌ Не удалось сохранить даже локально:', offlineError);
+      throw new Error('Не удалось сохранить поставщика ни в облаке, ни локально');
+    }
   }
-  
-  console.log('✅ Поставщик успешно сохранен:', data.id);
-  
-  return {
-    id: data.id,
-    name: data.name,
-    phone: data.phone || '',
-    notes: data.address || '',
-    totalDebt: Number(data.debt || 0),
-    paymentHistory: [],
-    createdAt: data.created_at,
-    lastUpdated: data.updated_at
-  };
 };
 
 /**

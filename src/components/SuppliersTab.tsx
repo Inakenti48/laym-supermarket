@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUser } from '@/lib/auth';
+import { getPendingSuppliersCount, syncSuppliersToCloud, setupSuppliersAutoSync } from '@/lib/suppliersOffline';
 
 interface PaymentHistoryItem {
   productName: string;
@@ -45,6 +46,7 @@ export const SuppliersTab = () => {
   const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   
   const [newSupplier, setNewSupplier] = useState(() => {
     const saved = localStorage.getItem('supplier_form_data');
@@ -111,6 +113,19 @@ export const SuppliersTab = () => {
 
   useEffect(() => {
     loadSuppliers();
+    checkPendingSuppliers();
+
+    // Настройка автоматической синхронизации
+    setupSuppliersAutoSync((result) => {
+      if (result.synced > 0) {
+        toast.success(`Синхронизировано ${result.synced} поставщиков`);
+        loadSuppliers();
+        checkPendingSuppliers();
+      }
+      if (result.failed > 0) {
+        toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
+      }
+    });
 
     // Подписка на реалтайм обновления
     const channel = supabase
@@ -132,6 +147,29 @@ export const SuppliersTab = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const checkPendingSuppliers = async () => {
+    const count = await getPendingSuppliersCount();
+    setPendingCount(count);
+  };
+
+  const handleManualSync = async () => {
+    toast.loading('Синхронизация...');
+    const result = await syncSuppliersToCloud();
+    toast.dismiss();
+    
+    if (result.synced > 0) {
+      toast.success(`Синхронизировано ${result.synced} поставщиков`);
+      loadSuppliers();
+      checkPendingSuppliers();
+    }
+    if (result.failed > 0) {
+      toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
+    }
+    if (result.synced === 0 && result.failed === 0) {
+      toast.info('Нет данных для синхронизации');
+    }
+  };
 
   const loadSuppliers = async () => {
     try {
@@ -430,14 +468,28 @@ export const SuppliersTab = () => {
     <div className="space-y-6">
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Поставщики ({suppliers.length})
-          </h3>
-          <Button onClick={() => setShowAddForm(!showAddForm)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Добавить поставщика
-          </Button>
+          <div>
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Поставщики ({suppliers.length})
+            </h3>
+            {pendingCount > 0 && (
+              <div className="text-sm text-orange-500 mt-1">
+                {pendingCount} не синхронизировано
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {pendingCount > 0 && (
+              <Button variant="outline" onClick={handleManualSync}>
+                Синхронизировать ({pendingCount})
+              </Button>
+            )}
+            <Button onClick={() => setShowAddForm(!showAddForm)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Добавить поставщика
+            </Button>
+          </div>
         </div>
 
         {showAddForm && (

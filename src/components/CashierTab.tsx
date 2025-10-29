@@ -191,6 +191,11 @@ export const CashierTab = () => {
     
     console.log('🎯 handleScan получил данные:', { sanitizedBarcode, productName, barcodeData });
     
+    // Если все поля пустые - пропускаем
+    if (!sanitizedBarcode && !productName) {
+      return;
+    }
+    
     let product = null;
     let isTemporary = false;
     const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
@@ -213,6 +218,24 @@ export const CashierTab = () => {
       
       if (product) {
         toast.info(`Товар найден по названию: ${product.name}`);
+        
+        // Сохраняем фото если оно есть
+        if (barcodeData.photoUrl || barcodeData.capturedImage) {
+          const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage;
+          if (imageToSave) {
+            console.log('💾 Сохранение фото товара на кассе...');
+            // Импортируем функцию сохранения
+            const { saveProductImage } = await import('@/lib/storage');
+            const saved = await saveProductImage(
+              product.barcode || `cashier-${Date.now()}`,
+              product.name,
+              imageToSave
+            );
+            if (saved) {
+              console.log('✅ Фото сохранено на кассе');
+            }
+          }
+        }
       }
     }
     
@@ -257,11 +280,9 @@ export const CashierTab = () => {
       
       addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}${isTemporary ? ' (из временной базы)' : ''}`);
-      setShowAIScanner(false);
     } else if (isFromPhotoScan) {
       // Если это был фото-скан и товар не найден
-      toast.error('Товар не распознан. Попробуйте еще раз или добавьте вручную');
-      setShowAIScanner(false);
+      console.log('❌ Товар не распознан по фото');
     }
   };
 

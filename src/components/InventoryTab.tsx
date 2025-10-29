@@ -220,7 +220,32 @@ export const InventoryTab = () => {
     const quantity = parseFloat(currentProduct.quantity);
 
     try {
-      // Сохраняем товар сразу в localStorage
+      // Сначала сохраняем все фотографии товара в базу product_images
+      if (photos.length > 0 || capturedImage) {
+        const imagesToSave = [...photos];
+        if (capturedImage && !photos.includes(capturedImage)) {
+          imagesToSave.push(capturedImage);
+        }
+        
+        console.log(`💾 Сохранение ${imagesToSave.length} фото товара в базу...`);
+        
+        for (const imageUrl of imagesToSave) {
+          try {
+            const saved = await saveProductImage(
+              currentProduct.barcode || `product-${Date.now()}`,
+              currentProduct.name,
+              imageUrl
+            );
+            if (saved) {
+              console.log('✅ Фото сохранено в product_images');
+            }
+          } catch (imgError) {
+            console.error('Ошибка сохранения фото:', imgError);
+          }
+        }
+      }
+      
+      // Сохраняем товар
       const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
         barcode: currentProduct.barcode,
         name: currentProduct.name,
@@ -238,6 +263,7 @@ export const InventoryTab = () => {
         supplier: currentProduct.supplier || undefined,
       };
 
+      console.log('💾 Сохранение товара в базу products...');
       const saved = await saveProduct(productData, currentUser?.username || 'unknown');
       
       if (saved) {
@@ -250,11 +276,14 @@ export const InventoryTab = () => {
           addLog(`Изменение цены "${currentProduct.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
         }
         
+        console.log('✅ Товар успешно сохранен');
         toast.success('✅ Товар сохранён и доступен на кассе!');
+      } else {
+        throw new Error('Не удалось сохранить товар');
       }
-    } catch (error) {
-      console.error('Error saving product:', error);
-      toast.error('Ошибка сохранения товара');
+    } catch (error: any) {
+      console.error('❌ Ошибка сохранения товара:', error);
+      toast.error(`Ошибка сохранения: ${error.message || 'Неизвестная ошибка'}`);
       return;
     }
 

@@ -206,18 +206,44 @@ export const CashierTab = () => {
       console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, '-> найден:', !!product);
     }
     
-    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию
+    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию (включая цвет и объем)
     if (!product && productName) {
       const allProducts = await getAllProducts();
+      
+      // Сначала точное совпадение
       product = allProducts.find(p => 
-        p.name.toLowerCase().includes(productName.toLowerCase()) ||
-        productName.toLowerCase().includes(p.name.toLowerCase())
+        p.name.toLowerCase() === productName.toLowerCase()
       );
       
-      console.log('🔍 Поиск по названию:', productName, '-> найден:', !!product);
+      // Если не нашли, ищем частичное совпадение (учитываем цвет и объем)
+      if (!product) {
+        product = allProducts.find(p => {
+          const productLower = p.name.toLowerCase();
+          const searchLower = productName.toLowerCase();
+          
+          // Проверяем вхождение в обе стороны
+          return productLower.includes(searchLower) || searchLower.includes(productLower);
+        });
+      }
+      
+      console.log('🔍 Поиск по названию:', productName, '-> найден:', product ? product.name : 'НЕ НАЙДЕН');
       
       if (product) {
-        toast.info(`Товар найден по названию: ${product.name}`);
+        // Проверяем, совпадают ли важные атрибуты (цвет, объем)
+        const searchWords = productName.toLowerCase().split(/[\s,]+/);
+        const productWords = product.name.toLowerCase().split(/[\s,]+/);
+        const hasColorOrVolumeMismatch = searchWords.some(word => {
+          // Проверяем слова, которые могут указывать на цвет или объем
+          const isImportantWord = /^\d+/.test(word) || // числа (объем)
+                                  word.length > 3; // потенциальные цвета/атрибуты
+          return isImportantWord && !productWords.includes(word);
+        });
+        
+        if (hasColorOrVolumeMismatch) {
+          toast.warning(`⚠️ Найден "${product.name}", но может отличаться цвет/объем от "${productName}"`);
+        } else {
+          toast.info(`Товар найден по названию: ${product.name}`);
+        }
         
         // Сохраняем фото если оно есть
         if (barcodeData.photoUrl || barcodeData.capturedImage) {

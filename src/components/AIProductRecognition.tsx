@@ -296,9 +296,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, 0, 0, width, height);
     
-    // Проверяем резкость - увеличиваем порог для лучшего качества
+    // Проверяем резкость - реалистичный порог
     const sharpness = checkImageSharpness(canvas);
-    const threshold = 600; // Увеличен порог для более четких изображений
+    const threshold = 50; // Снижен порог для работы в реальных условиях
     
     // Сохраняем в высоком качестве (85%)
     const image = canvas.toDataURL('image/jpeg', 0.85);
@@ -312,7 +312,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    // STEP 1: Попытка найти похожую фотографию в базе
+    // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
     console.log('🔍 Step 1: Searching for similar photo in database...');
     
     try {
@@ -331,21 +331,33 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         console.log('📦 Photo match response:', { matchData, matchError });
         
-        // Проверяем правильную структуру ответа: matchData.result.barcode
+        // Проверяем правильную структуру ответа
         if (!matchError && matchData?.result?.recognized && matchData?.result?.barcode) {
           console.log('✅ Found matching product by photo:', matchData.result.barcode);
           
-          // Проверяем что товар существует в базе
+          // Ищем товар по штрихкоду ИЛИ по названию
           const allProducts = await getAllProducts();
-          const product = allProducts.find(p => p.barcode === matchData.result.barcode);
+          let product = allProducts.find(p => p.barcode === matchData.result.barcode);
+          
+          // Если не нашли по штрихкоду, ищем по названию
+          if (!product && matchData.result.name) {
+            product = allProducts.find(p => 
+              p.name.toLowerCase() === matchData.result.name.toLowerCase() ||
+              p.name.toLowerCase().includes(matchData.result.name.toLowerCase()) ||
+              matchData.result.name.toLowerCase().includes(p.name.toLowerCase())
+            );
+            if (product) {
+              console.log('✅ Product found by NAME match:', product.name);
+            }
+          }
           
           if (product) {
             console.log('✅ Product found in database, using photo match result');
             return {
-              barcode: matchData.result.barcode,
+              barcode: product.barcode || matchData.result.barcode,
               name: product.name,
               category: product.category,
-              photoUrl: undefined
+              photoUrl: imageBase64 // Возвращаем изображение для сохранения
             };
           } else {
             console.log('⚠️ Photo matched but product not in database');

@@ -150,50 +150,111 @@ export const SuppliersTab = () => {
   };
 
   const handleAddSupplier = async () => {
-    if (!newSupplier.name || !newSupplier.phone) {
-      toast.error('Заполните название и телефон поставщика');
+    console.log('🔄 Начало добавления поставщика...');
+    
+    // Валидация
+    if (!newSupplier.name?.trim()) {
+      toast.error('❌ Введите название поставщика');
+      console.error('❌ Название поставщика пустое');
+      return;
+    }
+    
+    if (!newSupplier.phone?.trim()) {
+      toast.error('❌ Введите телефон поставщика');
+      console.error('❌ Телефон поставщика пустой');
       return;
     }
 
+    // Проверка соединения
+    if (!navigator.onLine) {
+      toast.error('⚠️ Нет соединения с интернетом. Поставщик будет сохранен локально.');
+      console.warn('⚠️ Нет интернет-соединения');
+    }
+
     // Проверка авторизации
-    const { data: { user } } = await supabase.auth.getUser();
+    console.log('🔐 Проверка авторизации...');
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('❌ Ошибка получения пользователя:', authError);
+      toast.error('❌ Ошибка авторизации');
+      return;
+    }
+    
     if (!user) {
       toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
       console.error('❌ Пользователь не авторизован');
       return;
     }
+    
+    console.log('✅ Пользователь авторизован:', user.id);
 
     try {
-      const { error } = await supabase
+      const supplierData = {
+        name: newSupplier.name.trim(),
+        phone: newSupplier.phone.trim(),
+        contact_person: newSupplier.contact_person?.trim() || null,
+        address: newSupplier.address?.trim() || null,
+        debt: 0,
+        payment_history: [],
+        created_by: user.id
+      };
+      
+      console.log('💾 Сохранение поставщика в БД:', supplierData);
+      
+      const { data, error } = await supabase
         .from('suppliers')
-        .insert({
-          name: newSupplier.name,
-          phone: newSupplier.phone,
-          contact_person: newSupplier.contact_person || null,
-          address: newSupplier.address || null,
-          debt: 0,
-          payment_history: [],
-          created_by: user.id
-        });
+        .insert(supplierData)
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Ошибка БД при сохранении поставщика:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+      
+      console.log('✅ Поставщик сохранен в БД:', data);
 
       // Добавляем лог
-      await supabase.from('system_logs').insert({
-        user_id: user.id,
-        user_name: currentUser?.username || 'Неизвестно',
-        message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
-      });
+      try {
+        await supabase.from('system_logs').insert({
+          user_id: user.id,
+          user_name: currentUser?.username || 'Неизвестно',
+          message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
+        });
+        console.log('✅ Лог операции записан');
+      } catch (logError) {
+        console.warn('⚠️ Не удалось записать лог:', logError);
+      }
 
-      toast.success('Поставщик добавлен');
+      toast.success('✅ Поставщик успешно добавлен');
       setNewSupplier({ name: '', phone: '', contact_person: '', address: '' });
       setShowAddForm(false);
       loadSuppliers();
-      // Очищаем сохраненное состояние формы
       localStorage.removeItem('supplier_form_data');
     } catch (error: any) {
-      console.error('Error adding supplier:', error);
-      toast.error('Ошибка добавления поставщика');
+      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении поставщика:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        stack: error.stack
+      });
+      
+      let errorMessage = 'Неизвестная ошибка';
+      if (error.message?.includes('duplicate')) {
+        errorMessage = 'Поставщик с таким названием уже существует';
+      } else if (error.code === '23505') {
+        errorMessage = 'Поставщик с такими данными уже существует';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(`❌ Ошибка: ${errorMessage}`);
     }
   };
 

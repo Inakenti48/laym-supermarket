@@ -288,6 +288,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
     // Асинхронно сохраняем на сервер
     (async () => {
       try {
+        console.log('☁️ Попытка сохранения товара на сервер...');
         const { data, error } = await supabase
           .from('products')
           .insert(productToInsert)
@@ -295,14 +296,26 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
           .single();
         
         if (error) {
-          console.error('❌ Ошибка сохранения на сервер:', error);
+          console.error('❌ Ошибка сохранения на сервер:', {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          });
         } else {
-          console.log('✅ Товар синхронизирован с сервером:', data.id);
+          console.log('✅ Товар успешно синхронизирован с сервером:', {
+            id: data.id,
+            name: data.name,
+            barcode: data.barcode
+          });
           // Запускаем синхронизацию остальных данных
           await syncItemToCloud();
         }
-      } catch (err) {
-        console.error('❌ Ошибка асинхронного сохранения:', err);
+      } catch (err: any) {
+        console.error('❌ Исключение при асинхронном сохранении:', {
+          message: err.message,
+          stack: err.stack
+        });
       }
     })();
     
@@ -522,13 +535,19 @@ export const getSuppliers = async (): Promise<Supplier[]> => {
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
   const now = new Date().toISOString();
   
-  console.log('💾 Сохранение поставщика...');
+  console.log('💾 Начало сохранения поставщика...', {
+    name: supplier.name,
+    phone: supplier.phone
+  });
   
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
+    console.error('❌ Пользователь не авторизован при сохранении поставщика');
     throw new Error('Пользователь не авторизован');
   }
+  
+  console.log('✅ Пользователь авторизован:', user.id);
   
   const supplierData = {
     name: supplier.name,
@@ -540,13 +559,16 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
     created_by: user.id
   };
   
+  console.log('📝 Данные поставщика для сохранения:', supplierData);
+  
   // Сохраняем локально сразу
   const localId = await saveSupplierLocally(supplierData);
-  console.log('✅ Поставщик сохранен локально:', localId);
+  console.log('✅ Поставщик сохранен локально с ID:', localId);
   
   // Асинхронно сохраняем на сервер
   (async () => {
     try {
+      console.log('☁️ Попытка сохранения поставщика на сервер...');
       const { data, error } = await supabase
         .from('suppliers')
         .insert(supplierData)
@@ -554,16 +576,28 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
         .single();
       
       if (error) {
-        console.error('❌ Ошибка сохранения поставщика на сервер:', error);
+        console.error('❌ Ошибка сохранения поставщика на сервер:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
       } else {
-        console.log('✅ Поставщик синхронизирован с сервером:', data.id);
+        console.log('✅ Поставщик успешно синхронизирован с сервером:', {
+          id: data.id,
+          name: data.name
+        });
         await syncItemToCloud();
       }
-    } catch (err) {
-      console.error('❌ Ошибка асинхронного сохранения поставщика:', err);
+    } catch (err: any) {
+      console.error('❌ Исключение при асинхронном сохранении поставщика:', {
+        message: err.message,
+        stack: err.stack
+      });
     }
   })();
   
+  console.log('✅ Возврат данных поставщика');
   // Возвращаем данные сразу
   return {
     id: localId,

@@ -258,6 +258,14 @@ export const InventoryTab = () => {
 
   const addProduct = async () => {
     try {
+      console.log('🔄 Начало добавления товара...');
+      
+      // Проверка интернет-соединения
+      if (!navigator.onLine) {
+        toast.info('⚠️ Нет соединения. Товар будет сохранен локально и синхронизирован позже.');
+        console.warn('⚠️ Режим оффлайн - данные будут синхронизированы при восстановлении соединения');
+      }
+      
       // Проверка авторизации
       console.log('🔐 Проверка авторизации...');
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -277,26 +285,58 @@ export const InventoryTab = () => {
       console.log('✅ Пользователь авторизован:', user.id);
       
       // Проверка обязательных полей
-      if (!currentProduct.name || !currentProduct.category || 
-          !currentProduct.purchasePrice || !currentProduct.quantity) {
-        console.warn('⚠️ Не все обязательные поля заполнены');
-        toast.error('Заполните все обязательные поля');
+      console.log('📋 Проверка обязательных полей...');
+      if (!currentProduct.name?.trim()) {
+        console.error('❌ Название товара пустое');
+        toast.error('❌ Введите название товара');
+        return;
+      }
+      
+      if (!currentProduct.category?.trim()) {
+        console.error('❌ Категория не выбрана');
+        toast.error('❌ Выберите категорию товара');
+        return;
+      }
+      
+      if (!currentProduct.purchasePrice) {
+        console.error('❌ Закупочная цена не указана');
+        toast.error('❌ Укажите закупочную цену');
+        return;
+      }
+      
+      if (!currentProduct.quantity) {
+        console.error('❌ Количество не указано');
+        toast.error('❌ Укажите количество товара');
         return;
       }
 
       if (isAdmin && !currentProduct.retailPrice) {
         console.warn('⚠️ Администратор не указал розничную цену');
-        toast.error('Администратор должен указать розничную цену');
+        toast.error('❌ Укажите розничную цену');
         return;
       }
+      
+      console.log('✅ Все обязательные поля заполнены');
 
       const purchasePrice = parseFloat(currentProduct.purchasePrice);
       const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
       const quantity = parseFloat(currentProduct.quantity);
+      
+      if (quantity <= 0) {
+        console.error('❌ Некорректное количество:', quantity);
+        toast.error('❌ Количество должно быть больше 0');
+        return;
+      }
+      
+      if (purchasePrice < 0 || retailPrice < 0) {
+        console.error('❌ Некорректные цены:', { purchasePrice, retailPrice });
+        toast.error('❌ Цены не могут быть отрицательными');
+        return;
+      }
 
-      console.log('📝 Данные товара:', {
+      console.log('📝 Валидированные данные товара:', {
         name: currentProduct.name,
-        barcode: currentProduct.barcode,
+        barcode: currentProduct.barcode || 'НЕТ',
         category: currentProduct.category,
         purchasePrice,
         retailPrice,
@@ -385,12 +425,25 @@ export const InventoryTab = () => {
     } catch (error: any) {
       console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении товара:', {
         message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
         stack: error.stack,
-        error: error
+        name: error.name
       });
       
-      let errorMessage = 'Неизвестная ошибка';
-      if (error.message) {
+      let errorMessage = 'Неизвестная ошибка при сохранении товара';
+      
+      // Определяем тип ошибки
+      if (error.message?.includes('duplicate')) {
+        errorMessage = 'Товар с таким штрихкодом уже существует';
+      } else if (error.code === '23505') {
+        errorMessage = 'Товар с такими данными уже существует';
+      } else if (error.message?.includes('не авторизован')) {
+        errorMessage = 'Необходимо войти в систему';
+      } else if (error.message?.includes('Network')) {
+        errorMessage = 'Ошибка сети. Проверьте интернет-соединение';
+      } else if (error.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;

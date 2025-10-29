@@ -1,5 +1,12 @@
 project_id = "rfkfjfvlcushtejkgbmg"
 
+[auth]
+# JWT expiry settings - месяц для access token
+jwt_expiry = 2592000
+# Refresh token expiry - месяц
+refresh_token_rotation_enabled = true
+refresh_token_reuse_interval = 10
+
 [functions.recognize-product]
 verify_jwt = true
 

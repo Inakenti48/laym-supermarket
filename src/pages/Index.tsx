@@ -4,6 +4,7 @@ import {
   LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle
 } from 'lucide-react';
 import { DashboardTab } from '@/components/DashboardTab';
+import { DatabaseBackupButton } from '@/components/DatabaseBackupButton';
 import { CashierTab } from '@/components/CashierTab';
 import { InventoryTab } from '@/components/InventoryTab';
 import { SuppliersTab } from '@/components/SuppliersTab';
@@ -130,6 +131,7 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {currentUser?.role === 'admin' && <DatabaseBackupButton />}
             <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>

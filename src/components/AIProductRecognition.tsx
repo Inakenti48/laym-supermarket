@@ -383,12 +383,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
     const result = data?.result || {};
     
-    // Возвращаем результат без сохранения фото для ускорения
+    // Возвращаем результат с захваченным изображением для сохранения
     return {
       barcode: result.barcode || '',
       name: result.name || '',
       category: result.category || '',
-      photoUrl: undefined
+      photoUrl: imageBase64  // Передаем изображение для последующего сохранения
     };
   };
 

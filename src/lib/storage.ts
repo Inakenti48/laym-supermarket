@@ -25,6 +25,94 @@ export interface StoredProduct {
   }>;
 }
 
+// Сохранение фото товара в постоянную базу product_images
+export const saveProductImage = async (
+  barcode: string, 
+  productName: string, 
+  imageBase64: string
+): Promise<boolean> => {
+  try {
+    // Конвертируем base64 в blob
+    const base64Data = imageBase64.split(',')[1];
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+    // Генерируем имя файла
+    const timestamp = Date.now();
+    const fileName = `${barcode || 'no-barcode'}-${timestamp}.jpg`;
+    const filePath = `products/${fileName}`;
+
+    // Загружаем в storage
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      return false;
+    }
+
+    // Получаем публичный URL
+    const { data: urlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath);
+
+    // Проверяем, есть ли уже запись для этого товара
+    const { data: existing } = await supabase
+      .from('product_images')
+      .select('id')
+      .eq('barcode', barcode)
+      .eq('product_name', productName)
+      .maybeSingle();
+
+    if (existing) {
+      // Обновляем существующую запись
+      const { error: updateError } = await supabase
+        .from('product_images')
+        .update({
+          image_url: urlData.publicUrl,
+          storage_path: filePath,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id);
+
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        return false;
+      }
+    } else {
+      // Создаем новую запись
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .insert({
+          barcode,
+          product_name: productName,
+          image_url: urlData.publicUrl,
+          storage_path: filePath
+        });
+
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+        return false;
+      }
+    }
+
+    console.log('✅ Product image saved to database');
+    return true;
+  } catch (err) {
+    console.error('Error saving product image:', err);
+    return false;
+  }
+};
+
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
   const { data, error } = await supabase
     .from('products')

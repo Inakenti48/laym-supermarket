@@ -11,7 +11,7 @@ import { BulkImportButton } from './BulkImportButton';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
-import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier } from '@/lib/storage';
+import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier, saveProductImage } from '@/lib/storage';
 import { Badge } from '@/components/ui/badge';
 
 export const InventoryTab = () => {
@@ -88,6 +88,22 @@ export const InventoryTab = () => {
     // Сохраняем capturedImage во временное состояние
     if (barcodeData.capturedImage) {
       setCapturedImage(barcodeData.capturedImage);
+    }
+    
+    // Сохраняем фото в постоянную базу если есть название и изображение
+    if (barcodeData.name && (barcodeData.photoUrl || barcodeData.capturedImage)) {
+      const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage;
+      if (imageToSave) {
+        console.log('💾 Saving product photo to database...');
+        const saved = await saveProductImage(
+          sanitizedBarcode || `no-barcode-${Date.now()}`,
+          barcodeData.name,
+          imageToSave
+        );
+        if (saved) {
+          console.log('✅ Photo saved successfully');
+        }
+      }
     }
     
     // Проверка только если штрихкод не пустой

@@ -11,7 +11,8 @@ import { BulkImportButton } from './BulkImportButton';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
-import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier, saveProductImage } from '@/lib/storage';
+import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } from '@/lib/storage';
+import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 

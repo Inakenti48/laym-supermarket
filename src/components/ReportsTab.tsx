@@ -4,7 +4,7 @@ import { PhotoReportsTab } from './PhotoReportsTab';
 import { Card } from '@/components/ui/card';
 import { FileText, Image, TrendingUp } from 'lucide-react';
 import { getAllProducts } from '@/lib/storage';
-import { getSuppliers } from '@/lib/storage';
+import { getSuppliers } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import {

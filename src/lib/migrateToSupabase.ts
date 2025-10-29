@@ -1,6 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
-import { getStoredProducts, getCancellationRequests, getSuppliers } from './storage';
-import type { StoredProduct, CancellationRequest, Supplier } from './storage';
+import { getStoredProducts, getCancellationRequests } from './storage';
+import { getSuppliers } from './suppliersDb';
+import type { StoredProduct, CancellationRequest } from './storage';
+import type { Supplier } from './suppliersDb';
 
 export interface MigrationResult {
   success: boolean;

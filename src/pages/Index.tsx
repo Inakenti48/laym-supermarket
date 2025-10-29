@@ -46,11 +46,11 @@ const Index = () => {
 
   const handleSelectRole = (role: UserRole) => {
     // Автоматический вход без логина
-    handleLogin('user', role);
+    handleLogin('user', role, undefined, undefined, true);
   };
 
-  const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
-    const success = await login(username, role, cashierName);
+  const handleLogin = async (username: string, role: UserRole, cashierName?: string, employeeId?: string, skipPasswordCheck?: boolean) => {
+    const success = await login(username, role, cashierName, employeeId, skipPasswordCheck);
     if (success) {
       const user = getCurrentUser();
       setCurrentUser(user);

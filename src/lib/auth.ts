@@ -27,11 +27,15 @@ export const login = async (
   username: string, 
   role: UserRole, 
   cashierName?: string,
-  employeeId?: string
+  employeeId?: string,
+  skipPasswordCheck?: boolean
 ): Promise<boolean> => {
   let isValid = false;
 
-  if (role === 'admin') {
+  // Если передан флаг skipPasswordCheck, пропускаем проверку пароля
+  if (skipPasswordCheck) {
+    isValid = true;
+  } else if (role === 'admin') {
     isValid = username === '8080';
   } else if (role === 'cashier') {
     if (!cashierName || cashierName.trim() === '') {

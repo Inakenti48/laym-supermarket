@@ -1,6 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import { saveProductLocally, saveLogLocally, saveSupplierLocally, saveEmployeeLocally } from './localDatabase';
-import { syncItemToCloud } from './syncService';
 
 export interface StoredProduct {
   id: string;
@@ -247,9 +245,9 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       priceHistory: (data.price_history as any) || []
     };
   } else {
-    console.log('💾 Создание нового товара - сохранение локально и на сервер...');
+    console.log('💾 Создание нового товара - сохранение в Supabase...');
     
-    // Проверяем авторизацию сразу
+    // Проверяем авторизацию
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('Пользователь не авторизован');
@@ -281,62 +279,37 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       created_by: user.id
     };
     
-    // Сохраняем локально сразу
-    const localId = await saveProductLocally(productToInsert);
-    console.log('✅ Товар сохранен локально:', localId);
+    console.log('☁️ Сохранение товара в Supabase...');
+    const { data, error } = await supabase
+      .from('products')
+      .insert(productToInsert)
+      .select()
+      .single();
     
-    // Асинхронно сохраняем на сервер
-    (async () => {
-      try {
-        console.log('☁️ Попытка сохранения товара на сервер...');
-        const { data, error } = await supabase
-          .from('products')
-          .insert(productToInsert)
-          .select()
-          .single();
-        
-        if (error) {
-          console.error('❌ Ошибка сохранения на сервер:', {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          });
-        } else {
-          console.log('✅ Товар успешно синхронизирован с сервером:', {
-            id: data.id,
-            name: data.name,
-            barcode: data.barcode
-          });
-          // Запускаем синхронизацию остальных данных
-          await syncItemToCloud();
-        }
-      } catch (err: any) {
-        console.error('❌ Исключение при асинхронном сохранении:', {
-          message: err.message,
-          stack: err.stack
-        });
-      }
-    })();
+    if (error) {
+      console.error('❌ Ошибка сохранения товара:', error);
+      throw error;
+    }
     
-    // Возвращаем данные сразу
+    console.log('✅ Товар успешно сохранен:', data.id);
+    
     return {
-      id: localId,
-      barcode: productToInsert.barcode,
-      name: productToInsert.name,
-      category: productToInsert.category,
-      purchasePrice: productToInsert.purchase_price,
-      retailPrice: productToInsert.sale_price,
-      quantity: productToInsert.quantity,
-      unit: productToInsert.unit as 'шт' | 'кг',
-      expiryDate: productToInsert.expiry_date || undefined,
+      id: data.id,
+      barcode: data.barcode,
+      name: data.name,
+      category: data.category,
+      purchasePrice: Number(data.purchase_price),
+      retailPrice: Number(data.sale_price),
+      quantity: data.quantity,
+      unit: data.unit as 'шт' | 'кг',
+      expiryDate: data.expiry_date || undefined,
       photos: product.photos || [],
-      paymentType: productToInsert.payment_type as 'full' | 'partial' | 'debt',
-      paidAmount: productToInsert.paid_amount,
-      debtAmount: productToInsert.debt_amount,
-      addedBy: userId,
-      supplier: productToInsert.supplier || undefined,
-      lastUpdated: now,
+      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: Number(data.paid_amount),
+      debtAmount: Number(data.debt_amount),
+      addedBy: user.id,
+      supplier: data.supplier || undefined,
+      lastUpdated: data.updated_at,
       priceHistory: newPriceHistory
     };
   }
@@ -533,9 +506,7 @@ export const getSuppliers = async (): Promise<Supplier[]> => {
 };
 
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
-  const now = new Date().toISOString();
-  
-  console.log('💾 Начало сохранения поставщика...', {
+  console.log('💾 Сохранение поставщика в Supabase...', {
     name: supplier.name,
     phone: supplier.phone
   });
@@ -543,7 +514,7 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    console.error('❌ Пользователь не авторизован при сохранении поставщика');
+    console.error('❌ Пользователь не авторизован');
     throw new Error('Пользователь не авторизован');
   }
   
@@ -559,55 +530,29 @@ export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' |
     created_by: user.id
   };
   
-  console.log('📝 Данные поставщика для сохранения:', supplierData);
+  console.log('☁️ Сохранение в базу данных...');
+  const { data, error } = await supabase
+    .from('suppliers')
+    .insert(supplierData)
+    .select()
+    .single();
   
-  // Сохраняем локально сразу
-  const localId = await saveSupplierLocally(supplierData);
-  console.log('✅ Поставщик сохранен локально с ID:', localId);
+  if (error) {
+    console.error('❌ Ошибка сохранения поставщика:', error);
+    throw error;
+  }
   
-  // Асинхронно сохраняем на сервер
-  (async () => {
-    try {
-      console.log('☁️ Попытка сохранения поставщика на сервер...');
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert(supplierData)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('❌ Ошибка сохранения поставщика на сервер:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-      } else {
-        console.log('✅ Поставщик успешно синхронизирован с сервером:', {
-          id: data.id,
-          name: data.name
-        });
-        await syncItemToCloud();
-      }
-    } catch (err: any) {
-      console.error('❌ Исключение при асинхронном сохранении поставщика:', {
-        message: err.message,
-        stack: err.stack
-      });
-    }
-  })();
+  console.log('✅ Поставщик успешно сохранен:', data.id);
   
-  console.log('✅ Возврат данных поставщика');
-  // Возвращаем данные сразу
   return {
-    id: localId,
-    name: supplierData.name,
-    phone: supplierData.phone || '',
-    notes: supplierData.address || '',
-    totalDebt: Number(supplierData.debt || 0),
+    id: data.id,
+    name: data.name,
+    phone: data.phone || '',
+    notes: data.address || '',
+    totalDebt: Number(data.debt || 0),
     paymentHistory: [],
-    createdAt: now,
-    lastUpdated: now
+    createdAt: data.created_at,
+    lastUpdated: data.updated_at
   };
 };
 

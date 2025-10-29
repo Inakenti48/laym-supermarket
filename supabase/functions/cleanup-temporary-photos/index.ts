@@ -14,13 +14,27 @@ Deno.serve(async (req) => {
     // Validate this is a scheduled call (from cron)
     const body = await req.json().catch(() => ({}));
     
+    // Enhanced validation: check for scheduled flag AND optional secret
+    const CLEANUP_SECRET = Deno.env.get('CLEANUP_SECRET');
+    
     if (!body.scheduled) {
-      console.warn('Cleanup called without scheduled flag - rejecting');
+      console.warn('⚠️ Cleanup called without scheduled flag - rejecting');
       return new Response(
         JSON.stringify({ error: 'Unauthorized - this endpoint is for scheduled tasks only' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // If secret is configured, validate it
+    if (CLEANUP_SECRET && body.secret !== CLEANUP_SECRET) {
+      console.warn('⚠️ Cleanup called with invalid secret - rejecting');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid secret' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('✅ Cleanup validation passed');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);

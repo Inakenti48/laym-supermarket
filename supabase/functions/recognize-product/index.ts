@@ -27,10 +27,43 @@ serve(async (req) => {
 
     // Input validation - imageUrl
     if (!imageUrl || typeof imageUrl !== 'string') {
+      console.warn('Invalid imageUrl type');
       return new Response(
         JSON.stringify({ error: 'imageUrl is required and must be a string' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Validate and sanitize allProducts array
+    if (recognitionType === 'product') {
+      if (!Array.isArray(allProducts)) {
+        console.warn('Invalid allProducts - not an array');
+        return new Response(
+          JSON.stringify({ error: 'allProducts must be an array' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Limit array size to prevent DoS
+      if (allProducts.length > 10000) {
+        console.warn('allProducts array too large:', allProducts.length);
+        return new Response(
+          JSON.stringify({ error: 'Too many products (max 10000)' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Sanitize product data to prevent prompt injection
+      const sanitizedProducts = allProducts.map((p: any) => ({
+        barcode: String(p.barcode || '').slice(0, 50).replace(/[<>{}]/g, ''),
+        name: String(p.name || '').slice(0, 200).replace(/[<>{}]/g, ''),
+        category: String(p.category || '').slice(0, 100).replace(/[<>{}]/g, ''),
+        unit: p.unit ? String(p.unit).slice(0, 20).replace(/[<>{}]/g, '') : '',
+        supplier: p.supplier ? String(p.supplier).slice(0, 100).replace(/[<>{}]/g, '') : ''
+      }));
+
+      // Use sanitized products in the prompt instead
+      allProducts = sanitizedProducts;
     }
 
     // URL format validation - allow http/https URLs and data URLs
@@ -56,10 +89,19 @@ serve(async (req) => {
     // Length validation - more lenient for base64 images
     const maxLength = imageUrl.startsWith('data:') ? 5000000 : 2048; // 5MB for base64
     if (imageUrl.length > maxLength) {
+      console.warn('Image too large:', imageUrl.length);
       return new Response(
         JSON.stringify({ error: `Image too large (max ${maxLength} characters)` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Log suspicious patterns (for monitoring)
+    const suspiciousKeywords = ['admin', 'password', 'token', 'secret', 'ignore previous'];
+    const checkText = JSON.stringify({ imageUrl: imageUrl.slice(0, 200), recognitionType });
+    const foundSuspicious = suspiciousKeywords.filter(kw => checkText.toLowerCase().includes(kw));
+    if (foundSuspicious.length > 0) {
+      console.warn('⚠️ Suspicious input detected:', foundSuspicious);
     }
 
     console.log(`Recognition type: ${recognitionType}`);

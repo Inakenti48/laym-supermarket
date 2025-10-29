@@ -25,12 +25,14 @@ export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSup
     }
 
     try {
+      const userId = currentUser?.username || 'unknown-user';
+      
       const result = await saveSupplier({
         name: name.trim(),
         phone: phone.trim(),
         notes: '',
         totalDebt: 0,
-      }, '');
+      }, userId);
 
       if ('isOffline' in result) {
         toast.warning(`Поставщик "${name}" сохранен локально`);

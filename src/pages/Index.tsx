@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, UserPlus, WifiOff
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, UserPlus, WifiOff, Shield
 } from 'lucide-react';
 import { DashboardTab } from '@/components/DashboardTab';
 import { CashierTab } from '@/components/CashierTab';
@@ -30,7 +30,65 @@ const Index = () => {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(isOnline());
-  const [showAuthDialog, setShowAuthDialog] = useState(false);
+
+  const handleRoleLogin = async (role: AppRole) => {
+    try {
+      // Получаем пользователей с этой ролью
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', role)
+        .limit(1)
+        .single();
+
+      if (!roleData) {
+        toast.error('Пользователь с этой ролью не найден');
+        return false;
+      }
+
+      // Получаем информацию о пользователе
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', roleData.user_id)
+        .single();
+
+      if (!profileData) {
+        toast.error('Профиль не найден');
+        return false;
+      }
+
+      // Вызываем edge function для авторизации
+      const { data, error } = await supabase.functions.invoke('passwordless-signin', {
+        body: { user_id: profileData.user_id }
+      });
+
+      if (error || !data?.access_token) {
+        toast.error('Ошибка входа');
+        console.error('Ошибка входа:', error);
+        return false;
+      }
+
+      // Устанавливаем сессию
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+
+      if (sessionError) {
+        toast.error('Ошибка создания сессии');
+        console.error('Ошибка сессии:', sessionError);
+        return false;
+      }
+
+      toast.success('Вход выполнен успешно');
+      return true;
+    } catch (error) {
+      console.error('Ошибка входа:', error);
+      toast.error('Ошибка подключения');
+      return false;
+    }
+  };
 
   useEffect(() => {
     checkAuth();
@@ -168,74 +226,115 @@ const Index = () => {
     userRole && tab.roles.includes(userRole)
   );
 
-  // Главная страница для неавторизованных пользователей
+  // Главная страница для неавторизованных пользователей - выбор роли
   if (!userRole && !loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-secondary/10">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            {/* Логотип и заголовок */}
-            <div className="space-y-4">
-              <Package className="h-24 w-24 text-primary mx-auto" />
-              <h1 className="text-5xl font-bold">Система Учета Товаров</h1>
-              <p className="text-xl text-muted-foreground">
-                Современное решение для управления складом и продажами
-              </p>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl">
+          <div className="text-center mb-8">
+            <Package className="h-16 w-16 text-primary mx-auto mb-4" />
+            <h1 className="text-4xl font-bold mb-2">Система Учета Товаров</h1>
+            <p className="text-muted-foreground">Выберите роль для входа</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Администратор */}
+            <div
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
+              onClick={async () => {
+                setLoading(true);
+                // Здесь будет логика входа как админ
+                const result = await handleRoleLogin('admin');
+                if (result) checkAuth();
+                else setLoading(false);
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Shield className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="font-semibold">Администратор</h3>
+                <p className="text-sm text-muted-foreground">Полный доступ</p>
+              </div>
             </div>
 
-            {/* Кнопка входа */}
-            <div className="flex justify-center">
-              <Button 
-                size="lg" 
-                className="text-lg px-8 py-6"
-                onClick={() => setShowAuthDialog(true)}
-              >
-                Войти в систему
-              </Button>
+            {/* Касса 1 */}
+            <div
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
+              onClick={async () => {
+                setLoading(true);
+                const result = await handleRoleLogin('cashier');
+                if (result) checkAuth();
+                else setLoading(false);
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <ShoppingCart className="w-8 h-8 text-secondary" />
+                </div>
+                <h3 className="font-semibold">Касса 1</h3>
+                <p className="text-sm text-muted-foreground">Работа с кассой</p>
+              </div>
             </div>
 
-            {/* Информационные секции */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
-              <div className="p-6 bg-card rounded-lg shadow-sm border">
-                <Package className="h-12 w-12 text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Управление товарами</h3>
-                <p className="text-muted-foreground">Полный контроль над складскими запасами</p>
+            {/* Касса 2 */}
+            <div
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
+              onClick={async () => {
+                setLoading(true);
+                const result = await handleRoleLogin('cashier2');
+                if (result) checkAuth();
+                else setLoading(false);
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <ShoppingCart className="w-8 h-8 text-green-500" />
+                </div>
+                <h3 className="font-semibold">Касса 2</h3>
+                <p className="text-sm text-muted-foreground">Вторая касса</p>
               </div>
-              
-              <div className="p-6 bg-card rounded-lg shadow-sm border">
-                <ShoppingCart className="h-12 w-12 text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Кассовые операции</h3>
-                <p className="text-muted-foreground">Быстрая и удобная работа с кассой</p>
+            </div>
+
+            {/* Складской */}
+            <div
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
+              onClick={async () => {
+                setLoading(true);
+                const result = await handleRoleLogin('inventory');
+                if (result) checkAuth();
+                else setLoading(false);
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Package className="w-8 h-8 text-accent-foreground" />
+                </div>
+                <h3 className="font-semibold">Складской</h3>
+                <p className="text-sm text-muted-foreground">Управление товарами</p>
               </div>
-              
-              <div className="p-6 bg-card rounded-lg shadow-sm border">
-                <FileText className="h-12 w-12 text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Отчетность</h3>
-                <p className="text-muted-foreground">Детальная аналитика и отчеты</p>
+            </div>
+
+            {/* Сотрудник */}
+            <div
+              className="cursor-pointer hover:shadow-lg transition-all hover:scale-105 p-6 bg-card rounded-lg border"
+              onClick={async () => {
+                setLoading(true);
+                const result = await handleRoleLogin('employee');
+                if (result) checkAuth();
+                else setLoading(false);
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-semibold">Сотрудник</h3>
+                <p className="text-sm text-muted-foreground">Выполнение заданий</p>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Диалог входа */}
-        {showAuthDialog && (
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-card rounded-lg shadow-xl max-w-4xl w-full p-6 relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-4"
-                onClick={() => setShowAuthDialog(false)}
-              >
-                <XCircle className="h-5 w-5" />
-              </Button>
-              <AuthScreen onSuccess={() => {
-                setShowAuthDialog(false);
-                checkAuth();
-              }} />
-            </div>
-          </div>
-        )}
       </div>
     );
   }

@@ -109,14 +109,43 @@ export const signOut = async (): Promise<void> => {
   await supabase.auth.signOut();
 };
 
+// Безопасное получение текущего пользователя с обработкой ошибок
+export const getSafeUser = async (): Promise<{ user: User | null; error: string | null }> => {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    if (error) {
+      console.error('❌ Ошибка получения пользователя:', {
+        message: error.message,
+        code: error.status
+      });
+      return { user: null, error: error.message };
+    }
+    
+    if (!user) {
+      console.warn('⚠️ Пользователь не авторизован');
+      return { user: null, error: 'Пользователь не авторизован' };
+    }
+    
+    return { user, error: null };
+  } catch (error: any) {
+    console.error('❌ Критическая ошибка при получении пользователя:', error);
+    return { user: null, error: error.message || 'Неизвестная ошибка' };
+  }
+};
+
 // Логирование действий
 export const logSystemAction = async (message: string): Promise<void> => {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getSafeUser();
   
   if (user) {
-    await supabase.from('system_logs').insert({
-      user_id: user.id,
-      message
-    });
+    try {
+      await supabase.from('system_logs').insert({
+        user_id: user.id,
+        message
+      });
+    } catch (error) {
+      console.warn('⚠️ Не удалось записать лог:', error);
+    }
   }
 };

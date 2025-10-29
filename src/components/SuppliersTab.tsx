@@ -172,9 +172,20 @@ export const SuppliersTab = () => {
 
       // Проверка авторизации
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
+      if (authError) {
+        console.error('❌ Ошибка авторизации:', {
+          message: authError.message,
+          code: authError.status
+        });
         toast.dismiss();
         toast.error('Ошибка авторизации. Войдите в систему.');
+        return;
+      }
+      
+      if (!user) {
+        console.warn('⚠️ Пользователь не авторизован');
+        toast.dismiss();
+        toast.error('Необходима авторизация');
         return;
       }
 
@@ -298,12 +309,18 @@ export const SuppliersTab = () => {
         `Долг (${totalCost}₽)`;
 
       // Добавляем лог
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('system_logs').insert({
-        user_id: user?.id || null,
-        user_name: currentUser?.username || 'Неизвестно',
-        message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
-      });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('system_logs').insert({
+            user_id: user.id,
+            user_name: currentUser?.username || 'Неизвестно',
+            message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
+          });
+        }
+      } catch (logError) {
+        console.warn('⚠️ Не удалось записать лог:', logError);
+      }
 
       toast.success('Операция добавлена');
       setPayment({
@@ -377,12 +394,18 @@ export const SuppliersTab = () => {
       if (updateError) throw updateError;
 
       // Добавляем лог
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('system_logs').insert({
-        user_id: user?.id || null,
-        user_name: currentUser?.username || 'Неизвестно',
-        message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
-      });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('system_logs').insert({
+            user_id: user.id,
+            user_name: currentUser?.username || 'Неизвестно',
+            message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
+          });
+        }
+      } catch (logError) {
+        console.warn('⚠️ Не удалось записать лог:', logError);
+      }
 
       toast.success('Долг погашен');
       setDebtPayment({ supplierId: '', amount: '' });

@@ -57,10 +57,18 @@ export const saveSupplier = async (
     phone: supplier.phone
   });
   
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  if (authError) {
+    console.error('❌ Ошибка получения пользователя:', {
+      message: authError.message,
+      code: authError.status
+    });
+    throw new Error('Ошибка авторизации');
+  }
   
   if (!user) {
-    console.error('❌ Пользователь не авторизован');
+    console.warn('⚠️ Пользователь не авторизован');
     throw new Error('Пользователь не авторизован');
   }
   

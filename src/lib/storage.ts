@@ -248,8 +248,16 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
     console.log('💾 Создание нового товара - сохранение в Supabase...');
     
     // Проверяем авторизацию
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('❌ Ошибка авторизации:', {
+        message: authError.message,
+        code: authError.status
+      });
+      throw new Error('Ошибка авторизации');
+    }
     if (!user) {
+      console.warn('⚠️ Пользователь не авторизован');
       throw new Error('Пользователь не авторизован');
     }
     

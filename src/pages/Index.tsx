@@ -14,7 +14,6 @@ import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { RoleSelector } from '@/components/RoleSelector';
-import { LoginScreen } from '@/components/LoginScreen';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -46,7 +45,8 @@ const Index = () => {
   }, []);
 
   const handleSelectRole = (role: UserRole) => {
-    setSelectedRole(role);
+    // Автоматический вход без логина
+    handleLogin('user', role);
   };
 
   const handleLogin = async (username: string, role: UserRole, cashierName?: string) => {
@@ -59,7 +59,7 @@ const Index = () => {
       // Set initial tab based on role after login
       if (user?.role === 'admin') {
         setActiveTab('dashboard');
-      } else if (user?.role === 'cashier') {
+      } else if (user?.role === 'cashier' || user?.role === 'cashier2') {
         setActiveTab('cashier');
       } else if (user?.role === 'inventory') {
         setActiveTab('inventory');
@@ -68,13 +68,7 @@ const Index = () => {
       }
       
       toast.success('Вход выполнен успешно');
-    } else {
-      toast.error('Неверный логин');
     }
-  };
-
-  const handleCancelLogin = () => {
-    setSelectedRole(null);
   };
 
   const handleLogout = async () => {
@@ -116,9 +110,6 @@ const Index = () => {
 
   // Show role selector if not logged in
   if (!currentUser) {
-    if (selectedRole) {
-      return <LoginScreen role={selectedRole} onLogin={handleLogin} onCancel={handleCancelLogin} />;
-    }
     return <RoleSelector onSelectRole={handleSelectRole} />;
   }
 

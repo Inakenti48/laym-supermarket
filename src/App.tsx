@@ -6,19 +6,15 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { startAutoSync } from "@/lib/syncService";
 import { initLocalDB } from "@/lib/localDatabase";
 
 const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    // Инициализируем локальную базу данных
+    // Инициализируем локальную базу данных для хранения данных локально
     initLocalDB().then(() => {
-      console.log('✅ Локальная база данных готова');
-      // Запускаем автоматическую синхронизацию каждые 30 минут
-      startAutoSync();
-      console.log('🔄 Автосинхронизация запущена (каждые 30 минут)');
+      console.log('✅ Локальная база данных готова - данные сохраняются локально и синхронизируются в реальном времени');
     });
   }, []);
 

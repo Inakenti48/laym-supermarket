@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { saveLogLocally } from './localDatabase';
+import { saveProductLocally, saveLogLocally, saveSupplierLocally, saveEmployeeLocally } from './localDatabase';
+import { syncItemToCloud } from './syncService';
 
 export interface StoredProduct {
   id: string;
@@ -246,7 +247,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       priceHistory: (data.price_history as any) || []
     };
   } else {
-    console.log('💾 Создание нового товара в базе данных...');
+    console.log('💾 Создание нового товара - сохранение локально и на сервер...');
     
     const newPriceHistory = [
       {
@@ -256,21 +257,6 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
         changedBy: userId,
       },
     ];
-    
-    // Получаем текущего пользователя
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError) {
-      console.error('❌ Ошибка получения пользователя:', authError);
-      throw new Error('Пользователь не авторизован. Пожалуйста, войдите в систему.');
-    }
-    
-    if (!user) {
-      console.error('❌ Пользователь не найден');
-      throw new Error('Пользователь не авторизован. Пожалуйста, войдите в систему.');
-    }
-    
-    console.log('✅ Пользователь авторизован:', user.id);
     
     const productToInsert = {
       barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
@@ -285,68 +271,61 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       paid_amount: product.paidAmount,
       debt_amount: product.debtAmount,
       supplier: product.supplier || null,
-      created_by: user.id,
       price_history: newPriceHistory as any
     };
     
-    console.log('📦 Данные для вставки:', JSON.stringify(productToInsert, null, 2));
+    // Сохраняем локально сразу
+    const localId = await saveProductLocally(productToInsert);
+    console.log('✅ Товар сохранен локально:', localId);
     
-    const { data, error } = await supabase
-      .from('products')
-      .insert(productToInsert)
-      .select()
-      .single();
+    // Асинхронно сохраняем на сервер
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.log('⚠️ Нет пользователя для сохранения на сервер');
+          return;
+        }
+        
+        const productWithUser = { ...productToInsert, created_by: user.id };
+        
+        const { data, error } = await supabase
+          .from('products')
+          .insert(productWithUser)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('❌ Ошибка сохранения на сервер:', error);
+        } else {
+          console.log('✅ Товар синхронизирован с сервером:', data.id);
+          // Запускаем синхронизацию остальных данных
+          await syncItemToCloud();
+        }
+      } catch (err) {
+        console.error('❌ Ошибка асинхронного сохранения:', err);
+      }
+    })();
     
-    if (error) {
-      console.error('❌ Ошибка Supabase при вставке товара:', error);
-      
-      // Сохраняем локально при ошибке
-      console.log('💾 Сохранение товара локально для последующей синхронизации...');
-      const { saveProductLocally } = await import('./localDatabase');
-      const localId = await saveProductLocally(productToInsert);
-      
-      // Возвращаем локальный товар
-      return {
-        id: localId,
-        barcode: productToInsert.barcode,
-        name: productToInsert.name,
-        category: productToInsert.category,
-        purchasePrice: productToInsert.purchase_price,
-        retailPrice: productToInsert.sale_price,
-        quantity: productToInsert.quantity,
-        unit: productToInsert.unit as 'шт' | 'кг',
-        expiryDate: productToInsert.expiry_date || undefined,
-        photos: product.photos || [],
-        paymentType: productToInsert.payment_type as 'full' | 'partial' | 'debt',
-        paidAmount: productToInsert.paid_amount,
-        debtAmount: productToInsert.debt_amount,
-        addedBy: userId,
-        supplier: productToInsert.supplier || undefined,
-        lastUpdated: now,
-        priceHistory: newPriceHistory
-      };
-    }
-    
-    console.log('✅ Товар успешно вставлен в базу:', data.id);
-    
+    // Возвращаем данные сразу
     return {
-      id: data.id,
-      barcode: data.barcode,
-      name: data.name,
-      category: data.category,
-      purchasePrice: Number(data.purchase_price),
-      retailPrice: Number(data.sale_price),
-      quantity: data.quantity,
-      unit: data.unit as 'шт' | 'кг',
-      expiryDate: data.expiry_date || undefined,
-      photos: [],
-      paymentType: data.payment_type as 'full' | 'partial' | 'debt',
-      paidAmount: Number(data.paid_amount),
-      debtAmount: Number(data.debt_amount),
-      addedBy: data.created_by || '',
-      supplier: data.supplier || undefined,
-      lastUpdated: data.updated_at,
-      priceHistory: (data.price_history as any) || []
+      id: localId,
+      barcode: productToInsert.barcode,
+      name: productToInsert.name,
+      category: productToInsert.category,
+      purchasePrice: productToInsert.purchase_price,
+      retailPrice: productToInsert.sale_price,
+      quantity: productToInsert.quantity,
+      unit: productToInsert.unit as 'шт' | 'кг',
+      expiryDate: productToInsert.expiry_date || undefined,
+      photos: product.photos || [],
+      paymentType: productToInsert.payment_type as 'full' | 'partial' | 'debt',
+      paidAmount: productToInsert.paid_amount,
+      debtAmount: productToInsert.debt_amount,
+      addedBy: userId,
+      supplier: productToInsert.supplier || undefined,
+      lastUpdated: now,
+      priceHistory: newPriceHistory
     };
   }
 };

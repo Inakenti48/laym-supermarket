@@ -15,7 +15,6 @@ import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { RoleSelector } from '@/components/RoleSelector';
 import { LoginScreen } from '@/components/LoginScreen';
-import { SyncStatus } from '@/components/SyncStatus';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -178,9 +177,6 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 space-y-4">
-        {/* Статус синхронизации */}
-        <SyncStatus />
-        
         {activeTab === 'dashboard' && <DashboardTab />}
         {activeTab === 'cashier' && <CashierTab />}
         {activeTab === 'inventory' && <InventoryTab />}

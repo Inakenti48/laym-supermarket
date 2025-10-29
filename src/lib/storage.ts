@@ -522,37 +522,58 @@ export const getSuppliers = async (): Promise<Supplier[]> => {
 export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
   const now = new Date().toISOString();
   
+  console.log('💾 Сохранение поставщика...');
+  
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
     throw new Error('Пользователь не авторизован');
   }
   
-  const { data, error } = await supabase
-    .from('suppliers')
-    .insert({
-      name: supplier.name,
-      phone: supplier.phone || null,
-      contact_person: supplier.name,
-      address: supplier.notes || null,
-      debt: supplier.totalDebt || 0,
-      payment_history: [] as any,
-      created_by: user.id
-    })
-    .select()
-    .single();
+  const supplierData = {
+    name: supplier.name,
+    phone: supplier.phone || null,
+    contact_person: supplier.name,
+    address: supplier.notes || null,
+    debt: supplier.totalDebt || 0,
+    payment_history: [] as any,
+    created_by: user.id
+  };
   
-  if (error) throw error;
+  // Сохраняем локально сразу
+  const localId = await saveSupplierLocally(supplierData);
+  console.log('✅ Поставщик сохранен локально:', localId);
   
+  // Асинхронно сохраняем на сервер
+  (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .insert(supplierData)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('❌ Ошибка сохранения поставщика на сервер:', error);
+      } else {
+        console.log('✅ Поставщик синхронизирован с сервером:', data.id);
+        await syncItemToCloud();
+      }
+    } catch (err) {
+      console.error('❌ Ошибка асинхронного сохранения поставщика:', err);
+    }
+  })();
+  
+  // Возвращаем данные сразу
   return {
-    id: data.id,
-    name: data.name,
-    phone: data.phone || '',
-    notes: data.address || '',
-    totalDebt: Number(data.debt || 0),
+    id: localId,
+    name: supplierData.name,
+    phone: supplierData.phone || '',
+    notes: supplierData.address || '',
+    totalDebt: Number(supplierData.debt || 0),
     paymentHistory: [],
-    createdAt: data.created_at,
-    lastUpdated: data.updated_at
+    createdAt: now,
+    lastUpdated: now
   };
 };
 

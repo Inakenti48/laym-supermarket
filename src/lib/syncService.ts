@@ -113,16 +113,44 @@ export async function syncToCloud(showToast: boolean = false): Promise<{
           created_by: user.id,
         };
 
-        const { data, error } = await supabase
-          .from('suppliers')
-          .upsert(supplierData, { 
-            onConflict: 'name',
-            ignoreDuplicates: false 
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        // Проверяем, существует ли поставщик с таким ID
+        if (item.id) {
+          const { data: existing } = await supabase
+            .from('suppliers')
+            .select('id')
+            .eq('id', item.id)
+            .maybeSingle();
+          
+          if (existing) {
+            // Обновляем существующего
+            const { data, error } = await supabase
+              .from('suppliers')
+              .update(supplierData)
+              .eq('id', item.id)
+              .select()
+              .single();
+            
+            if (error) throw error;
+          } else {
+            // Создаем нового
+            const { data, error } = await supabase
+              .from('suppliers')
+              .insert(supplierData)
+              .select()
+              .single();
+            
+            if (error) throw error;
+          }
+        } else {
+          // Создаем нового если нет ID
+          const { data, error } = await supabase
+            .from('suppliers')
+            .insert(supplierData)
+            .select()
+            .single();
+          
+          if (error) throw error;
+        }
 
         await db.put('suppliers', {
           ...item,

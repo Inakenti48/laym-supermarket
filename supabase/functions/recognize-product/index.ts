@@ -35,6 +35,7 @@ serve(async (req) => {
     }
 
     // Validate and sanitize allProducts array
+    let productsToUse = allProducts;
     if (recognitionType === 'product') {
       if (!Array.isArray(allProducts)) {
         console.warn('Invalid allProducts - not an array');
@@ -54,16 +55,13 @@ serve(async (req) => {
       }
 
       // Sanitize product data to prevent prompt injection
-      const sanitizedProducts = allProducts.map((p: any) => ({
+      productsToUse = allProducts.map((p: any) => ({
         barcode: String(p.barcode || '').slice(0, 50).replace(/[<>{}]/g, ''),
         name: String(p.name || '').slice(0, 200).replace(/[<>{}]/g, ''),
         category: String(p.category || '').slice(0, 100).replace(/[<>{}]/g, ''),
         unit: p.unit ? String(p.unit).slice(0, 20).replace(/[<>{}]/g, '') : '',
         supplier: p.supplier ? String(p.supplier).slice(0, 100).replace(/[<>{}]/g, '') : ''
       }));
-
-      // Use sanitized products in the prompt instead
-      allProducts = sanitizedProducts;
     }
 
     // URL format validation - allow http/https URLs and data URLs
@@ -116,7 +114,7 @@ serve(async (req) => {
 - Нет упаковки с текстом → пустые значения
 
 📦 ТОВАРЫ В БАЗЕ (ПОЛНАЯ ИНФОРМАЦИЯ О РАЗНОВИДНОСТЯХ):
-${allProducts.map((p: any) => {
+${productsToUse.map((p: any) => {
   const details = [
     `📌 ${p.barcode}`,
     `Название: ${p.name}`,

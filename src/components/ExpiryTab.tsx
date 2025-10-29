@@ -3,7 +3,7 @@ import { AlertTriangle, Package, Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getExpiringProducts, removeExpiredProduct } from '@/lib/storage';
-import { addLog } from '@/lib/auth';
+import { logSystemAction } from '@/lib/supabaseAuth';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
@@ -39,8 +39,8 @@ export const ExpiryTab = () => {
       const removed = await removeExpiredProduct(product.barcode);
       if (removed) {
         const expiryDate = new Date(product.expiryDate!).toLocaleDateString('ru-RU');
-        const logMessage = `Убран товар с истекшим сроком: "${product.name}", срок годности: ${expiryDate}, количество: ${product.quantity} ${product.unit}`;
-        addLog(logMessage);
+        const logMessage = `Убран с прилавки товар со сроком годности до ${expiryDate}: "${product.name}", количество: ${product.quantity} ${product.unit}`;
+        await logSystemAction(logMessage);
         toast.success('Товар удален из прилавка');
         
         // Обновляем список

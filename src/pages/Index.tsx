@@ -14,7 +14,7 @@ import { ExpiryTab } from '@/components/ExpiryTab';
 import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { CancellationsTab } from '@/components/CancellationsTab';
-import { LoginScreen } from '@/components/LoginScreen';
+import { RoleSelector } from '@/components/RoleSelector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -43,18 +43,18 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (password: string) => {
+  const handleLogin = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email: 'admin@system.local',
-        password: password,
+        email,
+        password,
       });
 
       if (error) throw error;
       
       toast.success('Вход выполнен успешно');
     } catch (error: any) {
-      toast.error('Неверный пароль');
+      toast.error('Ошибка входа: ' + error.message);
     }
   };
 
@@ -94,7 +94,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <RoleSelector onSelectRole={handleLogin} />;
   }
 
   return (

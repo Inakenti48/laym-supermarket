@@ -1,46 +1,43 @@
 import { Shield, ShoppingCart, Package, User } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserRole } from '@/lib/auth';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { AppRole } from '@/lib/supabaseAuth';
 
 interface RoleSelectorProps {
-  onSelectRole: (role: UserRole) => void;
+  onSelectRole: (email: string, password: string) => void;
 }
 
 const roles = [
   {
-    role: 'admin' as UserRole,
+    email: 'admin@system.local',
+    password: '8080',
     title: 'Администратор',
     description: 'Полный доступ к системе',
     icon: Shield,
     color: 'text-primary'
   },
   {
-    role: 'cashier' as UserRole,
+    email: 'cashier1@system.local',
+    password: '1020',
     title: 'Касса 1',
     description: 'Работа с кассой',
     icon: ShoppingCart,
     color: 'text-secondary'
   },
   {
-    role: 'cashier2' as UserRole,
+    email: 'cashier2@system.local',
+    password: '2030',
     title: 'Касса 2',
     description: 'Вторая касса',
     icon: ShoppingCart,
     color: 'text-green-500'
   },
   {
-    role: 'inventory' as UserRole,
-    title: 'Складской',
+    email: 'inventory@system.local',
+    password: '3040',
+    title: 'Склад',
     description: 'Управление товарами',
     icon: Package,
     color: 'text-accent-foreground'
-  },
-  {
-    role: 'employee' as UserRole,
-    title: 'Сотрудник',
-    description: 'Выполнение заданий',
-    icon: User,
-    color: 'text-muted-foreground'
   }
 ];
 
@@ -53,14 +50,14 @@ export const RoleSelector = ({ onSelectRole }: RoleSelectorProps) => {
           <p className="text-muted-foreground">Выберите роль для входа</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {roles.map((roleInfo) => {
             const Icon = roleInfo.icon;
             return (
               <Card
-                key={roleInfo.role}
+                key={roleInfo.email}
                 className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
-                onClick={() => onSelectRole(roleInfo.role)}
+                onClick={() => onSelectRole(roleInfo.email, roleInfo.password)}
               >
                 <CardHeader className="text-center">
                   <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">

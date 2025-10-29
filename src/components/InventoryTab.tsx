@@ -11,8 +11,10 @@ import { BulkImportButton } from './BulkImportButton';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
-import { findProductByBarcode, saveProduct, StoredProduct, getSuppliers, Supplier } from '@/lib/storage';
+import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } from '@/lib/storage';
+import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 export const InventoryTab = () => {
   const currentUser = getCurrentUser();
@@ -71,6 +73,58 @@ export const InventoryTab = () => {
       setSuppliers(loadedSuppliers);
     };
     loadSuppliers();
+
+    // Подписка на реалтайм обновления товаров и фото
+    const productsChannel = supabase
+      .channel('products_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          console.log('🔄 Products updated on another device');
+        }
+      )
+      .subscribe();
+
+    const imagesChannel = supabase
+      .channel('product_images_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_images'
+        },
+        () => {
+          console.log('🔄 Product images updated on another device');
+        }
+      )
+      .subscribe();
+
+    const suppliersChannel = supabase
+      .channel('suppliers_changes_inventory')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'suppliers'
+        },
+        () => {
+          loadSuppliers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(imagesChannel);
+      supabase.removeChannel(suppliersChannel);
+    };
   }, []);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number } | string) => {
@@ -79,9 +133,31 @@ export const InventoryTab = () => {
     
     const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
     
+    // ВАЖНО: Если все поля пустые, не обрабатываем результат
+    if (!sanitizedBarcode && !barcodeData.name && !barcodeData.category) {
+      console.log('AI вернул пустые значения, пропускаем');
+      return;
+    }
+    
     // Сохраняем capturedImage во временное состояние
     if (barcodeData.capturedImage) {
       setCapturedImage(barcodeData.capturedImage);
+    }
+    
+    // Сохраняем фото в постоянную базу если есть название и изображение
+    if (barcodeData.name && (barcodeData.photoUrl || barcodeData.capturedImage)) {
+      const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage;
+      if (imageToSave) {
+        console.log('💾 Saving product photo to database...');
+        const saved = await saveProductImage(
+          sanitizedBarcode || `no-barcode-${Date.now()}`,
+          barcodeData.name,
+          imageToSave
+        );
+        if (saved) {
+          console.log('✅ Photo saved successfully');
+        }
+      }
     }
     
     // Проверка только если штрихкод не пустой
@@ -182,23 +258,118 @@ export const InventoryTab = () => {
   };
 
   const addProduct = async () => {
-    if (!currentProduct.name || !currentProduct.category || 
-        !currentProduct.purchasePrice || !currentProduct.quantity) {
-      toast.error('Заполните все обязательные поля');
-      return;
-    }
-
-    if (isAdmin && !currentProduct.retailPrice) {
-      toast.error('Администратор должен указать розничную цену');
-      return;
-    }
-
-    const purchasePrice = parseFloat(currentProduct.purchasePrice);
-    const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
-    const quantity = parseFloat(currentProduct.quantity);
-
     try {
-      // Сохраняем товар сразу в localStorage
+      console.log('🔄 Начало добавления товара...');
+      
+      // Проверка интернет-соединения
+      if (!navigator.onLine) {
+        toast.info('⚠️ Нет соединения. Товар будет сохранен локально и синхронизирован позже.');
+        console.warn('⚠️ Режим оффлайн - данные будут синхронизированы при восстановлении соединения');
+      }
+      
+      // Проверка авторизации
+      console.log('🔐 Проверка авторизации...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('❌ Ошибка авторизации:', authError);
+        toast.error(`Ошибка авторизации: ${authError.message}`);
+        return;
+      }
+      
+      if (!user) {
+        console.error('❌ Пользователь не авторизован');
+        toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
+        return;
+      }
+      
+      console.log('✅ Пользователь авторизован:', user.id);
+      
+      // Проверка обязательных полей
+      console.log('📋 Проверка обязательных полей...');
+      if (!currentProduct.name?.trim()) {
+        console.error('❌ Название товара пустое');
+        toast.error('❌ Введите название товара');
+        return;
+      }
+      
+      if (!currentProduct.category?.trim()) {
+        console.error('❌ Категория не выбрана');
+        toast.error('❌ Выберите категорию товара');
+        return;
+      }
+      
+      if (!currentProduct.purchasePrice) {
+        console.error('❌ Закупочная цена не указана');
+        toast.error('❌ Укажите закупочную цену');
+        return;
+      }
+      
+      if (!currentProduct.quantity) {
+        console.error('❌ Количество не указано');
+        toast.error('❌ Укажите количество товара');
+        return;
+      }
+
+      if (isAdmin && !currentProduct.retailPrice) {
+        console.warn('⚠️ Администратор не указал розничную цену');
+        toast.error('❌ Укажите розничную цену');
+        return;
+      }
+      
+      console.log('✅ Все обязательные поля заполнены');
+
+      const purchasePrice = parseFloat(currentProduct.purchasePrice);
+      const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
+      const quantity = parseFloat(currentProduct.quantity);
+      
+      if (quantity <= 0) {
+        console.error('❌ Некорректное количество:', quantity);
+        toast.error('❌ Количество должно быть больше 0');
+        return;
+      }
+      
+      if (purchasePrice < 0 || retailPrice < 0) {
+        console.error('❌ Некорректные цены:', { purchasePrice, retailPrice });
+        toast.error('❌ Цены не могут быть отрицательными');
+        return;
+      }
+
+      console.log('📝 Валидированные данные товара:', {
+        name: currentProduct.name,
+        barcode: currentProduct.barcode || 'НЕТ',
+        category: currentProduct.category,
+        purchasePrice,
+        retailPrice,
+        quantity
+      });
+
+      // Сохранение фотографий
+      if (photos.length > 0 || capturedImage) {
+        const imagesToSave = [...photos];
+        if (capturedImage && !photos.includes(capturedImage)) {
+          imagesToSave.push(capturedImage);
+        }
+        
+        console.log(`📷 Сохранение ${imagesToSave.length} фото товара...`);
+        
+        for (const imageUrl of imagesToSave) {
+          try {
+            const saved = await saveProductImage(
+              currentProduct.barcode || `product-${Date.now()}`,
+              currentProduct.name,
+              imageUrl
+            );
+            if (saved) {
+              console.log('✅ Фото сохранено');
+            }
+          } catch (imgError: any) {
+            console.error('❌ Ошибка сохранения фото:', imgError.message);
+          }
+        }
+      }
+      
+      // Сохраняем товар
       const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
         barcode: currentProduct.barcode,
         name: currentProduct.name,
@@ -216,7 +387,9 @@ export const InventoryTab = () => {
         supplier: currentProduct.supplier || undefined,
       };
 
+      console.log('💾 Начинается сохранение товара...');
       const saved = await saveProduct(productData, currentUser?.username || 'unknown');
+      console.log('💾 Результат сохранения:', saved);
       
       if (saved) {
         addLog(`Добавлен товар: ${currentProduct.name} (${quantity} ${currentProduct.unit})`);
@@ -228,12 +401,56 @@ export const InventoryTab = () => {
           addLog(`Изменение цены "${currentProduct.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
         }
         
+        console.log('✅ Товар успешно сохранен');
         toast.success('✅ Товар сохранён и доступен на кассе!');
+        
+        // Reset form только после успешного сохранения
+        setCurrentProduct({
+          barcode: '',
+          name: '',
+          category: '',
+          purchasePrice: '',
+          retailPrice: '',
+          quantity: '',
+          unit: 'шт',
+          expiryDate: '',
+          supplier: '',
+        });
+        setPhotos([]);
+        setCapturedImage('');
+        setSuggestedProduct(null);
+        localStorage.removeItem('inventory_form_data');
+      } else {
+        throw new Error('saveProduct вернула false');
       }
-    } catch (error) {
-      console.error('Error saving product:', error);
-      toast.error('Ошибка сохранения товара');
-      return;
+    } catch (error: any) {
+      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении товара:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        stack: error.stack,
+        name: error.name
+      });
+      
+      let errorMessage = 'Неизвестная ошибка при сохранении товара';
+      
+      // Определяем тип ошибки
+      if (error.message?.includes('duplicate')) {
+        errorMessage = 'Товар с таким штрихкодом уже существует';
+      } else if (error.code === '23505') {
+        errorMessage = 'Товар с такими данными уже существует';
+      } else if (error.message?.includes('не авторизован')) {
+        errorMessage = 'Необходимо войти в систему';
+      } else if (error.message?.includes('Network')) {
+        errorMessage = 'Ошибка сети. Проверьте интернет-соединение';
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      toast.error(`❌ Ошибка: ${errorMessage}`);
     }
 
     // Reset form

@@ -1,4 +1,6 @@
-export type UserRole = 'admin' | 'cashier' | 'inventory' | 'employee';
+import { supabase } from '@/integrations/supabase/client';
+
+export type UserRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
 
 interface User {
   role: UserRole;
@@ -25,17 +27,23 @@ export const login = async (
   username: string, 
   role: UserRole, 
   cashierName?: string,
-  employeeId?: string
+  employeeId?: string,
+  skipPasswordCheck?: boolean
 ): Promise<boolean> => {
   let isValid = false;
 
-  if (role === 'admin') {
+  // Если передан флаг skipPasswordCheck, пропускаем проверку пароля
+  if (skipPasswordCheck) {
+    isValid = true;
+  } else if (role === 'admin') {
     isValid = username === '8080';
   } else if (role === 'cashier') {
     if (!cashierName || cashierName.trim() === '') {
       return false;
     }
     isValid = username === '2030';
+  } else if (role === 'cashier2') {
+    isValid = username === '1111';
   } else if (role === 'inventory') {
     isValid = username === '4050';
   } else if (role === 'employee') {
@@ -52,12 +60,87 @@ export const login = async (
     const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     
+    // Создаем сессию в Supabase для работы с базой данных
+    try {
+      // Используем специальный email для системных пользователей
+      const email = `${role}-${username}@system.local`;
+      const password = `${username}-${role}-system-password-2025`;
+      
+      console.log('🔐 Создание сессии Supabase для:', email);
+      
+      // Сначала выходим из текущей сессии, если есть
+      await supabase.auth.signOut();
+      
+      // Пытаемся войти
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (signInError) {
+        console.log('👤 Пользователь не найден, создаем нового...');
+        // Если пользователь не существует, создаем его
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              role: role,
+              username: username,
+              cashier_name: cashierName
+            }
+          }
+        });
+        
+        if (signUpError) {
+          console.error('❌ Ошибка создания пользователя Supabase:', signUpError);
+          throw signUpError;
+        }
+        
+        console.log('✅ Пользователь создан:', signUpData.user?.id);
+        
+        // После создания пользователя с auto-confirm сессия уже создана
+        if (signUpData.session) {
+          console.log('✅ Сессия создана автоматически после регистрации');
+        } else {
+          console.warn('⚠️ Сессия не создана после регистрации, проверьте настройки auto-confirm');
+        }
+      } else {
+        console.log('✅ Вход в Supabase выполнен:', signInData.user?.id);
+      }
+      
+      // Проверяем, что сессия действительно создана
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('❌ Ошибка получения сессии:', sessionError);
+        throw sessionError;
+      }
+      
+      if (!session) {
+        console.error('❌ Сессия не создана');
+        throw new Error('Не удалось создать сессию. Проверьте настройки Supabase Auth.');
+      }
+      
+      console.log('✅ Сессия Supabase активна:', session.user.id);
+    } catch (error: any) {
+      console.error('❌ Критическая ошибка авторизации Supabase:', error);
+      console.error('Детали ошибки:', {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
+      // Не блокируем вход - пользователь сможет работать офлайн
+      console.warn('⚠️ Работа продолжена в локальном режиме');
+    }
+    
     // Log without showing actual login credentials
     let logMessage = 'Вход в систему: ';
     if (role === 'admin') {
       logMessage += 'Администратор';
     } else if (role === 'cashier' && cashierName) {
       logMessage += `Кассир (${cashierName})`;
+    } else if (role === 'cashier2') {
+      logMessage += 'Касса 2';
     } else if (role === 'inventory') {
       logMessage += 'Складской';
     } else if (role === 'employee' && employeeId) {
@@ -69,7 +152,7 @@ export const login = async (
   return false;
 };
 
-export const logout = () => {
+export const logout = async () => {
   const user = getCurrentUser();
   if (user) {
     // Log without showing actual login credentials
@@ -78,6 +161,8 @@ export const logout = () => {
       logMessage += 'Администратор';
     } else if (user.role === 'cashier' && user.cashierName) {
       logMessage += `Кассир (${user.cashierName})`;
+    } else if (user.role === 'cashier2') {
+      logMessage += 'Касса 2';
     } else if (user.role === 'inventory') {
       logMessage += 'Складской';
     } else if (user.role === 'employee' && user.employeeId) {
@@ -85,6 +170,14 @@ export const logout = () => {
     }
     addLog(logMessage);
   }
+  
+  // Выходим из Supabase
+  try {
+    await supabase.auth.signOut();
+  } catch (error) {
+    console.error('Ошибка выхода из Supabase:', error);
+  }
+  
   localStorage.removeItem(STORAGE_KEY);
 };
 
@@ -128,6 +221,8 @@ export const addLog = (message: string) => {
       userDisplay = 'Администратор';
     } else if (user.role === 'cashier' && user.cashierName) {
       userDisplay = `Кассир (${user.cashierName})`;
+    } else if (user.role === 'cashier2') {
+      userDisplay = 'Касса 2';
     } else if (user.role === 'inventory') {
       userDisplay = 'Складской';
     } else if (user.role === 'employee' && user.employeeId) {

@@ -25,6 +25,98 @@ export interface StoredProduct {
   }>;
 }
 
+// Сохранение фото товара в постоянную базу product_images
+export const saveProductImage = async (
+  barcode: string, 
+  productName: string, 
+  imageBase64: string
+): Promise<boolean> => {
+  try {
+    // Получаем текущего пользователя (если есть)
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Конвертируем base64 в blob
+    const base64Data = imageBase64.split(',')[1];
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+    // Генерируем имя файла
+    const timestamp = Date.now();
+    const fileName = `${barcode || 'no-barcode'}-${timestamp}.jpg`;
+    const filePath = `products/${fileName}`;
+
+    // Загружаем в storage
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      return false;
+    }
+
+    // Получаем публичный URL
+    const { data: urlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath);
+
+    // Проверяем, есть ли уже запись для этого товара
+    const { data: existing } = await supabase
+      .from('product_images')
+      .select('id')
+      .eq('barcode', barcode)
+      .eq('product_name', productName)
+      .maybeSingle();
+
+    if (existing) {
+      // Обновляем существующую запись
+      const { error: updateError } = await supabase
+        .from('product_images')
+        .update({
+          image_url: urlData.publicUrl,
+          storage_path: filePath,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id);
+
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        return false;
+      }
+    } else {
+      // Создаем новую запись
+      const { error: dbError } = await supabase
+        .from('product_images')
+        .insert({
+          barcode,
+          product_name: productName,
+          image_url: urlData.publicUrl,
+          storage_path: filePath,
+          created_by: user?.id
+        });
+
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+        return false;
+      }
+    }
+
+    console.log('✅ Product image saved to database');
+    return true;
+  } catch (err) {
+    console.error('Error saving product image:', err);
+    return false;
+  }
+};
+
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
   const { data, error } = await supabase
     .from('products')
@@ -153,6 +245,22 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       priceHistory: (data.price_history as any) || []
     };
   } else {
+    console.log('💾 Создание нового товара - сохранение в Supabase...');
+    
+    // Проверяем авторизацию
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('❌ Ошибка авторизации:', {
+        message: authError.message,
+        code: authError.status
+      });
+      throw new Error('Ошибка авторизации');
+    }
+    if (!user) {
+      console.warn('⚠️ Пользователь не авторизован');
+      throw new Error('Пользователь не авторизован');
+    }
+    
     const newPriceHistory = [
       {
         date: now,
@@ -162,28 +270,36 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       },
     ];
     
+    const productToInsert = {
+      barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
+      name: product.name,
+      category: product.category,
+      purchase_price: product.purchasePrice,
+      sale_price: product.retailPrice,
+      quantity: product.quantity,
+      unit: product.unit,
+      expiry_date: product.expiryDate || null,
+      payment_type: product.paymentType,
+      paid_amount: product.paidAmount,
+      debt_amount: product.debtAmount,
+      supplier: product.supplier || null,
+      price_history: newPriceHistory as any,
+      created_by: user.id
+    };
+    
+    console.log('☁️ Сохранение товара в Supabase...');
     const { data, error } = await supabase
       .from('products')
-      .insert({
-        barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
-        name: product.name,
-        category: product.category,
-        purchase_price: product.purchasePrice,
-        sale_price: product.retailPrice,
-        quantity: product.quantity,
-        unit: product.unit,
-        expiry_date: product.expiryDate || null,
-        payment_type: product.paymentType,
-        paid_amount: product.paidAmount,
-        debt_amount: product.debtAmount,
-        supplier: product.supplier || null,
-        created_by: null,
-        price_history: newPriceHistory as any
-      })
+      .insert(productToInsert)
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Ошибка сохранения товара:', error);
+      throw error;
+    }
+    
+    console.log('✅ Товар успешно сохранен:', data.id);
     
     return {
       id: data.id,
@@ -195,14 +311,14 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       quantity: data.quantity,
       unit: data.unit as 'шт' | 'кг',
       expiryDate: data.expiry_date || undefined,
-      photos: [],
+      photos: product.photos || [],
       paymentType: data.payment_type as 'full' | 'partial' | 'debt',
       paidAmount: Number(data.paid_amount),
       debtAmount: Number(data.debt_amount),
-      addedBy: data.created_by || '',
+      addedBy: user.id,
       supplier: data.supplier || undefined,
       lastUpdated: data.updated_at,
-      priceHistory: (data.price_history as any) || []
+      priceHistory: newPriceHistory
     };
   }
 };
@@ -352,121 +468,10 @@ export const cleanupOldCancellations = async (): Promise<void> => {
     .lt('created_at', dayAgo.toISOString());
 };
 
-// Поставщики
-export interface Supplier {
-  id: string;
-  name: string;
-  phone: string;
-  notes: string;
-  totalDebt: number;
-  paymentHistory: Array<{
-    date: string;
-    amount: number;
-    paymentType: 'full' | 'partial' | 'debt';
-    productName: string;
-    productQuantity: number;
-    productPrice: number;
-    changedBy: string;
-  }>;
-  createdAt: string;
-  lastUpdated: string;
-}
-
-const SUPPLIERS_KEY = 'suppliers';
-
-export const getSuppliers = async (): Promise<Supplier[]> => {
-  const { data, error } = await supabase
-    .from('suppliers')
-    .select('*')
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching suppliers:', error);
-    return [];
-  }
-  
-  return (data || []).map(s => ({
-    id: s.id,
-    name: s.name,
-    phone: s.phone || '',
-    notes: s.address || '',
-    totalDebt: Number(s.debt || 0),
-    paymentHistory: (s.payment_history as any) || [],
-    createdAt: s.created_at,
-    lastUpdated: s.updated_at
-  }));
-};
-
-export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, userId: string): Promise<Supplier> => {
-  const now = new Date().toISOString();
-  
-  const { data, error } = await supabase
-    .from('suppliers')
-    .insert({
-      name: supplier.name,
-      phone: supplier.phone || null,
-      contact_person: supplier.name,
-      address: supplier.notes || null,
-      debt: supplier.totalDebt || 0,
-      payment_history: [] as any,
-      created_by: null
-    })
-    .select()
-    .single();
-  
-  if (error) throw error;
-  
-  return {
-    id: data.id,
-    name: data.name,
-    phone: data.phone || '',
-    notes: data.address || '',
-    totalDebt: Number(data.debt || 0),
-    paymentHistory: [],
-    createdAt: data.created_at,
-    lastUpdated: data.updated_at
-  };
-};
-
-export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
-  const updateData: any = {
-    updated_at: new Date().toISOString()
-  };
-  
-  if (updates.name) updateData.name = updates.name;
-  if (updates.phone !== undefined) updateData.phone = updates.phone || null;
-  if (updates.notes !== undefined) updateData.address = updates.notes || null;
-  if (updates.totalDebt !== undefined) updateData.debt = updates.totalDebt;
-  
-  const { error } = await supabase
-    .from('suppliers')
-    .update(updateData)
-    .eq('id', id);
-  
-  if (error) throw error;
-};
-
-export const addSupplierPayment = async (
-  supplierId: string, 
-  payment: {
-    amount: number;
-    paymentType: 'full' | 'partial' | 'debt';
-    productName: string;
-    productQuantity: number;
-    productPrice: number;
-  },
-  userId: string
-): Promise<void> => {
-  // Эта функция пока не используется, будет реализована позже
-  console.log('addSupplierPayment - not implemented yet');
-};
-
-export const paySupplierDebt = async (supplierId: string, amount: number, userId: string): Promise<void> => {
-  // Эта функция пока не используется, будет реализована позже
-  console.log('paySupplierDebt - not implemented yet');
-};
-
 export const exportAllData = async () => {
+  // Note: getSuppliers moved to suppliersDb.ts
+  const { getSuppliers } = await import('./suppliersDb');
+  
   const allData = {
     products: await getStoredProducts(),
     cancellations: await getCancellationRequests(),

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { saveSupplier, Supplier } from '@/lib/storage';
+import { saveSupplier, Supplier } from '@/lib/suppliersDb';
 import { getCurrentUser } from '@/lib/auth';
 
 interface QuickSupplierDialogProps {
@@ -25,15 +25,22 @@ export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSup
     }
 
     try {
-      const newSupplier = await saveSupplier({
+      const userId = currentUser?.username || 'unknown-user';
+      
+      const result = await saveSupplier({
         name: name.trim(),
         phone: phone.trim(),
         notes: '',
         totalDebt: 0,
-      }, '');
+      }, userId);
 
-      toast.success(`Поставщик "${name}" добавлен`);
-      onSupplierAdded(newSupplier);
+      if ('isOffline' in result) {
+        toast.warning(`Поставщик "${name}" сохранен локально`);
+      } else {
+        toast.success(`Поставщик "${name}" добавлен`);
+        onSupplierAdded(result);
+      }
+      
       setName('');
       setPhone('');
       onClose();

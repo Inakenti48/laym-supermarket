@@ -1,9 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Calculator, Printer, Search, Minus, Usb, XCircle, X, Camera, Scan, Edit2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +36,9 @@ import {
   isPrinterConnected, 
   printReceipt as printToDevice,
   printReceiptBrowser,
+  testDrawer,
+  setDrawerCommand,
+  DRAWER_COMMANDS,
   type ReceiptData 
 } from '@/lib/printer';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,7 +51,13 @@ interface CartItem {
   barcode?: string;
 }
 
-const QUICK_ITEMS = [
+interface QuickItem {
+  name: string;
+  price: number;
+  imageUrl?: string;
+}
+
+const DEFAULT_QUICK_ITEMS: QuickItem[] = [
   { name: 'Хлеб', price: 50 },
   { name: 'Молоко', price: 80 },
   { name: 'Яйца', price: 120 },
@@ -68,26 +82,44 @@ export const CashierTab = () => {
     }
     return [];
   });
+  const [quickItems, setQuickItems] = useState<QuickItem[]>(() => {
+    const saved = localStorage.getItem('quick_items_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_QUICK_ITEMS;
+      }
+    }
+    return DEFAULT_QUICK_ITEMS;
+  });
+  const [editMode, setEditMode] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
-  const [scannerActive, setScannerActive] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [printerConnected, setPrinterConnected] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showDrawerSettings, setShowDrawerSettings] = useState(false);
+  const [selectedDrawerCommand, setSelectedDrawerCommand] = useState<keyof typeof DRAWER_COMMANDS>('STANDARD');
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
+  const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const user = getCurrentUser();
 
   // Сохраняем корзину при изменении
   useEffect(() => {
     localStorage.setItem('cashier_cart_data', JSON.stringify(cart));
   }, [cart]);
+
+  // Сохраняем быстрые товары при изменении
+  useEffect(() => {
+    localStorage.setItem('quick_items_data', JSON.stringify(quickItems));
+  }, [quickItems]);
 
   // Закрытие результатов поиска при клике вне
   useEffect(() => {
@@ -100,6 +132,41 @@ export const CashierTab = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Подписка на реалтайм обновления товаров
+  useEffect(() => {
+    const channel = supabase
+      .channel('products_changes_cashier')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        () => {
+          console.log('🔄 Products updated on another device - refreshing search results');
+          // Обновляем результаты поиска если есть активный поиск
+          if (searchQuery.trim() && searchQuery.length >= 2) {
+            const updateSearchResults = async () => {
+              const query = searchQuery.toLowerCase();
+              const allProducts = await getAllProducts();
+              setSearchResults(
+                allProducts
+                  .filter(p => p.name.toLowerCase().includes(query))
+                  .slice(0, 10)
+              );
+            };
+            updateSearchResults();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [searchQuery]);
 
   // Поиск товаров по названию
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
@@ -131,6 +198,25 @@ export const CashierTab = () => {
     }
   };
 
+  const handleTestDrawer = async () => {
+    if (!printerConnected) {
+      toast.error('Сначала подключите принтер');
+      return;
+    }
+    const success = await testDrawer();
+    if (success) {
+      toast.success('Команда открытия ящика отправлена');
+    } else {
+      toast.error('Ошибка открытия ящика. Попробуйте другую команду');
+    }
+  };
+
+  const handleChangeDrawerCommand = (command: keyof typeof DRAWER_COMMANDS) => {
+    setSelectedDrawerCommand(command);
+    setDrawerCommand(command);
+    toast.success('Команда открытия ящика изменена');
+  };
+
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string } | string) => {
     // Поддержка обратной совместимости: если передана строка, преобразуем в объект
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
@@ -138,43 +224,83 @@ export const CashierTab = () => {
     const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
     const productName = barcodeData.name?.trim() || '';
     
+    console.log('🎯 handleScan получил данные:', { sanitizedBarcode, productName, barcodeData });
+    
+    // Если все поля пустые - пропускаем
+    if (!sanitizedBarcode && !productName) {
+      return;
+    }
+    
     let product = null;
     let isTemporary = false;
+    const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
 
-    // Если есть штрихкод - ищем по штрихкоду
+    // Если есть штрихкод - ищем по штрихкоду только в основной базе
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
-      // Сначала ищем в основной базе
       product = await findProductByBarcode(sanitizedBarcode);
-
-      // Если не найден в основной базе, ищем во временной
+      console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, '-> найден:', !!product);
+    }
+    
+    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию (включая цвет и объем)
+    if (!product && productName) {
+      const allProducts = await getAllProducts();
+      
+      // Сначала точное совпадение
+      product = allProducts.find(p => 
+        p.name.toLowerCase() === productName.toLowerCase()
+      );
+      
+      // Если не нашли, ищем частичное совпадение (учитываем цвет и объем)
       if (!product) {
-        const { data: tempProduct } = await supabase
-          .from('vremenno_product_foto')
-          .select('*')
-          .eq('barcode', sanitizedBarcode)
-          .maybeSingle();
-
-        if (tempProduct) {
-          // Находим товар по названию из временной базы в Supabase
-          const allProducts = await getAllProducts();
-          product = allProducts.find(p => p.name === tempProduct.product_name);
-          isTemporary = true;
+        product = allProducts.find(p => {
+          const productLower = p.name.toLowerCase();
+          const searchLower = productName.toLowerCase();
+          
+          // Проверяем вхождение в обе стороны
+          return productLower.includes(searchLower) || searchLower.includes(productLower);
+        });
+      }
+      
+      console.log('🔍 Поиск по названию:', productName, '-> найден:', product ? product.name : 'НЕ НАЙДЕН');
+      
+      if (product) {
+        // Проверяем, совпадают ли важные атрибуты (цвет, объем)
+        const searchWords = productName.toLowerCase().split(/[\s,]+/);
+        const productWords = product.name.toLowerCase().split(/[\s,]+/);
+        const hasColorOrVolumeMismatch = searchWords.some(word => {
+          // Проверяем слова, которые могут указывать на цвет или объем
+          const isImportantWord = /^\d+/.test(word) || // числа (объем)
+                                  word.length > 3; // потенциальные цвета/атрибуты
+          return isImportantWord && !productWords.includes(word);
+        });
+        
+        if (hasColorOrVolumeMismatch) {
+          toast.warning(`⚠️ Найден "${product.name}", но может отличаться цвет/объем от "${productName}"`);
+        } else {
+          toast.info(`Товар найден по названию: ${product.name}`);
+        }
+        
+        // Сохраняем фото если оно есть
+        if (barcodeData.photoUrl || barcodeData.capturedImage) {
+          const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage;
+          if (imageToSave) {
+            console.log('💾 Сохранение фото товара на кассе...');
+            // Импортируем функцию сохранения
+            const { saveProductImage } = await import('@/lib/storage');
+            const saved = await saveProductImage(
+              product.barcode || `cashier-${Date.now()}`,
+              product.name,
+              imageToSave
+            );
+            if (saved) {
+              console.log('✅ Фото сохранено на кассе');
+            }
+          }
         }
       }
     }
     
-    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию
-    if (!product && productName) {
-      const allProducts = await getAllProducts();
-      product = allProducts.find(p => 
-        p.name.toLowerCase().includes(productName.toLowerCase()) ||
-        productName.toLowerCase().includes(p.name.toLowerCase())
-      );
-      
-      if (product) {
-        toast.info(`Товар найден по названию: ${product.name}`);
-      }
-    }
+    console.log('📦 Итоговый результат поиска товара:', product ? product.name : 'НЕ НАЙДЕН');
 
     if (product) {
       // Проверка просрочки
@@ -215,12 +341,10 @@ export const CashierTab = () => {
       
       addToCart(product.name, product.retailPrice, product.barcode);
       toast.success(`Добавлен: ${product.name}${isTemporary ? ' (из временной базы)' : ''}`);
-    } else if (!productName) {
-      // Показываем ошибку только если AI вообще ничего не распознал
-      toast.error('Товар не найден');
+    } else if (isFromPhotoScan) {
+      // Если это был фото-скан и товар не найден
+      console.log('❌ Товар не распознан по фото');
     }
-    setShowScanner(false);
-    setShowAIScanner(false);
   };
 
   const addToCart = (name: string, price: number, barcode?: string) => {
@@ -367,6 +491,26 @@ export const CashierTab = () => {
     localStorage.removeItem('cashier_cart_data');
   };
 
+  const handleImageUpload = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Пожалуйста, выберите файл изображения');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageUrl = e.target?.result as string;
+      setQuickItems(prev => prev.map((item, i) => 
+        i === index ? { ...item, imageUrl } : item
+      ));
+      toast.success('Фото загружено');
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-4">
       {/* Print Confirmation Dialog */}
@@ -398,8 +542,8 @@ export const CashierTab = () => {
         hidden={true}
       />
 
-      {/* Scanner */}
-      <BarcodeScanner onScan={handleScan} autoFocus={scannerActive} />
+      {/* Scanner - всегда активен */}
+      <BarcodeScanner onScan={handleScan} autoFocus={true} />
 
       {/* Printer Connection */}
       {!printerConnected && (
@@ -419,11 +563,51 @@ export const CashierTab = () => {
 
       {printerConnected && (
         <Card className="p-3 bg-green-50 border-green-200">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
-            <Printer className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-green-800">Принтер чеков подключен</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+              <Printer className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-800">Принтер чеков подключен</span>
+            </div>
+            <Button 
+              onClick={() => setShowDrawerSettings(!showDrawerSettings)} 
+              size="sm" 
+              variant="outline"
+            >
+              Настройка ящика
+            </Button>
           </div>
+          
+          {showDrawerSettings && (
+            <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
+              <div className="text-sm font-medium text-green-800">Команда открытия денежного ящика:</div>
+              <div className="space-y-2">
+                {Object.keys(DRAWER_COMMANDS).map((key) => (
+                  <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="drawer-command"
+                      checked={selectedDrawerCommand === key}
+                      onChange={() => handleChangeDrawerCommand(key as keyof typeof DRAWER_COMMANDS)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-green-900">{key}</span>
+                  </label>
+                ))}
+              </div>
+              <Button 
+                onClick={handleTestDrawer} 
+                size="sm" 
+                className="w-full"
+              >
+                Тест открытия ящика
+              </Button>
+              <p className="text-xs text-green-700">
+                💡 Если ящик не открывается, попробуйте разные команды и нажмите "Тест". 
+                Работающая команда будет автоматически использоваться при печати чека.
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
@@ -582,48 +766,11 @@ export const CashierTab = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Quick items */}
-        <div className="lg:col-span-1">
-          <Card className="p-4">
-            <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
-              <Plus className="h-5 w-5" />
-              Быстрые товары
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {QUICK_ITEMS.map((item, idx) => (
-                <Button
-                  key={idx}
-                  variant="outline"
-                  className="h-16 sm:h-20 flex flex-col items-center justify-center gap-1 text-xs sm:text-sm"
-                  onClick={() => addToCart(item.name, item.price)}
-                >
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-muted-foreground">{item.price}₽</span>
-                </Button>
-              ))}
-            </div>
-          </Card>
-        </div>
-
         {/* Cart */}
         <div className="lg:col-span-2 space-y-4">
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <ShoppingCart className="h-5 w-5 text-primary" />
-                  <span className="font-medium text-sm sm:text-base">Сканер активен</span>
-                </div>
-                <Switch
-                  checked={scannerActive}
-                  onCheckedChange={(checked) => {
-                    setScannerActive(checked);
-                    if (checked) setShowScanner(true);
-                  }}
-                />
-              </div>
-              
               {/* AI Scanning Buttons */}
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -779,6 +926,90 @@ export const CashierTab = () => {
               <Printer className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               Завершить продажу
             </Button>
+          </Card>
+        </div>
+
+        {/* Quick items - справа */}
+        <div className="lg:col-span-1">
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2 text-sm sm:text-base">
+                <Plus className="h-5 w-5" />
+                Быстрые товары
+              </h3>
+              <Button
+                variant={editMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEditMode(!editMode)}
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {quickItems.map((item, idx) => (
+                <div key={idx} className="relative">
+                  {editMode ? (
+                    <div className="border rounded-lg p-2 space-y-2">
+                      <div className="text-xs font-medium truncate">{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{item.price}₽</div>
+                      <input
+                        ref={el => fileInputRefs.current[idx] = el}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(idx, e)}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={() => fileInputRefs.current[idx]?.click()}
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        {item.imageUrl ? 'Изменить' : 'Фото'}
+                      </Button>
+                      {item.imageUrl && (
+                        <div className="relative h-12 rounded overflow-hidden">
+                          <img 
+                            src={item.imageUrl} 
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="h-16 sm:h-20 w-full flex flex-col items-center justify-center gap-1 text-xs sm:text-sm"
+                          onClick={() => addToCart(item.name, item.price)}
+                        >
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-muted-foreground">{item.price}₽</span>
+                        </Button>
+                      </HoverCardTrigger>
+                      {item.imageUrl && (
+                        <HoverCardContent side="left" className="w-64">
+                          <div className="space-y-2">
+                            <div className="font-semibold">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">Цена: {item.price}₽</div>
+                            <div className="rounded-lg overflow-hidden">
+                              <img 
+                                src={item.imageUrl} 
+                                alt={item.name}
+                                className="w-full h-40 object-cover"
+                              />
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      )}
+                    </HoverCard>
+                  )}
+                </div>
+              ))}
+            </div>
           </Card>
         </div>
       </div>

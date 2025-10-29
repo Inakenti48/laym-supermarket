@@ -27,15 +27,75 @@ export const EmployeesTab = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [position, setPosition] = useState('');
-  const [workConditions, setWorkConditions] = useState('');
-  const [schedule, setSchedule] = useState<'full' | 'piece'>('full');
-  const [hourlyRate, setHourlyRate] = useState('');
-  const [customLogin, setCustomLogin] = useState('');
+  
+  const [employeeForm, setEmployeeForm] = useState(() => {
+    const saved = localStorage.getItem('employee_form_data');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {
+          name: '',
+          position: '',
+          workConditions: '',
+          schedule: 'full' as 'full' | 'piece',
+          hourlyRate: '',
+          customLogin: ''
+        };
+      }
+    }
+    return {
+      name: '',
+      position: '',
+      workConditions: '',
+      schedule: 'full' as 'full' | 'piece',
+      hourlyRate: '',
+      customLogin: ''
+    };
+  });
+
+  const name = employeeForm.name;
+  const position = employeeForm.position;
+  const workConditions = employeeForm.workConditions;
+  const schedule = employeeForm.schedule;
+  const hourlyRate = employeeForm.hourlyRate;
+  const customLogin = employeeForm.customLogin;
+
+  const setName = (val: string) => setEmployeeForm(prev => ({ ...prev, name: val }));
+  const setPosition = (val: string) => setEmployeeForm(prev => ({ ...prev, position: val }));
+  const setWorkConditions = (val: string) => setEmployeeForm(prev => ({ ...prev, workConditions: val }));
+  const setSchedule = (val: 'full' | 'piece') => setEmployeeForm(prev => ({ ...prev, schedule: val }));
+  const setHourlyRate = (val: string) => setEmployeeForm(prev => ({ ...prev, hourlyRate: val }));
+  const setCustomLogin = (val: string) => setEmployeeForm(prev => ({ ...prev, customLogin: val }));
+
+  // Сохраняем форму сотрудника при изменении
+  useEffect(() => {
+    localStorage.setItem('employee_form_data', JSON.stringify(employeeForm));
+  }, [employeeForm]);
 
   useEffect(() => {
     loadEmployees();
+
+    // Подписка на реалтайм обновления сотрудников
+    const channel = supabase
+      .channel('employees_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'employees'
+        },
+        () => {
+          console.log('🔄 Employees updated on another device');
+          loadEmployees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadEmployees = async () => {
@@ -130,12 +190,15 @@ export const EmployeesTab = () => {
 
   const resetForm = () => {
     setEditingId(null);
-    setName('');
-    setPosition('');
-    setWorkConditions('');
-    setSchedule('full');
-    setHourlyRate('');
-    setCustomLogin('');
+    setEmployeeForm({
+      name: '',
+      position: '',
+      workConditions: '',
+      schedule: 'full',
+      hourlyRate: '',
+      customLogin: ''
+    });
+    localStorage.removeItem('employee_form_data');
     setShowForm(false);
   };
 

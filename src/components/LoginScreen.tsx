@@ -20,10 +20,16 @@ const roleInfo = {
     color: 'text-primary'
   },
   cashier: {
-    title: 'Вход Кассира',
+    title: 'Вход Кассира (Касса 1)',
     description: 'Доступ к кассовым операциям',
     icon: User,
     color: 'text-secondary'
+  },
+  cashier2: {
+    title: 'Вход Кассы 2',
+    description: 'Доступ к кассовым операциям (вторая касса)',
+    icon: User,
+    color: 'text-green-500'
   },
   inventory: {
     title: 'Вход Складского',

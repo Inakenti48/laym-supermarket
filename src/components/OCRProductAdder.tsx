@@ -26,6 +26,10 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
   const [barcode, setBarcode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Форма
   const [formData, setFormData] = useState({
@@ -45,6 +49,9 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  
+  // Определяем тип устройства
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   // Получаем текущего пользователя из Supabase
   useEffect(() => {
@@ -56,6 +63,15 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
     };
     getCurrentUserId();
   }, []);
+
+  // Останавливаем камеру при размонтировании
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
 
   // Категории для распознавания по ключевым словам
   const categoryKeywords: Record<string, string[]> = {
@@ -85,48 +101,133 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
     return 'Разное';
   };
 
+  const startCamera = async (forStep: 'front' | 'barcode') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: isMobile ? 'environment' : 'user' },
+        audio: false
+      });
+      
+      setCameraStream(stream);
+      setShowCamera(true);
+      
+      // Ждем, пока video элемент будет готов
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Ошибка доступа к камере:', error);
+      toast.error('Не удалось получить доступ к камере. Проверьте разрешения.');
+    }
+  };
+
+  const capturePhoto = async (forStep: 'front' | 'barcode') => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.drawImage(video, 0, 0);
+    const imageBase64 = canvas.toDataURL('image/jpeg', 0.9);
+    
+    // Останавливаем камеру
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+
+    // Обрабатываем фото в зависимости от шага
+    if (forStep === 'front') {
+      await processFrontImage(imageBase64);
+    } else {
+      await processBarcodeImage(imageBase64);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+  };
+
+  const processFrontImage = async (imageBase64: string) => {
+    setIsProcessing(true);
+    toast.info('Распознавание текста...');
+    setFrontImage(imageBase64);
+
+    try {
+      const result = await Tesseract.recognize(imageBase64, 'rus+eng', {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            console.log(`OCR прогресс: ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      });
+
+      const text = result.data.text.trim();
+      console.log('Распознанный текст:', text);
+
+      const lines = text.split('\n').filter(line => line.trim().length > 2);
+      const name = lines[0] || 'Товар без названия';
+      const category = detectCategory(text);
+
+      setExtractedName(name);
+      setExtractedCategory(category);
+      setFormData(prev => ({ ...prev, name, category }));
+
+      toast.success('Текст распознан!');
+      setStep('barcode');
+    } catch (error) {
+      console.error('Ошибка OCR:', error);
+      toast.error('Не удалось распознать текст');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleFrontImageCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const imageBase64 = event.target?.result as string;
+      await processFrontImage(imageBase64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const processBarcodeImage = async (imageBase64: string) => {
     setIsProcessing(true);
-    toast.info('Распознавание текста...');
+    toast.info('Чтение штрихкода...');
+    setBarcodeImage(imageBase64);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const imageBase64 = event.target?.result as string;
-        setFrontImage(imageBase64);
+      const codeReader = new BrowserMultiFormatReader();
+      const result = await codeReader.decodeFromImage(undefined, imageBase64);
+      const barcodeText = result.getText();
 
-        // OCR с помощью tesseract.js
-        const result = await Tesseract.recognize(imageBase64, 'rus+eng', {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR прогресс: ${Math.round(m.progress * 100)}%`);
-            }
-          }
-        });
+      console.log('Распознанный штрихкод:', barcodeText);
+      setBarcode(barcodeText);
+      setFormData(prev => ({ ...prev, barcode: barcodeText }));
 
-        const text = result.data.text.trim();
-        console.log('Распознанный текст:', text);
-
-        // Извлекаем первую строку как название (обычно самый крупный текст)
-        const lines = text.split('\n').filter(line => line.trim().length > 2);
-        const name = lines[0] || 'Товар без названия';
-        
-        const category = detectCategory(text);
-
-        setExtractedName(name);
-        setExtractedCategory(category);
-        setFormData(prev => ({ ...prev, name, category }));
-
-        toast.success('Текст распознан!');
-        setStep('barcode');
-      };
-      reader.readAsDataURL(file);
+      toast.success('Штрихкод распознан!');
+      setStep('form');
     } catch (error) {
-      console.error('Ошибка OCR:', error);
-      toast.error('Не удалось распознать текст');
+      console.error('Ошибка чтения штрихкода:', error);
+      toast.warning('Штрихкод не распознан. Введите вручную.');
+      setStep('form');
     } finally {
       setIsProcessing(false);
     }
@@ -136,86 +237,12 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsProcessing(true);
-    toast.info('Чтение штрихкода...');
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const imageBase64 = event.target?.result as string;
-        setBarcodeImage(imageBase64);
-
-        // Создаем временный img элемент для чтения
-        const img = new Image();
-        img.onload = async () => {
-          try {
-            const codeReader = new BrowserMultiFormatReader();
-            
-            // Создаем canvas для обработки изображения
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Canvas context not available');
-            
-            ctx.drawImage(img, 0, 0);
-            
-            // Читаем штрихкод
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const luminanceSource = {
-              getRow: (y: number, row: Uint8ClampedArray) => {
-                const offset = y * canvas.width * 4;
-                for (let x = 0; x < canvas.width; x++) {
-                  const i = offset + x * 4;
-                  row[x] = Math.floor((imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3);
-                }
-                return row;
-              },
-              getMatrix: () => {
-                const matrix = new Uint8ClampedArray(canvas.width * canvas.height);
-                for (let y = 0; y < canvas.height; y++) {
-                  for (let x = 0; x < canvas.width; x++) {
-                    const i = (y * canvas.width + x) * 4;
-                    matrix[y * canvas.width + x] = Math.floor(
-                      (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3
-                    );
-                  }
-                }
-                return matrix;
-              },
-              getWidth: () => canvas.width,
-              getHeight: () => canvas.height,
-              isRotateSupported: () => false,
-              rotateCounterClockwise: () => luminanceSource,
-              rotateCounterClockwise45: () => luminanceSource,
-              invert: () => luminanceSource,
-              crop: () => luminanceSource
-            };
-
-            const result = await codeReader.decodeFromImage(undefined, imageBase64);
-            const barcodeText = result.getText();
-
-            console.log('Распознанный штрихкод:', barcodeText);
-            setBarcode(barcodeText);
-            setFormData(prev => ({ ...prev, barcode: barcodeText }));
-
-            toast.success('Штрихкод распознан!');
-            setStep('form');
-          } catch (error: any) {
-            console.error('Ошибка чтения штрихкода:', error);
-            toast.warning('Штрихкод не распознан. Введите вручную.');
-            setStep('form');
-          }
-        };
-        img.src = imageBase64;
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('Ошибка обработки изображения:', error);
-      toast.error('Не удалось обработать изображение');
-    } finally {
-      setIsProcessing(false);
-    }
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const imageBase64 = event.target?.result as string;
+      await processBarcodeImage(imageBase64);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async () => {
@@ -320,6 +347,40 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
     }
   };
 
+  if (showCamera) {
+    return (
+      <Card className="p-4 sm:p-6 max-w-2xl mx-auto">
+        <h2 className="text-lg sm:text-xl font-bold mb-3">
+          {step === 'front' ? 'Сфотографируйте лицевую сторону' : 'Сфотографируйте штрихкод'}
+        </h2>
+        
+        <div className="relative mb-4 bg-black rounded-lg overflow-hidden">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline
+            className="w-full h-auto max-h-[60vh]"
+          />
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            onClick={() => capturePhoto(step as 'front' | 'barcode')}
+            disabled={isProcessing}
+            className="flex-1 h-12 sm:h-10 text-base"
+          >
+            <Camera className="w-5 h-5 mr-2" />
+            Сделать снимок
+          </Button>
+          <Button onClick={stopCamera} variant="outline" className="h-12 sm:h-10">
+            Отменить
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   if (step === 'front') {
     return (
       <Card className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -334,18 +395,20 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
           </div>
         )}
 
-        <input
-          ref={frontInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFrontImageCapture}
-          className="hidden"
-        />
+        {isMobile && (
+          <input
+            ref={frontInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFrontImageCapture}
+            className="hidden"
+          />
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
-            onClick={() => frontInputRef.current?.click()}
+            onClick={() => isMobile ? frontInputRef.current?.click() : startCamera('front')}
             disabled={isProcessing}
             className="flex-1 h-12 sm:h-10 text-base"
           >
@@ -382,14 +445,16 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
           </div>
         )}
 
-        <input
-          ref={barcodeInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleBarcodeImageCapture}
-          className="hidden"
-        />
+        {isMobile && (
+          <input
+            ref={barcodeInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleBarcodeImageCapture}
+            className="hidden"
+          />
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
@@ -400,7 +465,7 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
             Назад
           </Button>
           <Button
-            onClick={() => barcodeInputRef.current?.click()}
+            onClick={() => isMobile ? barcodeInputRef.current?.click() : startCamera('barcode')}
             disabled={isProcessing}
             className="flex-1 h-12 sm:h-10 text-base order-1 sm:order-2"
           >

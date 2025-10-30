@@ -322,15 +322,15 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
 
   if (step === 'front') {
     return (
-      <Card className="p-6">
-        <h2 className="text-xl font-bold mb-4">Шаг 1: Сфотографируйте лицевую сторону</h2>
-        <p className="text-muted-foreground mb-4">
+      <Card className="p-4 sm:p-6 max-w-2xl mx-auto">
+        <h2 className="text-lg sm:text-xl font-bold mb-3">Шаг 1: Сфотографируйте лицевую сторону</h2>
+        <p className="text-sm text-muted-foreground mb-4">
           Сделайте фото упаковки с названием товара. Система автоматически распознает название и категорию.
         </p>
         
         {frontImage && (
           <div className="mb-4">
-            <img src={frontImage} alt="Лицевая сторона" className="w-full max-h-64 object-contain rounded-lg border" />
+            <img src={frontImage} alt="Лицевая сторона" className="w-full max-h-48 sm:max-h-64 object-contain rounded-lg border" />
           </div>
         )}
 
@@ -343,17 +343,18 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
           className="hidden"
         />
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Button
             onClick={() => frontInputRef.current?.click()}
             disabled={isProcessing}
-            className="flex-1"
+            className="flex-1 h-12 sm:h-10 text-base"
           >
-            <Camera className="w-4 h-4 mr-2" />
+            <Camera className="w-5 h-5 mr-2" />
             {isProcessing ? 'Обработка...' : 'Сфотографировать'}
           </Button>
-          <Button onClick={handleCancel} variant="outline">
-            <X className="w-4 h-4" />
+          <Button onClick={handleCancel} variant="outline" className="h-12 sm:h-10 sm:w-auto">
+            <X className="w-5 h-5 sm:mr-2" />
+            <span className="sm:inline hidden">Отмена</span>
           </Button>
         </div>
       </Card>
@@ -362,9 +363,9 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
 
   if (step === 'barcode') {
     return (
-      <Card className="p-6">
-        <h2 className="text-xl font-bold mb-4">Шаг 2: Сфотографируйте штрихкод</h2>
-        <p className="text-muted-foreground mb-4">
+      <Card className="p-4 sm:p-6 max-w-2xl mx-auto">
+        <h2 className="text-lg sm:text-xl font-bold mb-3">Шаг 2: Сфотографируйте штрихкод</h2>
+        <p className="text-sm text-muted-foreground mb-4">
           Сделайте четкое фото штрихкода товара. Система автоматически его считает.
         </p>
 
@@ -377,7 +378,7 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
         
         {barcodeImage && (
           <div className="mb-4">
-            <img src={barcodeImage} alt="Штрихкод" className="w-full max-h-64 object-contain rounded-lg border" />
+            <img src={barcodeImage} alt="Штрихкод" className="w-full max-h-48 sm:max-h-64 object-contain rounded-lg border" />
           </div>
         )}
 
@@ -390,25 +391,27 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
           className="hidden"
         />
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Button
             onClick={() => setStep('front')}
             variant="outline"
+            className="h-12 sm:h-10 order-3 sm:order-1"
           >
             Назад
           </Button>
           <Button
             onClick={() => barcodeInputRef.current?.click()}
             disabled={isProcessing}
-            className="flex-1"
+            className="flex-1 h-12 sm:h-10 text-base order-1 sm:order-2"
           >
-            <Camera className="w-4 h-4 mr-2" />
+            <Camera className="w-5 h-5 mr-2" />
             {isProcessing ? 'Обработка...' : 'Сфотографировать'}
           </Button>
           <Button
             onClick={() => setStep('form')}
             variant="outline"
             title="Пропустить и ввести вручную"
+            className="h-12 sm:h-10 order-2 sm:order-3"
           >
             Пропустить
           </Button>
@@ -419,8 +422,8 @@ export const OCRProductAdder = ({ onSuccess, onCancel }: OCRProductAdderProps) =
 
   // Форма ручного ввода
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-bold mb-4">Шаг 3: Дополните данные</h2>
+    <Card className="p-4 sm:p-6 max-w-2xl mx-auto">
+      <h2 className="text-lg sm:text-xl font-bold mb-4">Шаг 3: Дополните данные</h2>
       
       <div className="space-y-4">
         {extractedName && (

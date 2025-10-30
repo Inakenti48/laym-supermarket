@@ -22,7 +22,8 @@ import {
 import { getCurrentUser, addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
-import { AIProductRecognition } from './AIProductRecognition';
+import { CameraScanner } from './CameraScanner';
+import { BackgroundScanner } from './BackgroundScanner';
 import { CartItem } from './CashierCartItem';
 import {
   findProductByBarcode, 
@@ -105,8 +106,6 @@ export const CashierTab = () => {
   const [showDrawerSettings, setShowDrawerSettings] = useState(false);
   const [selectedDrawerCommand, setSelectedDrawerCommand] = useState<keyof typeof DRAWER_COMMANDS>('STANDARD');
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
-  const [showAIScanner, setShowAIScanner] = useState(false);
-  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
   const searchRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const user = getCurrentUser();
@@ -535,13 +534,6 @@ export const CashierTab = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Hidden background AI scanner - always working */}
-      <AIProductRecognition 
-        onProductFound={handleScan}
-        mode="product"
-        hidden={true}
-      />
-
       {/* Scanner - всегда активен */}
       <BarcodeScanner onScan={handleScan} autoFocus={true} />
 
@@ -771,32 +763,20 @@ export const CashierTab = () => {
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              {/* AI Scanning Buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  onClick={() => {
-                    setAiScanMode('product');
-                    setShowAIScanner(true);
+              {/* Background Scanner - автоматическое сканирование */}
+              <div className="flex justify-center">
+                <BackgroundScanner 
+                  onProductFound={(data) => {
+                    if (data.barcode || data.name) {
+                      handleScan({ 
+                        barcode: data.barcode || '', 
+                        name: data.name 
+                      });
+                    }
                   }}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  AI Лицевая
-                </Button>
-                <Button
-                  onClick={() => {
-                    setAiScanMode('barcode');
-                    setShowAIScanner(true);
-                  }}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  AI Штрихкод
-                </Button>
+                  autoStart={false}
+                />
               </div>
-              
             </div>
             <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />

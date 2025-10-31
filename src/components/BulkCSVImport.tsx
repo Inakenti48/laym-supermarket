@@ -19,8 +19,7 @@ export const BulkCSVImport = () => {
     if (!confirmed) return;
 
     setIsImporting(true);
-    toast.info('Начинаю импорт товаров...');
-
+    
     try {
       const csvFiles = [
         '/data/products_part_1.csv',
@@ -29,12 +28,29 @@ export const BulkCSVImport = () => {
         '/data/products_part_4.csv'
       ];
 
-      const result = await bulkImportFromCSV(csvFiles);
+      let totalInserted = 0;
+      let totalErrors = 0;
+
+      for (let i = 0; i < csvFiles.length; i++) {
+        toast.info(`Импорт файла ${i + 1} из ${csvFiles.length}...`);
+        
+        const result = await bulkImportFromCSV([csvFiles[i]]);
+        
+        totalInserted += result.inserted;
+        totalErrors += result.errors;
+        
+        console.log(`✓ Файл ${i + 1}: загружено ${result.inserted} товаров`);
+        
+        // Небольшая задержка между файлами
+        if (i < csvFiles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
 
       toast.success(
         `✅ Импорт завершен!\n` +
-        `Загружено: ${result.inserted} товаров\n` +
-        `Ошибок: ${result.errors}`
+        `Загружено: ${totalInserted} товаров\n` +
+        `Ошибок: ${totalErrors}`
       );
 
       // Перезагружаем страницу через 2 секунды

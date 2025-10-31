@@ -42,13 +42,15 @@ export const bulkImportFromCSV = async (csvFiles: string[]) => {
 
     console.log(`📦 Parsed ${allProducts.length} products from CSV files`);
 
-    // Отправляем на edge function партиями по 1000
-    const batchSize = 1000;
+    // Отправляем на edge function партиями по 500
+    const batchSize = 500;
     let totalInserted = 0;
     let totalErrors = 0;
 
     for (let i = 0; i < allProducts.length; i += batchSize) {
       const batch = allProducts.slice(i, i + batchSize);
+      
+      console.log(`📤 Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allProducts.length / batchSize)}`);
       
       const { data, error } = await supabase.functions.invoke('bulk-import-products', {
         body: { csvData: batch }
@@ -61,6 +63,11 @@ export const bulkImportFromCSV = async (csvFiles: string[]) => {
         totalInserted += data.inserted || 0;
         totalErrors += data.errors || 0;
         console.log(`✓ Imported batch ${i}-${i + batch.length}: ${data.inserted} inserted`);
+      }
+      
+      // Небольшая задержка между партиями
+      if (i + batchSize < allProducts.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 

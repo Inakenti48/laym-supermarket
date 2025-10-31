@@ -56,6 +56,8 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
 
   const startScanning = async () => {
     try {
+      setIsScanning(true);
+      
       // Запуск камеры
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }
@@ -64,6 +66,7 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
 
       // Запуск сканирования штрихкода
@@ -96,9 +99,9 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         }
       );
 
-      // Периодическое распознавание по изображению
+      // Периодическое распознавание по изображению (каждые 3 секунды)
       scanIntervalRef.current = setInterval(async () => {
-        if (!videoRef.current || !canvasRef.current) return;
+        if (!videoRef.current || !canvasRef.current || !isScanning) return;
         
         const now = Date.now();
         if (now - lastScanTime < 3000) return;
@@ -107,7 +110,7 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         const video = videoRef.current;
         const ctx = canvas.getContext('2d');
         
-        if (!ctx) return;
+        if (!ctx || video.videoWidth === 0) return;
 
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -121,9 +124,8 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
           onProductFound({ name: product.name, barcode: product.barcode });
           toast.success(`Распознан: ${product.name}`);
         }
-      }, 2000);
+      }, 3000);
 
-      setIsScanning(true);
       toast.success('Сканер запущен');
     } catch (error) {
       console.error('Ошибка запуска сканера:', error);
@@ -132,27 +134,44 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
   };
 
   const stopScanning = async () => {
+    console.log('🛑 Остановка сканера...');
+    setIsScanning(false);
+
+    // Останавливаем интервал распознавания
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
+      console.log('✓ Интервал остановлен');
     }
 
+    // Останавливаем HTML5 QR сканер
     if (scannerRef.current) {
       try {
         await scannerRef.current.stop();
         scannerRef.current.clear();
         scannerRef.current = null;
+        console.log('✓ QR сканер остановлен');
       } catch (error) {
-        console.error('Ошибка остановки сканера:', error);
+        console.error('Ошибка остановки QR сканера:', error);
       }
     }
 
+    // Останавливаем видео поток
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log('✓ Трек камеры остановлен:', track.kind);
+      });
       streamRef.current = null;
     }
 
-    setIsScanning(false);
+    // Очищаем видео элемент
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    toast.success('Сканер остановлен');
+    console.log('✅ Сканер полностью остановлен');
   };
 
   return (

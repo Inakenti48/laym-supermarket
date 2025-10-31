@@ -3,7 +3,12 @@ import { Scan, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
-import { findProductByBarcode } from '@/lib/storage';
+import { pipeline, env } from '@huggingface/transformers';
+import { findProductByBarcode, getAllProducts } from '@/lib/storage';
+
+// Настройка transformers.js
+env.allowLocalModels = false;
+env.useBrowserCache = true;
 
 interface BackgroundScannerProps {
   onProductFound: (data: { barcode?: string; name?: string }) => void;
@@ -15,6 +20,11 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
   const [lastScanTime, setLastScanTime] = useState(0);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerIdRef = useRef<string>(`scanner-${Date.now()}`);
+  const ocrPipelineRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (autoStart) {
@@ -25,8 +35,68 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
     };
   }, [autoStart]);
 
+  const initOCR = async () => {
+    if (!ocrPipelineRef.current) {
+      try {
+        console.log('🔄 Загрузка OCR модели...');
+        ocrPipelineRef.current = await pipeline(
+          'image-to-text',
+          'Xenova/vit-gpt2-image-captioning',
+          { device: 'webgpu' }
+        );
+        console.log('✅ OCR модель загружена');
+      } catch (error) {
+        console.error('❌ Ошибка загрузки OCR:', error);
+      }
+    }
+  };
+
+  const recognizeProduct = async (imageData: string) => {
+    try {
+      if (!ocrPipelineRef.current) {
+        await initOCR();
+      }
+      
+      const result = await ocrPipelineRef.current(imageData);
+      const recognizedText = result?.[0]?.generated_text || '';
+      
+      console.log('🔍 Распознанный текст:', recognizedText);
+      
+      // Поиск товара по названию в базе
+      const products = await getAllProducts();
+      const foundProduct = products.find(p => 
+        p.name.toLowerCase().includes(recognizedText.toLowerCase()) ||
+        recognizedText.toLowerCase().includes(p.name.toLowerCase().substring(0, 4))
+      );
+      
+      if (foundProduct) {
+        console.log('✅ Товар найден:', foundProduct.name);
+        return foundProduct;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Ошибка распознавания:', error);
+      return null;
+    }
+  };
+
   const startScanning = async () => {
     try {
+      // Запуск камеры
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+
+      // Инициализация OCR
+      await initOCR();
+
+      // Запуск сканирования штрихкода
       const scanner = new Html5Qrcode(scannerIdRef.current);
       scannerRef.current = scanner;
 
@@ -52,11 +122,39 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
           }
         },
         (errorMessage) => {
-          // Игнорируем ошибки сканирования (нормально, когда штрихкод не виден)
+          // Игнорируем ошибки сканирования
         }
       );
 
+      // Периодическое распознавание по изображению
+      scanIntervalRef.current = setInterval(async () => {
+        if (!videoRef.current || !canvasRef.current) return;
+        
+        const now = Date.now();
+        if (now - lastScanTime < 3000) return;
+
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) return;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        const product = await recognizeProduct(imageData);
+        
+        if (product) {
+          setLastScanTime(now);
+          onProductFound({ name: product.name, barcode: product.barcode });
+          toast.success(`Распознан: ${product.name}`);
+        }
+      }, 2000);
+
       setIsScanning(true);
+      toast.success('Сканер запущен');
     } catch (error) {
       console.error('Ошибка запуска сканера:', error);
       toast.error('Не удалось запустить камеру');
@@ -64,6 +162,11 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
   };
 
   const stopScanning = async () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+
     if (scannerRef.current) {
       try {
         await scannerRef.current.stop();
@@ -73,13 +176,23 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         console.error('Ошибка остановки сканера:', error);
       }
     }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
     setIsScanning(false);
   };
 
   return (
     <>
-      {/* Область для сканера (скрыта, но нужна для html5-qrcode) */}
+      {/* Скрытая область для html5-qrcode */}
       <div id={scannerIdRef.current} className="hidden" />
+      
+      {/* Скрытое видео для OCR */}
+      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+      <canvas ref={canvasRef} className="hidden" />
 
       {/* Кнопка управления сканированием */}
       <Button

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload, FileText } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { AIProductRecognition } from './AIProductRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
-import { OCRProductAdder } from './OCRProductAdder';
+
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } from '@/lib/storage';
@@ -30,7 +30,6 @@ export const InventoryTab = () => {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
-  const [showOCRAdder, setShowOCRAdder] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
@@ -520,23 +519,6 @@ export const InventoryTab = () => {
         }}
       />
 
-      {/* OCR Product Adder */}
-      {showOCRAdder && (
-        <div className="mb-4">
-          <OCRProductAdder
-            onSuccess={async () => {
-              setShowOCRAdder(false);
-              toast.success('Товар добавлен через OCR');
-              addLog('Товар добавлен через OCR распознавание');
-              
-              // Обновляем список поставщиков
-              const updatedSuppliers = await getSuppliers();
-              setSuppliers(updatedSuppliers);
-            }}
-            onCancel={() => setShowOCRAdder(false)}
-          />
-        </div>
-      )}
 
       {/* Scanner and Import */}
       <div className="flex gap-2 flex-wrap">
@@ -545,14 +527,6 @@ export const InventoryTab = () => {
         </div>
         {isAdmin && (
           <>
-            <Button 
-              onClick={() => setShowOCRAdder(true)}
-              variant="default"
-              className="bg-gradient-to-r from-primary to-primary/80"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              OCR Товар
-            </Button>
             <Button 
               onClick={() => {
                 setAiScanMode('product');

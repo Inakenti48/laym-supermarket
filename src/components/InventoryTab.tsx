@@ -8,6 +8,7 @@ import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
+import { BulkCSVImport } from './BulkCSVImport';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 
 import { addLog, getCurrentUser } from '@/lib/auth';
@@ -552,6 +553,7 @@ export const InventoryTab = () => {
               Импорт CSV
             </Button>
             <BulkImportButton />
+            <BulkCSVImport />
           </>
         )}
       </div>

@@ -15,3 +15,6 @@ verify_jwt = true
 
 [functions.cleanup-temporary-photos]
 verify_jwt = false  # Called by cron job, validated internally
+
+[functions.bulk-import-products]
+verify_jwt = true

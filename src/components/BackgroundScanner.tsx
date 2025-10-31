@@ -3,12 +3,8 @@ import { Scan, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
-import { pipeline, env } from '@huggingface/transformers';
+import { supabase } from '@/integrations/supabase/client';
 import { findProductByBarcode, getAllProducts } from '@/lib/storage';
-
-// Настройка transformers.js
-env.allowLocalModels = false;
-env.useBrowserCache = true;
 
 interface BackgroundScannerProps {
   onProductFound: (data: { barcode?: string; name?: string }) => void;
@@ -20,7 +16,6 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
   const [lastScanTime, setLastScanTime] = useState(0);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerIdRef = useRef<string>(`scanner-${Date.now()}`);
-  const ocrPipelineRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -35,45 +30,23 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
     };
   }, [autoStart]);
 
-  const initOCR = async () => {
-    if (!ocrPipelineRef.current) {
-      try {
-        console.log('🔄 Загрузка OCR модели...');
-        ocrPipelineRef.current = await pipeline(
-          'image-to-text',
-          'Xenova/vit-gpt2-image-captioning',
-          { device: 'webgpu' }
-        );
-        console.log('✅ OCR модель загружена');
-      } catch (error) {
-        console.error('❌ Ошибка загрузки OCR:', error);
-      }
-    }
-  };
-
   const recognizeProduct = async (imageData: string) => {
     try {
-      if (!ocrPipelineRef.current) {
-        await initOCR();
+      const { data, error } = await supabase.functions.invoke('recognize-product-by-photo', {
+        body: { imageBase64: imageData }
+      });
+
+      if (error) {
+        console.error('❌ Ошибка распознавания:', error);
+        return null;
       }
-      
-      const result = await ocrPipelineRef.current(imageData);
-      const recognizedText = result?.[0]?.generated_text || '';
-      
-      console.log('🔍 Распознанный текст:', recognizedText);
-      
-      // Поиск товара по названию в базе
-      const products = await getAllProducts();
-      const foundProduct = products.find(p => 
-        p.name.toLowerCase().includes(recognizedText.toLowerCase()) ||
-        recognizedText.toLowerCase().includes(p.name.toLowerCase().substring(0, 4))
-      );
-      
-      if (foundProduct) {
-        console.log('✅ Товар найден:', foundProduct.name);
-        return foundProduct;
+
+      const result = data?.result;
+      if (result?.recognized && result.barcode) {
+        console.log('✅ Товар распознан:', result.name);
+        return { barcode: result.barcode, name: result.name };
       }
-      
+
       return null;
     } catch (error) {
       console.error('❌ Ошибка распознавания:', error);
@@ -92,9 +65,6 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-
-      // Инициализация OCR
-      await initOCR();
 
       // Запуск сканирования штрихкода
       const scanner = new Html5Qrcode(scannerIdRef.current);

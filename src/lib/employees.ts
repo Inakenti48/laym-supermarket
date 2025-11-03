@@ -4,6 +4,7 @@ const TASK_REPORTS_KEY = 'task_reports';
 export interface Task {
   id: string;
   employeeId: string;
+  employeeName: string;
   title: string;
   description: string;
   date: string;

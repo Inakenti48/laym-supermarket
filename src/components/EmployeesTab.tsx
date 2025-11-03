@@ -5,7 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Users, Edit2, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Plus, Users, Edit2, Loader2, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentUser } from '@/lib/auth';
@@ -27,6 +28,13 @@ export const EmployeesTab = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [taskForm, setTaskForm] = useState({ 
+    title: '', 
+    description: '', 
+    date: new Date().toISOString().split('T')[0] 
+  });
   
   const [employeeForm, setEmployeeForm] = useState(() => {
     const saved = localStorage.getItem('employee_form_data');
@@ -155,6 +163,8 @@ export const EmployeesTab = () => {
         toast.success('Сотрудник обновлён');
       } else {
         const login = customLogin || generateLogin();
+        const password = Math.random().toString(36).slice(-8); // Генерируем пароль
+        
         const { error } = await supabase
           .from('employees')
           .insert({
@@ -168,7 +178,13 @@ export const EmployeesTab = () => {
           });
 
         if (error) throw error;
-        toast.success(`Сотрудник добавлен. Логин: ${login}`);
+        
+        // Сохраняем пароль в localStorage для входа сотрудников
+        const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
+        employeesAuth.push({ login, password, name });
+        localStorage.setItem('employees_auth', JSON.stringify(employeesAuth));
+        
+        toast.success(`Сотрудник добавлен!\nЛогин: ${login}\nПароль: ${password}`, { duration: 10000 });
       }
 
       // Добавляем лог
@@ -186,6 +202,27 @@ export const EmployeesTab = () => {
       console.error('Error saving employee:', error);
       toast.error('Ошибка сохранения сотрудника');
     }
+  };
+
+  const handleAddTask = async () => {
+    if (!selectedEmployee || !taskForm.title.trim()) {
+      toast.error('Заполните все поля');
+      return;
+    }
+
+    const { saveTask } = await import('@/lib/employees');
+    saveTask({
+      employeeId: selectedEmployee.id,
+      employeeName: selectedEmployee.name,
+      title: taskForm.title,
+      description: taskForm.description,
+      date: taskForm.date
+    });
+
+    toast.success('Задание добавлено');
+    setShowTaskDialog(false);
+    setTaskForm({ title: '', description: '', date: new Date().toISOString().split('T')[0] });
+    setSelectedEmployee(null);
   };
 
   const resetForm = () => {
@@ -318,14 +355,28 @@ export const EmployeesTab = () => {
                     <h3 className="font-semibold text-sm">{employee.name}</h3>
                     <p className="text-xs text-muted-foreground">{employee.position}</p>
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="ghost"
-                    onClick={() => handleEditEmployee(employee)}
-                    className="text-xs"
-                  >
-                    <Edit2 className="h-3 w-3" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedEmployee(employee);
+                        setShowTaskDialog(true);
+                      }}
+                      className="text-xs"
+                      title="Добавить задание"
+                    >
+                      <ClipboardList className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => handleEditEmployee(employee)}
+                      className="text-xs"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -351,6 +402,58 @@ export const EmployeesTab = () => {
           ))
         )}
       </div>
+
+      {/* Диалог добавления задания */}
+      <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Добавить задание для {selectedEmployee?.name}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="task-title">Название задания</Label>
+              <Input
+                id="task-title"
+                value={taskForm.title}
+                onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                placeholder="Например: Протереть полки"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="task-description">Описание</Label>
+              <Textarea
+                id="task-description"
+                value={taskForm.description}
+                onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                placeholder="Подробное описание задания..."
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="task-date">Дата выполнения</Label>
+              <Input
+                id="task-date"
+                type="date"
+                value={taskForm.date}
+                onChange={(e) => setTaskForm({ ...taskForm, date: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTaskDialog(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleAddTask}>
+              <Plus className="h-4 w-4 mr-2" />
+              Добавить задание
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

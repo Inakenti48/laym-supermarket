@@ -111,6 +111,9 @@ const Index = () => {
 
       if (error) throw error;
       
+      // ВАЖНО: Сохраняем время входа для работы таймера сессии
+      localStorage.setItem('last_login_time', Date.now().toString());
+      
       toast.success('Вход выполнен успешно');
     } catch (error: any) {
       toast.error('Ошибка входа: ' + error.message);

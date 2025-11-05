@@ -550,7 +550,68 @@ export const SuppliersTab = () => {
               <Card key={supplier.id} className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-lg">{supplier.name}</h4>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <h4 
+                          className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors"
+                          onClick={() => setSelectedSupplier(supplier)}
+                        >
+                          {supplier.name}
+                        </h4>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Управление долгом: {supplier.name}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="p-4 bg-muted rounded-lg">
+                            <div className="text-sm text-muted-foreground mb-1">Текущий долг</div>
+                            <div className="text-2xl font-bold text-destructive">
+                              {(supplier.debt || 0).toFixed(2)}₽
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-medium mb-2 block">
+                              Сумма оплаты (₽)
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Введите сумму"
+                              value={debtPayment.supplierId === supplier.id ? debtPayment.amount : ''}
+                              onChange={(e) => {
+                                setDebtPayment({ 
+                                  supplierId: supplier.id, 
+                                  amount: e.target.value 
+                                });
+                              }}
+                            />
+                            {debtPayment.supplierId === supplier.id && debtPayment.amount && (
+                              <div className="mt-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                                <div className="text-sm text-muted-foreground mb-1">
+                                  Останется долга
+                                </div>
+                                <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                                  {Math.max(0, (supplier.debt || 0) - parseFloat(debtPayment.amount || '0')).toFixed(2)}₽
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <Button 
+                            onClick={() => {
+                              handlePayDebt();
+                            }}
+                            className="w-full"
+                            disabled={!debtPayment.amount || parseFloat(debtPayment.amount) <= 0}
+                          >
+                            Оплатить
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
                     {supplier.contact_person && (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                         <Users className="h-4 w-4" />

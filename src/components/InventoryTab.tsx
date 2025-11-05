@@ -923,13 +923,11 @@ export const InventoryTab = () => {
 
       {/* Main Content */}
       <div className="flex-1 space-y-4">
-        {/* Scanner and Import */}
-        <div className="flex gap-2 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <BarcodeScanner onScan={handleScan} />
-          </div>
+        {/* Scanner and Import - Реорганизация: AI кнопки слева, USB сканер справа */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+          {/* Левая часть - AI кнопки и импорт */}
           {isAdmin && (
-            <>
+            <div className="flex gap-2 flex-wrap">
               <Button 
                 onClick={() => {
                   setAiScanMode('dual');
@@ -937,9 +935,10 @@ export const InventoryTab = () => {
                   toast.info('📸 Сделайте 2 фото: сначала лицевая сторона, потом штрихкод');
                 }}
                 variant="secondary"
+                className="flex-1 min-w-[180px]"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
-                AI Сканирование (2 фото)
+                AI Сканирование
               </Button>
               <Button 
                 onClick={() => {
@@ -948,18 +947,28 @@ export const InventoryTab = () => {
                   toast.info('📸 Сфотографируйте упаковку с датой производства и сроком годности');
                 }}
                 variant="outline"
+                className="flex-1 min-w-[150px]"
               >
                 <CalendarClock className="h-4 w-4 mr-2" />
                 Срок годности
               </Button>
-              <Button onClick={() => setShowImportDialog(true)} variant="outline">
+              <Button 
+                onClick={() => setShowImportDialog(true)} 
+                variant="outline"
+                className="flex-1 min-w-[140px]"
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Импорт CSV
               </Button>
               <BulkImportButton />
               <BulkCSVImport />
-            </>
+            </div>
           )}
+          
+          {/* Правая часть - USB сканер */}
+          <div className="min-w-[280px]">
+            <BarcodeScanner onScan={handleScan} />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">

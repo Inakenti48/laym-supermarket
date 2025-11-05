@@ -987,9 +987,9 @@ export const InventoryTab = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
         {/* Add Product Form */}
-        <Card className="p-3 md:p-4 lg:p-6">
-          <h3 className="text-sm md:text-base lg:text-lg font-semibold mb-2 md:mb-3 lg:mb-4 flex items-center gap-1.5 md:gap-2">
-            <Plus className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
+        <Card className="p-4 md:p-4 lg:p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <h3 className="text-base md:text-base lg:text-lg font-semibold mb-4 md:mb-3 lg:mb-4 flex items-center gap-2 md:gap-2 sticky top-0 bg-card z-10 pb-2">
+            <Plus className="h-5 w-5 md:h-5 md:w-5 flex-shrink-0" />
             <span className="truncate">Добавить товар</span>
           </h3>
 
@@ -1017,15 +1017,15 @@ export const InventoryTab = () => {
             </div>
           )}
 
-          <div className="space-y-2 md:space-y-3">
+          <div className="space-y-4 md:space-y-3">
             {/* Индикатор других пользователей */}
             {isAdmin && otherUsersStates.length > 0 && (
-              <div className="p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-[10px] md:text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-xs md:text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
                   👥 {otherUsersStates.length} админ(ов) заполняют форму:
                 </p>
                 {otherUsersStates.map((state, idx) => (
-                  <div key={state.userId} className="text-[9px] md:text-[10px] text-blue-600 dark:text-blue-400">
+                  <div key={state.userId} className="text-[10px] md:text-[10px] text-blue-600 dark:text-blue-400">
                     • {state.userName}: {state.name || state.barcode || 'начинает заполнение...'}
                   </div>
                 ))}
@@ -1033,58 +1033,58 @@ export const InventoryTab = () => {
             )}
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">
                 Штрихкод <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-xs md:text-sm h-8 md:h-9"
+                className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.barcode}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
                 placeholder="Сканируйте"
               />
               {isAdmin && otherUsersStates.some(s => s.barcode) && (
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                   Другие: {otherUsersStates.filter(s => s.barcode).map(s => s.barcode).join(', ')}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">
                 Название <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-xs md:text-sm h-8 md:h-9"
+                className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.name}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, name: e.target.value })}
                 placeholder="Название"
               />
               {isAdmin && otherUsersStates.some(s => s.name) && (
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                   Другие: {otherUsersStates.filter(s => s.name).map(s => s.name).join(', ')}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">
                 Категория <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-xs md:text-sm h-8 md:h-9"
+                className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.category}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
                 placeholder="Категория"
               />
               {isAdmin && otherUsersStates.some(s => s.category) && (
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                   Другие: {otherUsersStates.filter(s => s.category).map(s => s.category).join(', ')}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">Поставщик</label>
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">Поставщик</label>
               <Select
                 value={currentProduct.supplier}
                 onValueChange={(value) => {
@@ -1095,22 +1095,22 @@ export const InventoryTab = () => {
                   }
                 }}
               >
-                <SelectTrigger className="text-xs md:text-sm h-8 md:h-9">
+                <SelectTrigger className="text-sm md:text-sm h-11 md:h-9">
                   <SelectValue placeholder="Выбрать" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  <SelectItem value="__add_new__" className="text-primary font-medium text-[10px] md:text-xs">
+                  <SelectItem value="__add_new__" className="text-primary font-medium text-sm md:text-xs">
                     + Добавить
                   </SelectItem>
                   {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name} className="text-[10px] md:text-xs">
+                    <SelectItem key={supplier.id} value={supplier.name} className="text-sm md:text-xs">
                       {supplier.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {isAdmin && otherUsersStates.some(s => s.supplier) && (
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                   Другие: {otherUsersStates.filter(s => s.supplier).map(s => s.supplier).join(', ')}
                 </p>
               )}
@@ -1118,11 +1118,11 @@ export const InventoryTab = () => {
 
             {/* Одна колонка на мобильных для цен */}
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">
                 Закуп (₽) <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-xs md:text-sm h-8 md:h-9"
+                className="text-sm md:text-sm h-11 md:h-9"
                 type="number"
                 step="0.01"
                 value={currentProduct.purchasePrice}
@@ -1130,7 +1130,7 @@ export const InventoryTab = () => {
                 placeholder="0"
               />
               {isAdmin && otherUsersStates.some(s => s.purchasePrice) && (
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                   Другие: {otherUsersStates.filter(s => s.purchasePrice).map(s => s.purchasePrice).join(', ')}₽
                 </p>
               )}
@@ -1138,11 +1138,11 @@ export const InventoryTab = () => {
 
             {isAdmin && (
               <div>
-                <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                <label className="text-sm md:text-xs font-medium mb-1.5 block">
                   Розница (₽) <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  className="text-xs md:text-sm h-8 md:h-9"
+                  className="text-sm md:text-sm h-11 md:h-9"
                   type="number"
                   step="0.01"
                   value={currentProduct.retailPrice}
@@ -1150,20 +1150,20 @@ export const InventoryTab = () => {
                   placeholder="0"
                 />
                 {otherUsersStates.some(s => s.retailPrice) && (
-                  <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
                     Другие: {otherUsersStates.filter(s => s.retailPrice).map(s => s.retailPrice).join(', ')}₽
                   </p>
                 )}
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-1.5 md:gap-2">
+            <div className="grid grid-cols-2 gap-2 md:gap-2">
               <div>
-                <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                <label className="text-sm md:text-xs font-medium mb-1.5 block">
                   Кол-во <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  className="text-xs md:text-sm h-8 md:h-9"
+                  className="text-sm md:text-sm h-11 md:h-9"
                   type="number"
                   step="0.01"
                   value={currentProduct.quantity}
@@ -1172,7 +1172,7 @@ export const InventoryTab = () => {
                 />
               </div>
               <div>
-                <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                <label className="text-sm md:text-xs font-medium mb-1.5 block">
                   Ед. <span className="text-destructive">*</span>
                 </label>
                 <Select
@@ -1181,22 +1181,22 @@ export const InventoryTab = () => {
                     setCurrentProduct({ ...currentProduct, unit: value })
                   }
                 >
-                  <SelectTrigger className="text-xs md:text-sm h-8 md:h-9">
+                  <SelectTrigger className="text-sm md:text-sm h-11 md:h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="шт" className="text-[10px] md:text-xs">шт</SelectItem>
-                    <SelectItem value="кг" className="text-[10px] md:text-xs">кг</SelectItem>
+                    <SelectItem value="шт" className="text-sm md:text-xs">шт</SelectItem>
+                    <SelectItem value="кг" className="text-sm md:text-xs">кг</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">Срок</label>
-              <div className="flex gap-1.5 md:gap-2">
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">Срок</label>
+              <div className="flex gap-2 md:gap-2">
                 <Input
-                  className="text-xs md:text-sm flex-1 h-8 md:h-9"
+                  className="text-sm md:text-sm flex-1 h-11 md:h-9"
                   type="date"
                   value={currentProduct.expiryDate}
                   onChange={(e) => setCurrentProduct({ ...currentProduct, expiryDate: e.target.value })}
@@ -1208,37 +1208,37 @@ export const InventoryTab = () => {
                   onClick={handleRecognizeExpiry}
                   disabled={isRecognizingExpiry || photos.length === 0}
                   title="AI"
-                  className="h-8 w-8 md:h-9 md:w-9 flex-shrink-0"
+                  className="h-11 w-11 md:h-9 md:w-9 flex-shrink-0"
                 >
-                  <CalendarClock className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
+                  <CalendarClock className={`h-5 w-5 md:h-4 md:w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
-              <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-xs md:text-[10px] text-muted-foreground mt-1">
                 {photos.length > 0 ? 'AI кнопка' : 'Загрузите фото'}
               </p>
             </div>
 
             <div>
-              <label className="text-[11px] md:text-xs font-medium mb-1 block">Фото (до 3)</label>
+              <label className="text-sm md:text-xs font-medium mb-1.5 block">Фото (до 3)</label>
               <Input
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handlePhotoUpload}
-                className="text-[10px] md:text-xs h-8 md:h-9"
+                className="text-sm md:text-xs h-11 md:h-9"
               />
               {photos.length > 0 && (
-                <div className="flex gap-1.5 md:gap-2 mt-1.5 md:mt-2 flex-wrap">
+                <div className="flex gap-2 md:gap-2 mt-2 md:mt-2 flex-wrap">
                   {photos.map((photo, idx) => (
                     <div key={idx} className="relative">
-                      <img src={photo} alt={`${idx + 1}`} className="h-12 w-12 md:h-14 md:w-14 object-cover rounded border" />
+                      <img src={photo} alt={`${idx + 1}`} className="h-16 w-16 md:h-14 md:w-14 object-cover rounded border" />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 rounded-full p-0"
+                        className="absolute -top-1 -right-1 h-6 w-6 md:h-5 md:w-5 rounded-full p-0"
                         onClick={() => removePhoto(idx)}
                       >
-                        <X className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                        <X className="h-3 w-3 md:h-3 md:w-3" />
                       </Button>
                     </div>
                   ))}
@@ -1246,8 +1246,8 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <Button onClick={addProduct} className="w-full h-9 md:h-10 text-xs md:text-sm font-medium">
-              <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
+            <Button onClick={addProduct} className="w-full h-12 md:h-10 text-base md:text-sm font-medium mt-2">
+              <Plus className="h-5 w-5 md:h-4 md:w-4 mr-2 md:mr-2" />
               Сохранить
             </Button>
           </div>

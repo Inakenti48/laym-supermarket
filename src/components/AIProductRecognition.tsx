@@ -10,9 +10,10 @@ interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string }) => void;
   mode?: 'product' | 'barcode' | 'expiry' | 'dual';
   hidden?: boolean;
+  hasIncompleteProducts?: boolean; // Есть ли незавершенные товары в очереди
 }
 
-export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden = false }: AIProductRecognitionProps) => {
+export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden = false, hasIncompleteProducts = false }: AIProductRecognitionProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -415,6 +416,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleManualCapture = async () => {
     if (isProcessing) return;
     
+    // Блокируем съемку если есть незавершенные товары в режиме dual
+    if (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none') {
+      toast.error('Завершите текущий товар (заполните штрихкод и название) перед сканированием следующего');
+      return;
+    }
+    
     setIsProcessing(true);
 
     try {
@@ -607,6 +614,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const interval = setInterval(async () => {
         if (isProcessing || !isMountedRef.current || !cameraReady) return;
 
+        // Блокируем автоматическое сканирование если есть незавершенные товары в режиме dual
+        if (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none') {
+          return;
+        }
+
         setIsProcessing(true);
 
         try {
@@ -766,6 +778,16 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           {!isProcessing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
+              {mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none' && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-2">
+                  <p className="text-destructive text-xs font-medium text-center">
+                    ⚠️ Завершите текущий товар перед сканированием следующего
+                  </p>
+                  <p className="text-destructive/80 text-[10px] text-center mt-1">
+                    Заполните штрихкод и название в очереди товаров
+                  </p>
+                </div>
+              )}
               <div className="flex items-center gap-3 justify-center">
                 <span className="text-foreground text-sm font-medium">Штук:</span>
                 <Button
@@ -790,10 +812,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 onClick={handleManualCapture}
                 size="lg"
                 className="rounded-full shadow-lg w-full"
-                disabled={!cameraReady}
+                disabled={!cameraReady || (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none')}
               >
                 <Camera className="h-5 w-5 mr-2" />
-                Сфотографировать
+                {mode === 'dual' && dualPhotoStep === 'front' ? 'Сфотографировать лицевую' : 
+                 mode === 'dual' && dualPhotoStep === 'barcode' ? 'Сфотографировать штрихкод' :
+                 'Сфотографировать'}
               </Button>
             </div>
           )}

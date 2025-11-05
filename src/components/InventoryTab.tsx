@@ -889,6 +889,7 @@ export const InventoryTab = () => {
           <AIProductRecognition 
             onProductFound={handleScan}
             mode={aiScanMode}
+            hasIncompleteProducts={pendingProducts.some(p => !p.barcode || !p.name)}
           />
           <Button
             onClick={() => {

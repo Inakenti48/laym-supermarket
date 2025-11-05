@@ -6,8 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string }) => void;
-  mode?: 'product' | 'barcode' | 'expiry';
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string }) => void;
+  mode?: 'product' | 'barcode' | 'expiry' | 'dual';
   hidden?: boolean;
 }
 
@@ -25,6 +25,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [recognizedProducts, setRecognizedProducts] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [hasPermission, setHasPermission] = useState(false);
+  const [dualPhotoStep, setDualPhotoStep] = useState<'front' | 'barcode' | 'none'>('none');
+  const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
+  const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -311,7 +314,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     };
   };
 
-  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
+  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry' | 'dual'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
     // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
     console.log('🔍 Step 1: Searching for similar photo in database...');
     
@@ -418,6 +421,81 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         setNotification('❌ Ошибка');
         setTimeout(() => setNotification(''), 1000);
         return;
+      }
+      
+      // Если режим двух фото
+      if (mode === 'dual') {
+        if (dualPhotoStep === 'none' || dualPhotoStep === 'front') {
+          // Сохраняем лицевую сторону
+          setTempFrontPhoto(image);
+          setDualPhotoStep('barcode');
+          setNotification('✅ Лицевая сохранена! Теперь штрихкод');
+          setTimeout(() => setNotification(''), 2000);
+          setIsProcessing(false);
+          return;
+        } else if (dualPhotoStep === 'barcode') {
+          // Сохраняем штрихкод
+          setTempBarcodePhoto(image);
+          setNotification('🔍 Распознавание...');
+          
+          try {
+            // Отправляем оба фото на распознавание
+            const { data, error } = await supabase.functions.invoke('recognize-product-by-photo', {
+              body: { 
+                frontPhoto: tempFrontPhoto,
+                barcodePhoto: image
+              }
+            });
+
+            if (error) {
+              console.error('Ошибка распознавания:', error);
+              setNotification('❌ Ошибка');
+              setTimeout(() => setNotification(''), 1500);
+              toast.error('Не удалось распознать товар');
+              setDualPhotoStep('none');
+              setTempFrontPhoto('');
+              setTempBarcodePhoto('');
+              return;
+            }
+
+            console.log('📦 Результат распознавания:', data);
+
+            if (data?.result?.recognized && (data?.result?.barcode || data?.result?.name)) {
+              setNotification('✅ Товар распознан!');
+              
+              onProductFound({
+                barcode: data.result.barcode || '',
+                name: data.result.name || '',
+                category: data.result.category || '',
+                frontPhoto: tempFrontPhoto,
+                barcodePhoto: image
+              });
+              
+              setTimeout(() => setNotification(''), 1000);
+              setDualPhotoStep('none');
+              setTempFrontPhoto('');
+              setTempBarcodePhoto('');
+            } else {
+              setNotification('❌ Не распознано');
+              setTimeout(() => setNotification(''), 1500);
+              toast.warning('Товар не распознан, попробуйте снова');
+              setDualPhotoStep('none');
+              setTempFrontPhoto('');
+              setTempBarcodePhoto('');
+            }
+          } catch (err: any) {
+            console.error('Ошибка при распознавании:', err);
+            setNotification('❌ Ошибка');
+            setTimeout(() => setNotification(''), 1500);
+            toast.error('Ошибка при распознавании товара');
+            setDualPhotoStep('none');
+            setTempFrontPhoto('');
+            setTempBarcodePhoto('');
+          }
+          
+          setIsProcessing(false);
+          return;
+        }
       }
       
       // Если режим распознавания срока годности
@@ -530,7 +608,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             return;
           }
           
-          const result = await recognizeProduct(image, mode);
+          const result = await recognizeProduct(image, mode === 'dual' ? 'product' : mode);
           
           if (mode === 'barcode') {
             if (result.barcode) {

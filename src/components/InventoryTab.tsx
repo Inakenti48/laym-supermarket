@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload, CalendarClock } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -29,7 +29,7 @@ export const InventoryTab = () => {
   const [photos, setPhotos] = useState<string[]>([]);
   const [capturedImage, setCapturedImage] = useState<string>('');
   const [showAIScanner, setShowAIScanner] = useState(false);
-  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode' | 'expiry'>('product');
+  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode' | 'expiry' | 'dual'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
@@ -214,6 +214,56 @@ export const InventoryTab = () => {
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
+    
+    // Если это режим двух фото
+    if (aiScanMode === 'dual' && barcodeData.frontPhoto && barcodeData.barcodePhoto) {
+      const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
+      
+      // Сохраняем оба фото
+      const allPhotos: string[] = [];
+      if (barcodeData.frontPhoto) allPhotos.push(barcodeData.frontPhoto);
+      if (barcodeData.barcodePhoto) allPhotos.push(barcodeData.barcodePhoto);
+      
+      // Добавляем товар в очередь
+      const newPendingProduct: PendingProduct = {
+        id: `pending-${Date.now()}-${Math.random()}`,
+        barcode: sanitizedBarcode,
+        name: barcodeData.name || '',
+        category: barcodeData.category || '',
+        purchasePrice: '',
+        retailPrice: '',
+        quantity: '1',
+        unit: 'шт',
+        expiryDate: '',
+        supplier: '',
+        photos: allPhotos,
+        frontPhoto: barcodeData.frontPhoto,
+        barcodePhoto: barcodeData.barcodePhoto,
+      };
+
+      // Если есть штрихкод, ищем в базе для автозаполнения
+      if (sanitizedBarcode) {
+        const existing = await findProductByBarcode(sanitizedBarcode);
+        if (existing) {
+          newPendingProduct.category = existing.category;
+          newPendingProduct.purchasePrice = existing.purchasePrice.toString();
+          newPendingProduct.retailPrice = existing.retailPrice.toString();
+          newPendingProduct.unit = existing.unit;
+          toast.info('✅ Товар найден в базе, цены автозаполнены');
+        }
+      }
+
+      setPendingProducts(prev => [...prev, newPendingProduct]);
+      setShowAIScanner(false);
+      setAiScanMode('product');
+      
+      if (barcodeData.name) {
+        toast.success(`📦 Добавлен в очередь: ${barcodeData.name}`);
+      } else if (sanitizedBarcode) {
+        toast.success(`📦 Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
+      }
+      return;
+    }
     
     // Если это режим распознавания срока годности
     if (aiScanMode === 'expiry') {
@@ -483,6 +533,21 @@ export const InventoryTab = () => {
 
       for (let i = 0; i < pendingProducts.length; i++) {
         const product = pendingProducts[i];
+        
+        // Проверка на дублирование
+        if (product.barcode) {
+          const { data: existing } = await supabase
+            .from('products')
+            .select('id')
+            .eq('barcode', product.barcode)
+            .maybeSingle();
+          
+          if (existing) {
+            console.log(`⚠️ Товар с баркодом ${product.barcode} уже существует, пропускаем`);
+            savedProductIds.push(product.id);
+            continue;
+          }
+        }
         
         try {
           // Сохраняем фотографии - собираем все уникальные фото
@@ -865,6 +930,17 @@ export const InventoryTab = () => {
           </div>
           {isAdmin && (
             <>
+              <Button 
+                onClick={() => {
+                  setAiScanMode('dual');
+                  setShowAIScanner(true);
+                  toast.info('📸 Сделайте 2 фото: сначала лицевая сторона, потом штрихкод');
+                }}
+                variant="secondary"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                AI Сканирование (2 фото)
+              </Button>
               <Button 
                 onClick={() => {
                   setAiScanMode('expiry');

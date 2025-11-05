@@ -219,6 +219,17 @@ export const InventoryTab = () => {
     if (aiScanMode === 'dual' && barcodeData.frontPhoto && barcodeData.barcodePhoto) {
       const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
       
+      // Автозаполнение полей формы
+      if (sanitizedBarcode) {
+        setCurrentProduct(prev => ({ ...prev, barcode: sanitizedBarcode }));
+      }
+      if (barcodeData.name) {
+        setCurrentProduct(prev => ({ ...prev, name: barcodeData.name || '' }));
+      }
+      if (barcodeData.category) {
+        setCurrentProduct(prev => ({ ...prev, category: barcodeData.category || '' }));
+      }
+      
       // Сохраняем оба фото
       const allPhotos: string[] = [];
       if (barcodeData.frontPhoto) allPhotos.push(barcodeData.frontPhoto);
@@ -292,6 +303,17 @@ export const InventoryTab = () => {
     if (!sanitizedBarcode && !barcodeData.name && !barcodeData.category) {
       console.log('AI вернул пустые значения, пропускаем');
       return;
+    }
+    
+    // Автозаполнение полей формы при обычном распознавании
+    if (sanitizedBarcode) {
+      setCurrentProduct(prev => ({ ...prev, barcode: sanitizedBarcode }));
+    }
+    if (barcodeData.name) {
+      setCurrentProduct(prev => ({ ...prev, name: barcodeData.name || '' }));
+    }
+    if (barcodeData.category) {
+      setCurrentProduct(prev => ({ ...prev, category: barcodeData.category || '' }));
     }
     
     // Обработка двух фото

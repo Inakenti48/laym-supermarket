@@ -12,22 +12,28 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64 } = await req.json();
+    const { imageBase64, frontPhoto, barcodePhoto } = await req.json();
     
     console.log('=== RECOGNIZE BY PHOTO START ===');
     console.log('Image size:', imageBase64?.length || 0);
+    console.log('Front photo:', frontPhoto ? 'Yes' : 'No');
+    console.log('Barcode photo:', barcodePhoto ? 'Yes' : 'No');
     
-    if (!imageBase64) {
-      console.error('Missing imageBase64');
+    // Используем приоритет: frontPhoto > barcodePhoto > imageBase64
+    const primaryImage = frontPhoto || imageBase64;
+    const secondaryImage = barcodePhoto;
+    
+    if (!primaryImage) {
+      console.error('Missing image');
       return new Response(
-        JSON.stringify({ error: 'imageBase64 is required' }),
+        JSON.stringify({ error: 'At least one image is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Validate base64 image format
     const base64Pattern = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i;
-    if (!base64Pattern.test(imageBase64)) {
+    if (!base64Pattern.test(primaryImage)) {
       return new Response(
         JSON.stringify({ error: 'Invalid image format. Must be a valid base64 image (PNG, JPEG, WEBP, GIF)' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -35,7 +41,7 @@ serve(async (req) => {
     }
 
     // Size validation - approximately 10MB limit for base64
-    const base64Data = imageBase64.split(',')[1] || imageBase64;
+    const base64Data = primaryImage.split(',')[1] || primaryImage;
     const sizeInBytes = (base64Data.length * 3) / 4;
     const maxSize = 10 * 1024 * 1024; // 10MB
     
@@ -106,6 +112,27 @@ ${productsInfo}
 - Используй ТОЛЬКО штрихкоды из списка. НЕ придумывай.`;
 
     // Вызываем Lovable AI для быстрого распознавания
+    // Если есть оба фото, используем их для более точного распознавания
+    const userContent: any[] = [
+      {
+        type: 'text',
+        text: secondaryImage 
+          ? 'На первом изображении - лицевая сторона товара, на втором - штрих-код. Какой товар? Верни штрихкод из базы или UNKNOWN.'
+          : 'Какой товар на изображении? Верни штрихкод из базы или UNKNOWN.'
+      },
+      {
+        type: 'image_url',
+        image_url: { url: primaryImage }
+      }
+    ];
+
+    if (secondaryImage) {
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: secondaryImage }
+      });
+    }
+
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -118,16 +145,7 @@ ${productsInfo}
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Какой товар на изображении? Верни штрихкод из базы или UNKNOWN.'
-              },
-              {
-                type: 'image_url',
-                image_url: { url: imageBase64 }
-              }
-            ]
+            content: userContent
           }
         ],
         tools: [{

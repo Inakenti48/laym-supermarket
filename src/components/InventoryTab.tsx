@@ -10,6 +10,8 @@ import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
 import { BulkCSVImport } from './BulkCSVImport';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
+import { PendingProductsList } from './PendingProductsList';
+import { PendingProduct } from './PendingProductItem';
 
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -31,6 +33,10 @@ export const InventoryTab = () => {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
+  const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
+  const [photoStep, setPhotoStep] = useState<'front' | 'barcode' | 'none'>('none');
+  const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
+  const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
@@ -129,16 +135,27 @@ export const InventoryTab = () => {
     };
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number } | string) => {
-    // Поддержка обратной совместимости: если передана строка, преобразуем в объект
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
-    const sanitizedBarcode = barcodeData.barcode.trim().replace(/[<>'"]/g, '');
+    const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
     
-    // ВАЖНО: Если все поля пустые, не обрабатываем результат
     if (!sanitizedBarcode && !barcodeData.name && !barcodeData.category) {
       console.log('AI вернул пустые значения, пропускаем');
       return;
+    }
+    
+    // Обработка двух фото
+    if (photoStep === 'front' && barcodeData.capturedImage) {
+      setTempFrontPhoto(barcodeData.capturedImage);
+      setPhotoStep('barcode');
+      toast.info('📸 Теперь сфотографируйте штрих-код');
+      return;
+    }
+    
+    if (photoStep === 'barcode' && barcodeData.capturedImage) {
+      setTempBarcodePhoto(barcodeData.capturedImage);
+      setPhotoStep('none');
     }
     
     // Сохраняем capturedImage во временное состояние
@@ -147,8 +164,8 @@ export const InventoryTab = () => {
     }
     
     // Сохраняем фото в постоянную базу если есть название и изображение
-    if (barcodeData.name && (barcodeData.photoUrl || barcodeData.capturedImage)) {
-      const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage;
+    if (barcodeData.name && (barcodeData.photoUrl || barcodeData.capturedImage || tempFrontPhoto)) {
+      const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage || tempFrontPhoto;
       if (imageToSave) {
         console.log('💾 Saving product photo to database...');
         const saved = await saveProductImage(
@@ -162,55 +179,49 @@ export const InventoryTab = () => {
       }
     }
     
-    // Проверка только если штрихкод не пустой
     if (sanitizedBarcode && sanitizedBarcode.length > 50) {
       toast.warning('Штрихкод слишком длинный');
       return;
     }
 
-    // Если есть штрихкод, ищем в базе
-    if (sanitizedBarcode) {
-      const existing = await findProductByBarcode(sanitizedBarcode);
-      
-      if (existing) {
-        setSuggestedProduct(existing);
-        setShowSuggestion(true);
-        setCurrentProduct({ 
-          ...currentProduct, 
-          barcode: sanitizedBarcode,
-          name: existing.name,
-          category: existing.category,
-          purchasePrice: existing.purchasePrice.toString(),
-          retailPrice: existing.retailPrice.toString(),
-          unit: existing.unit,
-        });
-        setPhotos(existing.photos);
-        toast.info('Товар найден в базе данных');
-        addLog(`Отсканирован штрихкод: ${sanitizedBarcode} (${existing.name})`);
-        return;
-      } else {
-        // Штрихкод не найден в базе
-        toast.info('Штрихкод нет в базе данных');
-      }
-    }
-
-    // Заполняем данные из AI распознавания (с штрихкодом или без)
-    const newPhotos = barcodeData.photoUrl ? [barcodeData.photoUrl] : [];
-    setCurrentProduct({ 
-      ...currentProduct, 
+    // Добавляем товар в очередь
+    const newPendingProduct: PendingProduct = {
+      id: `pending-${Date.now()}-${Math.random()}`,
       barcode: sanitizedBarcode,
       name: barcodeData.name || '',
       category: barcodeData.category || '',
-      quantity: barcodeData.quantity?.toString() || currentProduct.quantity
-    });
-    setPhotos(newPhotos);
+      purchasePrice: '',
+      retailPrice: '',
+      quantity: barcodeData.quantity?.toString() || '1',
+      unit: 'шт',
+      expiryDate: '',
+      supplier: '',
+      photos: [],
+      frontPhoto: tempFrontPhoto || barcodeData.frontPhoto,
+      barcodePhoto: tempBarcodePhoto || barcodeData.barcodePhoto || barcodeData.capturedImage,
+    };
+
+    // Если есть штрихкод, ищем в базе для автозаполнения
+    if (sanitizedBarcode) {
+      const existing = await findProductByBarcode(sanitizedBarcode);
+      if (existing) {
+        newPendingProduct.category = existing.category;
+        newPendingProduct.purchasePrice = existing.purchasePrice.toString();
+        newPendingProduct.retailPrice = existing.retailPrice.toString();
+        newPendingProduct.unit = existing.unit;
+        newPendingProduct.photos = existing.photos;
+        toast.info('✅ Товар найден в базе, цены автозаполнены');
+      }
+    }
+
+    setPendingProducts(prev => [...prev, newPendingProduct]);
+    setTempFrontPhoto('');
+    setTempBarcodePhoto('');
     
     if (barcodeData.name) {
-      toast.success(`Распознано: ${barcodeData.name}`);
-      addLog(`Распознан товар: ${barcodeData.name}${sanitizedBarcode ? ` (штрихкод: ${sanitizedBarcode})` : ''}`);
+      toast.success(`Добавлен в очередь: ${barcodeData.name}`);
     } else if (sanitizedBarcode) {
-      toast.success(`Штрихкод отсканирован: ${sanitizedBarcode}`);
-      addLog(`Отсканирован штрихкод: ${sanitizedBarcode}`);
+      toast.success(`Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
     }
   };
 
@@ -259,17 +270,116 @@ export const InventoryTab = () => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleUpdatePendingProduct = (id: string, updates: Partial<PendingProduct>) => {
+    setPendingProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  };
+
+  const handleRemovePendingProduct = (id: string) => {
+    setPendingProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleSaveAllProducts = async () => {
+    if (pendingProducts.length === 0) {
+      toast.error('Нет товаров для сохранения');
+      return;
+    }
+
+    const incompleteProducts = pendingProducts.filter(p => 
+      !p.name || !p.category || !p.purchasePrice || !p.retailPrice || !p.quantity
+    );
+
+    if (incompleteProducts.length > 0) {
+      toast.error(`${incompleteProducts.length} товаров не заполнены полностью`);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Необходимо войти в систему');
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const product of pendingProducts) {
+        try {
+          // Сохраняем фотографии
+          const allPhotos = [...product.photos];
+          if (product.frontPhoto) allPhotos.push(product.frontPhoto);
+          if (product.barcodePhoto) allPhotos.push(product.barcodePhoto);
+
+          for (const photoUrl of allPhotos) {
+            await saveProductImage(
+              product.barcode || `product-${Date.now()}`,
+              product.name,
+              photoUrl
+            );
+          }
+
+          // Сохраняем товар
+          const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
+            barcode: product.barcode,
+            name: product.name,
+            category: product.category,
+            purchasePrice: parseFloat(product.purchasePrice),
+            retailPrice: parseFloat(product.retailPrice),
+            quantity: parseFloat(product.quantity),
+            unit: product.unit,
+            expiryDate: product.expiryDate || undefined,
+            photos: allPhotos,
+            paymentType: 'full',
+            paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
+            debtAmount: 0,
+            addedBy: currentUser?.role || 'unknown',
+            supplier: product.supplier || undefined,
+          };
+
+          const saved = await saveProduct(productData, currentUser?.username || 'unknown');
+          
+          if (saved) {
+            successCount++;
+            addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          console.error('Ошибка сохранения товара:', error);
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`✅ Сохранено товаров: ${successCount}`);
+        setPendingProducts([]);
+      }
+      
+      if (errorCount > 0) {
+        toast.error(`❌ Ошибок: ${errorCount}`);
+      }
+    } catch (error: any) {
+      console.error('Ошибка массового сохранения:', error);
+      toast.error('Ошибка при сохранении товаров');
+    }
+  };
+
+  const handleClearAllProducts = () => {
+    if (confirm(`Очистить очередь из ${pendingProducts.length} товаров?`)) {
+      setPendingProducts([]);
+      toast.info('Очередь очищена');
+    }
+  };
+
   const addProduct = async () => {
     try {
       console.log('🔄 Начало добавления товара...');
       
-      // Проверка интернет-соединения
       if (!navigator.onLine) {
         toast.info('⚠️ Нет соединения. Товар будет сохранен локально и синхронизирован позже.');
         console.warn('⚠️ Режим оффлайн - данные будут синхронизированы при восстановлении соединения');
       }
       
-      // Проверка авторизации
       console.log('🔐 Проверка авторизации...');
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
@@ -287,7 +397,6 @@ export const InventoryTab = () => {
       
       console.log('✅ Пользователь авторизован:', user.id);
       
-      // Проверка обязательных полей
       console.log('📋 Проверка обязательных полей...');
       if (!currentProduct.name?.trim()) {
         console.error('❌ Название товара пустое');
@@ -346,7 +455,6 @@ export const InventoryTab = () => {
         quantity
       });
 
-      // Сохранение фотографий
       if (photos.length > 0 || capturedImage) {
         const imagesToSave = [...photos];
         if (capturedImage && !photos.includes(capturedImage)) {
@@ -371,7 +479,6 @@ export const InventoryTab = () => {
         }
       }
       
-      // Сохраняем товар
       const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
         barcode: currentProduct.barcode,
         name: currentProduct.name,
@@ -406,7 +513,6 @@ export const InventoryTab = () => {
         console.log('✅ Товар успешно сохранен');
         toast.success('✅ Товар сохранён и доступен на кассе!');
         
-        // Reset form только после успешного сохранения
         setCurrentProduct({
           barcode: '',
           name: '',
@@ -437,7 +543,6 @@ export const InventoryTab = () => {
       
       let errorMessage = 'Неизвестная ошибка при сохранении товара';
       
-      // Определяем тип ошибки
       if (error.message?.includes('duplicate')) {
         errorMessage = 'Товар с таким штрихкодом уже существует';
       } else if (error.code === '23505') {
@@ -455,7 +560,6 @@ export const InventoryTab = () => {
       toast.error(`❌ Ошибка: ${errorMessage}`);
     }
 
-    // Reset form
     setCurrentProduct({
       barcode: '',
       name: '',
@@ -470,14 +574,13 @@ export const InventoryTab = () => {
     setPhotos([]);
     setCapturedImage('');
     setSuggestedProduct(null);
-    // Очищаем сохраненное состояние формы
     localStorage.removeItem('inventory_form_data');
   };
 
   // Удалена функция saveAllProducts - товары теперь сохраняются сразу при добавлении
 
   return (
-    <div className="space-y-4">
+    <div className="flex gap-4 h-full">
       {/* AI Product Recognition - только для админов */}
       {isAdmin && showAIScanner && (
         <div className="fixed inset-0 bg-background z-50">
@@ -489,6 +592,9 @@ export const InventoryTab = () => {
             onClick={() => {
               setShowAIScanner(false);
               setAiScanMode('product');
+              setPhotoStep('none');
+              setTempFrontPhoto('');
+              setTempBarcodePhoto('');
             }}
             variant="outline"
             className="absolute top-4 right-4 z-50"
@@ -520,45 +626,38 @@ export const InventoryTab = () => {
         }}
       />
 
-
-      {/* Scanner and Import */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="flex-1 min-w-[200px]">
-          <BarcodeScanner onScan={handleScan} />
+      {/* Main Content */}
+      <div className="flex-1 space-y-4">
+        {/* Scanner and Import */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <BarcodeScanner onScan={handleScan} />
+          </div>
+          {isAdmin && (
+            <>
+              <Button 
+                onClick={() => {
+                  setPhotoStep('front');
+                  setAiScanMode('product');
+                  setShowAIScanner(true);
+                  toast.info('📸 Сфотографируйте лицевую сторону товара');
+                }} 
+                variant="outline"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                AI Сканирование (2 фото)
+              </Button>
+              <Button onClick={() => setShowImportDialog(true)} variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Импорт CSV
+              </Button>
+              <BulkImportButton />
+              <BulkCSVImport />
+            </>
+          )}
         </div>
-        {isAdmin && (
-          <>
-            <Button 
-              onClick={() => {
-                setAiScanMode('product');
-                setShowAIScanner(true);
-              }} 
-              variant="outline"
-            >
-              <Camera className="h-4 w-4 mr-2" />
-              AI Лицевая
-            </Button>
-            <Button 
-              onClick={() => {
-                setAiScanMode('barcode');
-                setShowAIScanner(true);
-              }} 
-              variant="outline"
-            >
-              <Scan className="h-4 w-4 mr-2" />
-              AI Штрихкод
-            </Button>
-            <Button onClick={() => setShowImportDialog(true)} variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Импорт CSV
-            </Button>
-            <BulkImportButton />
-            <BulkCSVImport />
-          </>
-        )}
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Add Product Form */}
         <Card className="p-4 sm:p-6">
           <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2">
@@ -751,7 +850,17 @@ export const InventoryTab = () => {
             </Button>
           </div>
         </Card>
+        </div>
       </div>
+
+      {/* Pending Products List - Right Side */}
+      <PendingProductsList
+        products={pendingProducts}
+        onUpdateProduct={handleUpdatePendingProduct}
+        onRemoveProduct={handleRemovePendingProduct}
+        onSaveAll={handleSaveAllProducts}
+        onClearAll={handleClearAllProducts}
+      />
     </div>
   );
 };

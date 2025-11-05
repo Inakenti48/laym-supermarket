@@ -25,44 +25,44 @@ export const PendingProductsList = ({
 
   return (
     <Card className="w-80 flex flex-col h-full bg-muted/30">
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-6 border-b space-y-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">Очередь товаров</h3>
+            <h3 className="font-semibold text-base">Очередь товаров</h3>
           </div>
-          <span className="text-sm text-muted-foreground">{products.length}</span>
+          <span className="text-sm text-muted-foreground font-medium">{products.length}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <Button
             onClick={onSaveAll}
             disabled={!allComplete}
-            className="flex-1"
-            size="sm"
+            className="flex-1 h-10"
           >
-            <Save className="h-4 w-4 mr-1" />
+            <Save className="h-4 w-4 mr-2" />
             Занести все
           </Button>
           <Button
             onClick={onClearAll}
             variant="outline"
-            size="sm"
+            size="icon"
             disabled={products.length === 0}
+            className="h-10 w-10"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-6">
         {products.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">
-            <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Очередь пуста</p>
-            <p className="text-xs mt-1">Отсканируйте товары для добавления</p>
+          <div className="text-center text-muted-foreground py-12">
+            <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p className="text-base font-medium">Очередь пуста</p>
+            <p className="text-sm mt-2">Отсканируйте товары для добавления</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {products.map((product) => (
               <PendingProductItem
                 key={product.id}

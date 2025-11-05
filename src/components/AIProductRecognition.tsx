@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
+import { compressForAI } from '@/lib/imageCompression';
 
 interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string }) => void;
@@ -315,6 +316,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry' | 'dual'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
+    // Сжимаем изображение сразу для всех операций
+    console.log('📦 Сжатие изображения...');
+    const compressedImage = await compressForAI(imageBase64);
+    
     // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
     console.log('🔍 Step 1: Searching for similar photo in database...');
     
@@ -328,7 +333,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         const { data: matchData, error: matchError } = await supabase.functions.invoke('recognize-product-by-photo', {
           body: { 
-            imageBase64: imageBase64
+            imageBase64: compressedImage
           }
         });
         
@@ -380,7 +385,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {
       body: {
-        imageUrl: imageBase64,
+        imageUrl: compressedImage,  // Используем сжатое изображение
         recognitionType: type,
         allProducts: allProducts.map(p => ({
           barcode: p.barcode,
@@ -439,11 +444,15 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setNotification('🔍 Распознавание...');
           
           try {
+            // Сжимаем изображения перед отправкой
+            const compressedFront = await compressForAI(tempFrontPhoto);
+            const compressedBarcode = await compressForAI(image);
+            
             // Отправляем оба фото на распознавание
             const { data, error } = await supabase.functions.invoke('recognize-product-by-photo', {
               body: { 
-                frontPhoto: tempFrontPhoto,
-                barcodePhoto: image
+                frontPhoto: compressedFront,
+                barcodePhoto: compressedBarcode
               }
             });
 
@@ -503,8 +512,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         setNotification('🔍 Распознавание дат...');
         
         try {
+          // Сжимаем изображение перед отправкой
+          const compressedImage = await compressForAI(image);
+          
           const { data, error } = await supabase.functions.invoke('recognize-expiry-date', {
-            body: { imageBase64: image }
+            body: { imageBase64: compressedImage }
           });
 
           if (error) {
@@ -742,9 +754,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           {isProcessing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-              <div className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-full shadow-lg">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm">Распознавание...</span>
+              <div className="flex flex-col items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl shadow-lg min-w-[200px]">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="text-center space-y-0.5">
+                  <span className="text-sm font-medium block">Обработка...</span>
+                  <span className="text-[10px] opacity-90 block">Сжатие и отправка</span>
+                </div>
               </div>
             </div>
           )}

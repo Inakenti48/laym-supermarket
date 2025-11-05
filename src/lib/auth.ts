@@ -220,6 +220,31 @@ export const isAuthenticated = (role?: UserRole): boolean => {
   return user.role === role;
 };
 
+// Проверка, истекла ли сессия
+export const isSessionExpired = (): boolean => {
+  const loginTimeStr = localStorage.getItem(LOGIN_TIME_KEY);
+  if (!loginTimeStr) return true;
+  
+  const loginTime = parseInt(loginTimeStr);
+  const currentTime = Date.now();
+  const timePassed = currentTime - loginTime;
+  
+  return timePassed > SESSION_DURATION;
+};
+
+// Получить оставшееся время сессии в миллисекундах
+export const getSessionTimeRemaining = (): number => {
+  const loginTimeStr = localStorage.getItem(LOGIN_TIME_KEY);
+  if (!loginTimeStr) return 0;
+  
+  const loginTime = parseInt(loginTimeStr);
+  const currentTime = Date.now();
+  const timePassed = currentTime - loginTime;
+  const remaining = SESSION_DURATION - timePassed;
+  
+  return remaining > 0 ? remaining : 0;
+};
+
 export const hasRole = (role: UserRole): boolean => {
   return isAuthenticated(role);
 };

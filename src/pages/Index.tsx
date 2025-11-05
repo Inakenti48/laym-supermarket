@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
+import { isSessionExpired } from '@/lib/auth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
@@ -46,6 +47,25 @@ const Index = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Периодическая проверка истечения сессии (каждые 60 секунд)
+  useEffect(() => {
+    const checkSession = () => {
+      if (user && isSessionExpired()) {
+        console.log('⏰ Сессия истекла через 24 часа, автоматический выход');
+        toast.info('Сессия истекла. Пожалуйста, войдите снова');
+        handleLogout();
+      }
+    };
+
+    // Проверяем сразу
+    checkSession();
+
+    // Проверяем каждую минуту
+    const interval = setInterval(checkSession, 60000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogin = async (email: string, password: string) => {
     try {

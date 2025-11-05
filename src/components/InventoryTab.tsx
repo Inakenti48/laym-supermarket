@@ -882,7 +882,7 @@ export const InventoryTab = () => {
   // Удалена функция saveAllProducts - товары теперь сохраняются сразу при добавлении
 
   return (
-    <div className="flex gap-4 h-full">
+    <div className="space-y-4">
       {/* AI Product Recognition - только для админов */}
       {isAdmin && showAIScanner && (
         <div className="fixed inset-0 bg-background z-50">
@@ -929,7 +929,7 @@ export const InventoryTab = () => {
       />
 
       {/* Main Content */}
-      <div className="flex-1 space-y-3 md:space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
@@ -1255,14 +1255,16 @@ export const InventoryTab = () => {
         </div>
       </div>
 
-      {/* Pending Products List - Right Side */}
-      <PendingProductsList
-        products={pendingProducts}
-        onUpdateProduct={handleUpdatePendingProduct}
-        onRemoveProduct={handleRemovePendingProduct}
-        onSaveAll={handleSaveAllProducts}
-        onClearAll={handleClearAllProducts}
-      />
+      {/* Pending Products List - Below Form */}
+      <div className="mt-10">
+        <PendingProductsList
+          products={pendingProducts}
+          onUpdateProduct={handleUpdatePendingProduct}
+          onRemoveProduct={handleRemovePendingProduct}
+          onSaveAll={handleSaveAllProducts}
+          onClearAll={handleClearAllProducts}
+        />
+      </div>
     </div>
   );
 };

@@ -24,7 +24,7 @@ export const PendingProductsList = ({
   );
 
   return (
-    <Card className="w-80 flex flex-col h-full bg-muted/30">
+    <Card className="w-full bg-muted/30">
       <div className="p-6 border-b space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -54,7 +54,7 @@ export const PendingProductsList = ({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-6">
+      <div className="p-6 max-h-96 overflow-y-auto">
         {products.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
             <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
@@ -62,7 +62,7 @@ export const PendingProductsList = ({
             <p className="text-sm mt-2">Отсканируйте товары для добавления</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {products.map((product) => (
               <PendingProductItem
                 key={product.id}
@@ -73,7 +73,7 @@ export const PendingProductsList = ({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </Card>
   );
 };

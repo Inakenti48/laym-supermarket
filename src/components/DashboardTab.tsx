@@ -5,8 +5,17 @@ import { Button } from '@/components/ui/button';
 import { getAllProducts, getExpiringProducts, exportAllData } from '@/lib/storage';
 import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
+import { useProductsSync } from '@/hooks/useProductsSync';
 
 export const DashboardTab = () => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Realtime синхронизация товаров
+  useProductsSync(() => {
+    // При изменении товаров перезагружаем статистику
+    setRefreshTrigger(prev => prev + 1);
+  });
+
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalProducts: 0,
@@ -68,7 +77,7 @@ export const DashboardTab = () => {
     const interval = setInterval(calculateStats, 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshTrigger]); // Добавляем refreshTrigger как зависимость
 
   const statCards = [
     {

@@ -19,10 +19,14 @@ import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } fr
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useProductsSync } from '@/hooks/useProductsSync';
 
 export const InventoryTab = () => {
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
+
+  // Realtime синхронизация товаров
+  useProductsSync();
   
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -109,37 +113,6 @@ export const InventoryTab = () => {
     };
     loadPendingProducts();
 
-    // Подписка на реалтайм обновления товаров и фото
-    const productsChannel = supabase
-      .channel('products_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products'
-        },
-        () => {
-          console.log('🔄 Products updated on another device');
-        }
-      )
-      .subscribe();
-
-    const imagesChannel = supabase
-      .channel('product_images_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'product_images'
-        },
-        () => {
-          console.log('🔄 Product images updated on another device');
-        }
-      )
-      .subscribe();
-
     const suppliersChannel = supabase
       .channel('suppliers_changes_inventory')
       .on(
@@ -205,8 +178,6 @@ export const InventoryTab = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(productsChannel);
-      supabase.removeChannel(imagesChannel);
       supabase.removeChannel(suppliersChannel);
       supabase.removeChannel(tempPhotosChannel);
     };

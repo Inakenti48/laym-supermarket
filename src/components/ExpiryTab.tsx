@@ -7,17 +7,22 @@ import { logSystemAction } from '@/lib/supabaseAuth';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
+import { useProductsSync } from '@/hooks/useProductsSync';
 
 export const ExpiryTab = () => {
   const [expiringProducts, setExpiringProducts] = useState<StoredProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadProducts = async () => {
+    const products = await getExpiringProducts(3);
+    setExpiringProducts(products);
+    setLoading(false);
+  };
+
+  // Realtime синхронизация товаров
+  useProductsSync(loadProducts);
+
   useEffect(() => {
-    const loadProducts = async () => {
-      const products = await getExpiringProducts(3);
-      setExpiringProducts(products);
-      setLoading(false);
-    };
     loadProducts();
   }, []);
 
@@ -44,8 +49,7 @@ export const ExpiryTab = () => {
         toast.success('Товар удален из прилавка');
         
         // Обновляем список
-        const updatedProducts = await getExpiringProducts(3);
-        setExpiringProducts(updatedProducts);
+        await loadProducts();
       }
     } catch (error) {
       toast.error('Не удалось удалить товар');

@@ -94,6 +94,59 @@ export const InventoryTab = () => {
     expiryDate: currentProduct.expiryDate
   }, isAdmin);
 
+  // Подписка на изменения product_form_state для real-time синхронизации полей
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const channel = supabase
+      .channel('product_form_sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_form_state'
+        },
+        async (payload) => {
+          console.log('📡 Form state change detected:', payload);
+          
+          // Получаем текущего пользователя
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          // Игнорируем свои собственные изменения
+          if (payload.new && 'user_id' in payload.new && payload.new.user_id === user.id) {
+            return;
+          }
+
+          // Применяем изменения из другой сессии
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const formData = payload.new as any;
+            
+            setCurrentProduct(prev => ({
+              ...prev,
+              barcode: formData.barcode || prev.barcode,
+              name: formData.name || prev.name,
+              category: formData.category || prev.category,
+              purchasePrice: formData.purchase_price?.toString() || prev.purchasePrice,
+              retailPrice: formData.retail_price?.toString() || prev.retailPrice,
+              quantity: formData.quantity?.toString() || prev.quantity,
+              unit: formData.unit || prev.unit,
+              expiryDate: formData.expiry_date || prev.expiryDate,
+              supplier: formData.supplier || prev.supplier,
+            }));
+
+            toast.info(`🔄 Данные обновлены из другой сессии (${formData.user_name})`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin]);
+
   useEffect(() => {
     const loadSuppliers = async () => {
       const loadedSuppliers = await getSuppliers();

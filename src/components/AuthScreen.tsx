@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Package, Loader2 } from 'lucide-react';
 import { signIn } from '@/lib/supabaseAuth';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface AuthScreenProps {
   onSuccess: () => void;
@@ -14,9 +16,11 @@ interface AuthScreenProps {
 export const AuthScreen = ({ onSuccess }: AuthScreenProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [login, setLogin] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
@@ -43,6 +47,50 @@ export const AuthScreen = ({ onSuccess }: AuthScreenProps) => {
     }
   };
 
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!login || !loginPassword) {
+      toast.error('Заполните логин и пароль');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.rpc('verify_login_credentials', {
+        _login: login,
+        _password: loginPassword
+      });
+
+      if (error || !data || data.length === 0) {
+        toast.error('Неверный логин или пароль');
+        setLoading(false);
+        return;
+      }
+
+      const userData = data[0];
+      if (userData.success) {
+        // Получаем сессию пользователя
+        const { data: authData, error: authError } = await supabase.auth.admin.getUserById(userData.user_id);
+        
+        if (!authError && authData) {
+          toast.success('Вход выполнен успешно');
+          onSuccess();
+        } else {
+          toast.error('Ошибка входа в систему');
+        }
+      } else {
+        toast.error('Неверный логин или пароль');
+      }
+    } catch (error: any) {
+      toast.error('Ошибка подключения');
+      console.error('Ошибка входа по логину:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-background to-secondary/20 flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
@@ -54,38 +102,82 @@ export const AuthScreen = ({ onSuccess }: AuthScreenProps) => {
           <p className="text-muted-foreground">Войдите в систему</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="example@mail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              autoComplete="email"
-            />
-          </div>
+        <Tabs defaultValue="login" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="login">По логину</TabsTrigger>
+            <TabsTrigger value="email">По Email</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="login">
+            <form onSubmit={handleLoginSubmit} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="login">Логин</Label>
+                <Input
+                  id="login"
+                  type="text"
+                  placeholder="admin"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  disabled={loading}
+                  autoComplete="username"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Пароль</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              autoComplete="current-password"
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Пароль</Label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+              </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Войти
-          </Button>
-        </form>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Войти
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="email">
+            <form onSubmit={handleEmailSubmit} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="example@mail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Пароль</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Войти
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
 
         <div className="text-center text-sm text-muted-foreground">
           <p>Для получения доступа обратитесь к администратору</p>

@@ -366,18 +366,24 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          login: string | null
+          password_hash: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          login?: string | null
+          password_hash?: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
+          login?: string | null
+          password_hash?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
@@ -425,6 +431,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      verify_login_credentials: {
+        Args: { _login: string; _password: string }
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+          success: boolean
+          user_id: string
+        }[]
       }
     }
     Enums: {

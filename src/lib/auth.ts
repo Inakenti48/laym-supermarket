@@ -157,7 +157,7 @@ export const login = async (
   return false;
 };
 
-export const logout = async () => {
+export const logout = async (preserveFormData: boolean = false) => {
   const user = getCurrentUser();
   if (user) {
     // Log without showing actual login credentials
@@ -183,7 +183,12 @@ export const logout = async () => {
     console.error('Ошибка выхода из Supabase:', error);
   }
   
+  // Очищаем только данные сессии, но НЕ очищаем данные форм
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LOGIN_TIME_KEY);
+  
+  // Данные форм (inventory_form_data и другие) остаются нетронутыми
+  console.log('✅ Выход выполнен, данные форм сохранены');
 };
 
 export const getCurrentUser = (): User | null => {

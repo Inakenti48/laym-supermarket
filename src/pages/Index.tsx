@@ -32,6 +32,7 @@ const Index = () => {
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
+  const [sessionTimeRemaining, setSessionTimeRemaining] = useState<string>('');
 
   useEffect(() => {
     // Проверка текущей сессии
@@ -63,6 +64,40 @@ const Index = () => {
 
     // Проверяем каждую минуту
     const interval = setInterval(checkSession, 60000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Обновление таймера оставшегося времени сессии
+  useEffect(() => {
+    const updateTimer = () => {
+      const loginTimeStr = localStorage.getItem('last_login_time');
+      if (!loginTimeStr) {
+        setSessionTimeRemaining('');
+        return;
+      }
+
+      const loginTime = parseInt(loginTimeStr);
+      const currentTime = Date.now();
+      const elapsed = currentTime - loginTime;
+      const remaining = (24 * 60 * 60 * 1000) - elapsed; // 24 часа в миллисекундах
+
+      if (remaining <= 0) {
+        setSessionTimeRemaining('Истекла');
+        return;
+      }
+
+      const hours = Math.floor(remaining / (1000 * 60 * 60));
+      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      
+      setSessionTimeRemaining(`${hours}ч ${minutes}м`);
+    };
+
+    // Обновляем сразу
+    updateTimer();
+
+    // Обновляем каждую минуту
+    const interval = setInterval(updateTimer, 60000);
 
     return () => clearInterval(interval);
   }, [user]);
@@ -161,6 +196,12 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {sessionTimeRemaining && (
+              <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 border border-border">
+                <span className="text-xs text-muted-foreground">Сессия:</span>
+                <span className="text-xs font-mono font-semibold">{sessionTimeRemaining}</span>
+              </div>
+            )}
             <DatabaseBackupButton />
             <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />

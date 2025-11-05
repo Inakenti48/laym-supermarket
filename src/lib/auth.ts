@@ -41,9 +41,9 @@ export const login = async (
     if (!cashierName || cashierName.trim() === '') {
       return false;
     }
-    isValid = username === '2030';
+    isValid = username === '1020';
   } else if (role === 'cashier2') {
-    isValid = username === '1111';
+    isValid = username === '2030';
   } else if (role === 'inventory') {
     isValid = username === '4050';
   } else if (role === 'employee') {

@@ -999,29 +999,29 @@ export const InventoryTab = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Add Product Form */}
-        <Card className="p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Добавить товар
+        <Card className="p-3 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+            <span className="truncate">Добавить товар</span>
           </h3>
 
           {showSuggestion && suggestedProduct && (
-            <div className="mb-4 p-3 bg-primary/10 border border-primary rounded-lg">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex-1">
-                  <p className="font-medium text-sm">Товар найден в базе!</p>
-                  <p className="text-xs text-muted-foreground mt-1">{suggestedProduct.name}</p>
+            <div className="mb-3 sm:mb-4 p-3 bg-primary/10 border border-primary rounded-lg">
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-xs sm:text-sm">Товар найден в базе!</p>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">{suggestedProduct.name}</p>
                   <div className="text-xs space-y-1 mt-2">
                     <div>Закуп: {suggestedProduct.purchasePrice}₽</div>
                     {isAdmin && <div>Розница: {suggestedProduct.retailPrice}₽</div>}
-                    <div>Категория: {suggestedProduct.category}</div>
+                    <div className="truncate">Категория: {suggestedProduct.category}</div>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={acceptSuggestion}>
+                <div className="flex gap-1 sm:gap-2 flex-shrink-0">
+                  <Button size="sm" variant="outline" onClick={acceptSuggestion} className="text-xs px-2">
                     Принять
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={rejectSuggestion}>
+                  <Button size="sm" variant="ghost" onClick={rejectSuggestion} className="px-2">
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1029,21 +1029,25 @@ export const InventoryTab = () => {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-3 sm:space-y-4">
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Штрихкод *</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                Штрихкод <span className="text-destructive">*</span>
+              </label>
               <Input
-                className="text-sm"
+                className="text-sm h-9 sm:h-10"
                 value={currentProduct.barcode}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
-                placeholder="Используйте сканер выше"
+                placeholder="Используйте сканер"
               />
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Название товара *</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                Название товара <span className="text-destructive">*</span>
+              </label>
               <Input
-                className="text-sm"
+                className="text-sm h-9 sm:h-10"
                 value={currentProduct.name}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, name: e.target.value })}
                 placeholder="Введите название"
@@ -1051,17 +1055,19 @@ export const InventoryTab = () => {
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Категория *</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                Категория <span className="text-destructive">*</span>
+              </label>
               <Input
-                className="text-sm"
+                className="text-sm h-9 sm:h-10"
                 value={currentProduct.category}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
-                placeholder="Например: Молочные продукты"
+                placeholder="Молочные продукты"
               />
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Поставщик</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Поставщик</label>
               <Select
                 value={currentProduct.supplier}
                 onValueChange={(value) => {
@@ -1072,15 +1078,15 @@ export const InventoryTab = () => {
                   }
                 }}
               >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Выберите поставщика" />
+                <SelectTrigger className="text-sm h-9 sm:h-10">
+                  <SelectValue placeholder="Выберите" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  <SelectItem value="__add_new__" className="text-primary font-medium">
-                    + Добавить нового поставщика
+                  <SelectItem value="__add_new__" className="text-primary font-medium text-xs sm:text-sm">
+                    + Добавить
                   </SelectItem>
                   {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name}>
+                    <SelectItem key={supplier.id} value={supplier.name} className="text-xs sm:text-sm">
                       {supplier.name}
                     </SelectItem>
                   ))}
@@ -1088,11 +1094,13 @@ export const InventoryTab = () => {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Закуп (₽) *</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                  Закуп (₽) <span className="text-destructive">*</span>
+                </label>
                 <Input
-                  className="text-sm"
+                  className="text-sm h-9 sm:h-10"
                   type="number"
                   step="0.01"
                   value={currentProduct.purchasePrice}
@@ -1102,9 +1110,11 @@ export const InventoryTab = () => {
               </div>
               {isAdmin && (
                 <div>
-                  <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Розница (₽) *</label>
+                  <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                    Розница (₽) <span className="text-destructive">*</span>
+                  </label>
                   <Input
-                    className="text-sm"
+                    className="text-sm h-9 sm:h-10"
                     type="number"
                     step="0.01"
                     value={currentProduct.retailPrice}
@@ -1115,11 +1125,13 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Количество *</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                  Кол-во <span className="text-destructive">*</span>
+                </label>
                 <Input
-                  className="text-sm"
+                  className="text-sm h-9 sm:h-10"
                   type="number"
                   step="0.01"
                   value={currentProduct.quantity}
@@ -1128,29 +1140,31 @@ export const InventoryTab = () => {
                 />
               </div>
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Единица *</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                  Единица <span className="text-destructive">*</span>
+                </label>
                 <Select
                   value={currentProduct.unit}
                   onValueChange={(value: 'шт' | 'кг') => 
                     setCurrentProduct({ ...currentProduct, unit: value })
                   }
                 >
-                  <SelectTrigger className="text-sm">
+                  <SelectTrigger className="text-sm h-9 sm:h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="шт">Штуки</SelectItem>
-                    <SelectItem value="кг">Килограммы</SelectItem>
+                    <SelectItem value="шт" className="text-xs sm:text-sm">Штуки</SelectItem>
+                    <SelectItem value="кг" className="text-xs sm:text-sm">Килограммы</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Срок годности</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Срок годности</label>
               <div className="flex gap-2">
                 <Input
-                  className="text-sm flex-1"
+                  className="text-sm flex-1 h-9 sm:h-10"
                   type="date"
                   value={currentProduct.expiryDate}
                   onChange={(e) => setCurrentProduct({ ...currentProduct, expiryDate: e.target.value })}
@@ -1161,34 +1175,35 @@ export const InventoryTab = () => {
                   size="icon"
                   onClick={handleRecognizeExpiry}
                   disabled={isRecognizingExpiry || photos.length === 0}
-                  title="AI распознавание срока годности"
+                  title="AI распознавание"
+                  className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
                 >
                   <CalendarClock className={`h-4 w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {photos.length > 0 ? 'Нажмите AI кнопку для распознавания дат' : 'Загрузите фото упаковки с датами'}
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                {photos.length > 0 ? 'Нажмите AI кнопку' : 'Загрузите фото'}
               </p>
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Фото товара (до 3 шт)</label>
+              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Фото товара (до 3)</label>
               <Input
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handlePhotoUpload}
-                className="text-sm"
+                className="text-xs sm:text-sm h-9 sm:h-10"
               />
               {photos.length > 0 && (
                 <div className="flex gap-2 mt-2 flex-wrap">
                   {photos.map((photo, idx) => (
                     <div key={idx} className="relative">
-                      <img src={photo} alt={`Preview ${idx + 1}`} className="h-16 w-16 object-cover rounded border" />
+                      <img src={photo} alt={`Preview ${idx + 1}`} className="h-14 w-14 sm:h-16 sm:w-16 object-cover rounded border" />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-2 -right-2 h-5 w-5"
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full"
                         onClick={() => removePhoto(idx)}
                       >
                         <X className="h-3 w-3" />
@@ -1199,7 +1214,7 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <Button onClick={addProduct} className="w-full">
+            <Button onClick={addProduct} className="w-full h-10 sm:h-11 text-sm sm:text-base">
               <Plus className="h-4 w-4 mr-2" />
               Сохранить товар
             </Button>

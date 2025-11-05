@@ -11,6 +11,8 @@ interface User {
 
 const STORAGE_KEY = 'inventory_user';
 const LOGS_KEY = 'system_logs';
+const LOGIN_TIME_KEY = 'last_login_time';
+const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
 
 // SHA-256 hash function
 async function sha256(message: string): Promise<string> {
@@ -59,6 +61,9 @@ export const login = async (
   if (isValid) {
     const user: User = { role, username, cashierName, employeeId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    
+    // Сохраняем время входа
+    localStorage.setItem(LOGIN_TIME_KEY, Date.now().toString());
     
     // Создаем сессию в Supabase для работы с базой данных
     try {
@@ -184,6 +189,23 @@ export const logout = async () => {
 export const getCurrentUser = (): User | null => {
   const userStr = localStorage.getItem(STORAGE_KEY);
   if (!userStr) return null;
+  
+  // Проверяем время последнего входа
+  const loginTimeStr = localStorage.getItem(LOGIN_TIME_KEY);
+  if (loginTimeStr) {
+    const loginTime = parseInt(loginTimeStr);
+    const currentTime = Date.now();
+    const timePassed = currentTime - loginTime;
+    
+    // Если прошло больше 24 часов, автоматически выходим
+    if (timePassed > SESSION_DURATION) {
+      console.log('⏰ Сессия истекла (прошло больше 24 часов), требуется повторный вход');
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LOGIN_TIME_KEY);
+      return null;
+    }
+  }
+  
   try {
     return JSON.parse(userStr);
   } catch {

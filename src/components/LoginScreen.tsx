@@ -46,13 +46,6 @@ export const LoginScreen = ({ onLogin }: LoginScreenProps) => {
                   autoFocus
                 />
               </div>
-              <div className="text-xs text-muted-foreground mt-3 space-y-1 bg-muted/50 p-3 rounded-md">
-                <p className="font-medium mb-2">Пароли для входа:</p>
-                <p>• Админ: <span className="font-mono">8080</span></p>
-                <p>• Склад: <span className="font-mono">4050</span></p>
-                <p>• Касса 1: <span className="font-mono">1020</span></p>
-                <p>• Касса 2: <span className="font-mono">2030</span></p>
-              </div>
             </div>
             <Button type="submit" className="w-full h-11 gap-2 text-base">
               <LogIn className="w-5 h-5" />

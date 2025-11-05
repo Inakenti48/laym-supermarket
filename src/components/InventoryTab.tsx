@@ -412,8 +412,22 @@ export const InventoryTab = () => {
     setPendingProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
 
-  const handleRemovePendingProduct = (id: string) => {
+  const handleRemovePendingProduct = async (id: string) => {
     setPendingProducts(prev => prev.filter(p => p.id !== id));
+    
+    // Также удаляем из временной таблицы
+    try {
+      const { error } = await supabase
+        .from('vremenno_product_foto')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Ошибка удаления из временной таблицы:', error);
+      }
+    } catch (err) {
+      console.error('Ошибка при удалении:', err);
+    }
   };
 
   const handleSaveAllProducts = async () => {
@@ -438,10 +452,16 @@ export const InventoryTab = () => {
         return;
       }
 
+      const totalProducts = pendingProducts.length;
+      toast.info(`📦 Начинаем сохранение ${totalProducts} товаров...`);
+
       let successCount = 0;
       let errorCount = 0;
+      const savedProductIds: string[] = [];
 
-      for (const product of pendingProducts) {
+      for (let i = 0; i < pendingProducts.length; i++) {
+        const product = pendingProducts[i];
+        
         try {
           // Сохраняем фотографии - собираем все уникальные фото
           const allPhotos = [...new Set([
@@ -450,7 +470,7 @@ export const InventoryTab = () => {
             ...(product.barcodePhoto ? [product.barcodePhoto] : [])
           ])];
 
-          console.log(`📸 Сохранение ${allPhotos.length} фото для товара ${product.name}`);
+          console.log(`📸 [${i + 1}/${totalProducts}] Сохранение ${allPhotos.length} фото для товара ${product.name}`);
 
           for (const photoUrl of allPhotos) {
             try {
@@ -486,23 +506,47 @@ export const InventoryTab = () => {
           
           if (saved) {
             successCount++;
+            savedProductIds.push(product.id);
             addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
+            console.log(`✅ [${i + 1}/${totalProducts}] Товар "${product.name}" сохранен`);
           } else {
             errorCount++;
+            console.error(`❌ [${i + 1}/${totalProducts}] Не удалось сохранить "${product.name}"`);
           }
         } catch (error) {
-          console.error('Ошибка сохранения товара:', error);
+          console.error(`❌ [${i + 1}/${totalProducts}] Ошибка сохранения товара "${product.name}":`, error);
           errorCount++;
         }
       }
 
+      // Удаляем успешно сохраненные товары из временной таблицы
+      if (savedProductIds.length > 0) {
+        console.log(`🗑️ Удаление ${savedProductIds.length} товаров из временной таблицы...`);
+        
+        for (const productId of savedProductIds) {
+          try {
+            const { error: deleteError } = await supabase
+              .from('vremenno_product_foto')
+              .delete()
+              .eq('id', productId);
+            
+            if (deleteError) {
+              console.error('Ошибка удаления из временной таблицы:', deleteError);
+            }
+          } catch (err) {
+            console.error('Ошибка при удалении:', err);
+          }
+        }
+      }
+
+      // Очищаем список pending products
       if (successCount > 0) {
-        toast.success(`✅ Сохранено товаров: ${successCount}`);
+        toast.success(`✅ Сохранено товаров: ${successCount} из ${totalProducts}`);
         setPendingProducts([]);
       }
       
       if (errorCount > 0) {
-        toast.error(`❌ Ошибок: ${errorCount}`);
+        toast.error(`❌ Ошибок при сохранении: ${errorCount} из ${totalProducts}`);
       }
     } catch (error: any) {
       console.error('Ошибка массового сохранения:', error);
@@ -510,8 +554,26 @@ export const InventoryTab = () => {
     }
   };
 
-  const handleClearAllProducts = () => {
+  const handleClearAllProducts = async () => {
     if (confirm(`Очистить очередь из ${pendingProducts.length} товаров?`)) {
+      // Удаляем все товары из временной таблицы
+      try {
+        const productIds = pendingProducts.map(p => p.id);
+        
+        if (productIds.length > 0) {
+          const { error } = await supabase
+            .from('vremenno_product_foto')
+            .delete()
+            .in('id', productIds);
+          
+          if (error) {
+            console.error('Ошибка очистки временной таблицы:', error);
+          }
+        }
+      } catch (err) {
+        console.error('Ошибка при очистке:', err);
+      }
+      
       setPendingProducts([]);
       toast.info('Очередь очищена');
     }

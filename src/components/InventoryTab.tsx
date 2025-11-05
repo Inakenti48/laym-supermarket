@@ -20,6 +20,7 @@ import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductsSync } from '@/hooks/useProductsSync';
+import { useFormSync } from '@/hooks/useFormSync';
 
 export const InventoryTab = () => {
   const currentUser = getCurrentUser();
@@ -27,7 +28,7 @@ export const InventoryTab = () => {
 
   // Realtime синхронизация товаров
   useProductsSync();
-  
+
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -42,7 +43,7 @@ export const InventoryTab = () => {
   const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
-  
+
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
     if (saved) {
@@ -79,6 +80,19 @@ export const InventoryTab = () => {
   useEffect(() => {
     localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
   }, [currentProduct]);
+
+  // Realtime синхронизация формы между админами
+  const { otherUsersStates } = useFormSync({
+    barcode: currentProduct.barcode,
+    name: currentProduct.name,
+    category: currentProduct.category,
+    supplier: currentProduct.supplier,
+    purchasePrice: currentProduct.purchasePrice,
+    retailPrice: currentProduct.retailPrice,
+    quantity: currentProduct.quantity,
+    unit: currentProduct.unit,
+    expiryDate: currentProduct.expiryDate
+  }, isAdmin);
 
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -1004,6 +1018,20 @@ export const InventoryTab = () => {
           )}
 
           <div className="space-y-2 md:space-y-3">
+            {/* Индикатор других пользователей */}
+            {isAdmin && otherUsersStates.length > 0 && (
+              <div className="p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-[10px] md:text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+                  👥 {otherUsersStates.length} админ(ов) заполняют форму:
+                </p>
+                {otherUsersStates.map((state, idx) => (
+                  <div key={state.userId} className="text-[9px] md:text-[10px] text-blue-600 dark:text-blue-400">
+                    • {state.userName}: {state.name || state.barcode || 'начинает заполнение...'}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div>
               <label className="text-[11px] md:text-xs font-medium mb-1 block">
                 Штрихкод <span className="text-destructive">*</span>
@@ -1014,6 +1042,11 @@ export const InventoryTab = () => {
                 onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
                 placeholder="Сканируйте"
               />
+              {isAdmin && otherUsersStates.some(s => s.barcode) && (
+                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  Другие: {otherUsersStates.filter(s => s.barcode).map(s => s.barcode).join(', ')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -1026,6 +1059,11 @@ export const InventoryTab = () => {
                 onChange={(e) => setCurrentProduct({ ...currentProduct, name: e.target.value })}
                 placeholder="Название"
               />
+              {isAdmin && otherUsersStates.some(s => s.name) && (
+                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  Другие: {otherUsersStates.filter(s => s.name).map(s => s.name).join(', ')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -1038,6 +1076,11 @@ export const InventoryTab = () => {
                 onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
                 placeholder="Категория"
               />
+              {isAdmin && otherUsersStates.some(s => s.category) && (
+                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  Другие: {otherUsersStates.filter(s => s.category).map(s => s.category).join(', ')}
+                </p>
+              )}
             </div>
 
             <div>
@@ -1066,38 +1109,53 @@ export const InventoryTab = () => {
                   ))}
                 </SelectContent>
               </Select>
+              {isAdmin && otherUsersStates.some(s => s.supplier) && (
+                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  Другие: {otherUsersStates.filter(s => s.supplier).map(s => s.supplier).join(', ')}
+                </p>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5 md:gap-2">
+            {/* Одна колонка на мобильных для цен */}
+            <div>
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                Закуп (₽) <span className="text-destructive">*</span>
+              </label>
+              <Input
+                className="text-xs md:text-sm h-8 md:h-9"
+                type="number"
+                step="0.01"
+                value={currentProduct.purchasePrice}
+                onChange={(e) => setCurrentProduct({ ...currentProduct, purchasePrice: e.target.value })}
+                placeholder="0"
+              />
+              {isAdmin && otherUsersStates.some(s => s.purchasePrice) && (
+                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                  Другие: {otherUsersStates.filter(s => s.purchasePrice).map(s => s.purchasePrice).join(', ')}₽
+                </p>
+              )}
+            </div>
+
+            {isAdmin && (
               <div>
                 <label className="text-[11px] md:text-xs font-medium mb-1 block">
-                  Закуп (₽) <span className="text-destructive">*</span>
+                  Розница (₽) <span className="text-destructive">*</span>
                 </label>
                 <Input
                   className="text-xs md:text-sm h-8 md:h-9"
                   type="number"
                   step="0.01"
-                  value={currentProduct.purchasePrice}
-                  onChange={(e) => setCurrentProduct({ ...currentProduct, purchasePrice: e.target.value })}
+                  value={currentProduct.retailPrice}
+                  onChange={(e) => setCurrentProduct({ ...currentProduct, retailPrice: e.target.value })}
                   placeholder="0"
                 />
+                {otherUsersStates.some(s => s.retailPrice) && (
+                  <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                    Другие: {otherUsersStates.filter(s => s.retailPrice).map(s => s.retailPrice).join(', ')}₽
+                  </p>
+                )}
               </div>
-              {isAdmin && (
-                <div>
-                  <label className="text-[11px] md:text-xs font-medium mb-1 block">
-                    Розница (₽) <span className="text-destructive">*</span>
-                  </label>
-                  <Input
-                    className="text-xs md:text-sm h-8 md:h-9"
-                    type="number"
-                    step="0.01"
-                    value={currentProduct.retailPrice}
-                    onChange={(e) => setCurrentProduct({ ...currentProduct, retailPrice: e.target.value })}
-                    placeholder="0"
-                  />
-                </div>
-              )}
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-1.5 md:gap-2">
               <div>

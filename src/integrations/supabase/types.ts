@@ -92,6 +92,57 @@ export type Database = {
         }
         Relationships: []
       }
+      product_form_state: {
+        Row: {
+          barcode: string | null
+          category: string | null
+          created_at: string | null
+          expiry_date: string | null
+          id: string
+          last_updated: string | null
+          name: string | null
+          purchase_price: number | null
+          quantity: number | null
+          retail_price: number | null
+          supplier: string | null
+          unit: string | null
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          barcode?: string | null
+          category?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          last_updated?: string | null
+          name?: string | null
+          purchase_price?: number | null
+          quantity?: number | null
+          retail_price?: number | null
+          supplier?: string | null
+          unit?: string | null
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          barcode?: string | null
+          category?: string | null
+          created_at?: string | null
+          expiry_date?: string | null
+          id?: string
+          last_updated?: string | null
+          name?: string | null
+          purchase_price?: number | null
+          quantity?: number | null
+          retail_price?: number | null
+          supplier?: string | null
+          unit?: string | null
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
       product_images: {
         Row: {
           barcode: string
@@ -367,6 +418,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_form_states: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

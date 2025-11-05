@@ -1,8 +1,9 @@
-import { X, Edit2, Check } from 'lucide-react';
+import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useState } from 'react';
 
 export interface PendingProduct {
@@ -30,6 +31,35 @@ interface PendingProductItemProps {
 export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProductItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState(product);
+  const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+
+  // Собираем все фото в один массив
+  const allPhotos = [
+    ...(product.frontPhoto ? [product.frontPhoto] : []),
+    ...(product.barcodePhoto ? [product.barcodePhoto] : []),
+    ...product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto)
+  ];
+
+  const handlePhotoClick = (photo: string) => {
+    const index = allPhotos.indexOf(photo);
+    setCurrentPhotoIndex(index);
+    setEnlargedPhoto(photo);
+  };
+
+  const handleNextPhoto = () => {
+    if (currentPhotoIndex < allPhotos.length - 1) {
+      setCurrentPhotoIndex(currentPhotoIndex + 1);
+      setEnlargedPhoto(allPhotos[currentPhotoIndex + 1]);
+    }
+  };
+
+  const handlePrevPhoto = () => {
+    if (currentPhotoIndex > 0) {
+      setCurrentPhotoIndex(currentPhotoIndex - 1);
+      setEnlargedPhoto(allPhotos[currentPhotoIndex - 1]);
+    }
+  };
 
   const handleSave = () => {
     onUpdate(product.id, editedProduct);
@@ -100,19 +130,40 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
               {(product.frontPhoto || product.barcodePhoto || product.photos.length > 0) && (
                 <div className="flex gap-1 mt-2 flex-wrap">
                   {product.frontPhoto && (
-                    <div className="relative">
+                    <div 
+                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
+                      onClick={() => handlePhotoClick(product.frontPhoto!)}
+                    >
                       <img src={product.frontPhoto} alt="Лицевая" className="w-12 h-12 object-cover rounded border-2 border-green-500" />
                       <div className="absolute -top-1 -left-1 bg-green-500 text-white text-xs px-1 rounded">Л</div>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
+                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
                     </div>
                   )}
                   {product.barcodePhoto && (
-                    <div className="relative">
+                    <div 
+                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
+                      onClick={() => handlePhotoClick(product.barcodePhoto!)}
+                    >
                       <img src={product.barcodePhoto} alt="Штрихкод" className="w-12 h-12 object-cover rounded border-2 border-blue-500" />
                       <div className="absolute -top-1 -left-1 bg-blue-500 text-white text-xs px-1 rounded">Ш</div>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
+                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
                     </div>
                   )}
                   {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (
-                    <img key={idx} src={photo} alt={`Фото ${idx + 1}`} className="w-12 h-12 object-cover rounded" />
+                    <div 
+                      key={idx}
+                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
+                      onClick={() => handlePhotoClick(photo)}
+                    >
+                      <img src={photo} alt={`Фото ${idx + 1}`} className="w-12 h-12 object-cover rounded" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
+                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -134,6 +185,62 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
           </Button>
         </div>
       </div>
+
+      {/* Dialog для увеличенного просмотра фото */}
+      <Dialog open={enlargedPhoto !== null} onOpenChange={(open) => !open && setEnlargedPhoto(null)}>
+        <DialogContent className="max-w-4xl w-full p-2">
+          <div className="relative">
+            <img 
+              src={enlargedPhoto || ''} 
+              alt="Увеличенное фото" 
+              className="w-full h-auto max-h-[80vh] object-contain rounded"
+            />
+            
+            {/* Навигация между фото */}
+            {allPhotos.length > 1 && (
+              <>
+                {currentPhotoIndex > 0 && (
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute left-2 top-1/2 -translate-y-1/2"
+                    onClick={handlePrevPhoto}
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                )}
+                {currentPhotoIndex < allPhotos.length - 1 && (
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    onClick={handleNextPhoto}
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                )}
+                
+                {/* Индикатор текущего фото */}
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+                  {currentPhotoIndex + 1} / {allPhotos.length}
+                </div>
+              </>
+            )}
+
+            {/* Метки для типа фото */}
+            {enlargedPhoto === product.frontPhoto && (
+              <div className="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded">
+                Лицевая сторона
+              </div>
+            )}
+            {enlargedPhoto === product.barcodePhoto && (
+              <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded">
+                Штрихкод
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

@@ -97,14 +97,23 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
                 {product.retailPrice && <p>Розница: {product.retailPrice}₽</p>}
                 {product.quantity && <p>Кол-во: {product.quantity} {product.unit}</p>}
               </div>
-              {(product.frontPhoto || product.barcodePhoto) && (
-                <div className="flex gap-1 mt-2">
+              {(product.frontPhoto || product.barcodePhoto || product.photos.length > 0) && (
+                <div className="flex gap-1 mt-2 flex-wrap">
                   {product.frontPhoto && (
-                    <img src={product.frontPhoto} alt="Лицевая" className="w-12 h-12 object-cover rounded" />
+                    <div className="relative">
+                      <img src={product.frontPhoto} alt="Лицевая" className="w-12 h-12 object-cover rounded border-2 border-green-500" />
+                      <div className="absolute -top-1 -left-1 bg-green-500 text-white text-xs px-1 rounded">Л</div>
+                    </div>
                   )}
                   {product.barcodePhoto && (
-                    <img src={product.barcodePhoto} alt="Штрихкод" className="w-12 h-12 object-cover rounded" />
+                    <div className="relative">
+                      <img src={product.barcodePhoto} alt="Штрихкод" className="w-12 h-12 object-cover rounded border-2 border-blue-500" />
+                      <div className="absolute -top-1 -left-1 bg-blue-500 text-white text-xs px-1 rounded">Ш</div>
+                    </div>
                   )}
+                  {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (
+                    <img key={idx} src={photo} alt={`Фото ${idx + 1}`} className="w-12 h-12 object-cover rounded" />
+                  ))}
                 </div>
               )}
             </>

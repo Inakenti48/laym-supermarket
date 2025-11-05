@@ -149,13 +149,15 @@ export const InventoryTab = () => {
     if (photoStep === 'front' && barcodeData.capturedImage) {
       setTempFrontPhoto(barcodeData.capturedImage);
       setPhotoStep('barcode');
-      toast.info('📸 Теперь сфотографируйте штрих-код');
+      setShowAIScanner(false);
+      toast.info('📸 Отлично! Теперь нажмите кнопку "AI Сканирование" снова и сфотографируйте штрих-код');
       return;
     }
     
     if (photoStep === 'barcode' && barcodeData.capturedImage) {
       setTempBarcodePhoto(barcodeData.capturedImage);
       setPhotoStep('none');
+      setShowAIScanner(false);
     }
     
     // Сохраняем capturedImage во временное состояние
@@ -163,15 +165,27 @@ export const InventoryTab = () => {
       setCapturedImage(barcodeData.capturedImage);
     }
     
-    // Сохраняем фото в постоянную базу если есть название и изображение
-    if (barcodeData.name && (barcodeData.photoUrl || barcodeData.capturedImage || tempFrontPhoto)) {
-      const imageToSave = barcodeData.photoUrl || barcodeData.capturedImage || tempFrontPhoto;
-      if (imageToSave) {
-        console.log('💾 Saving product photo to database...');
+    // Собираем все фотографии
+    const allPhotos: string[] = [];
+    if (tempFrontPhoto) allPhotos.push(tempFrontPhoto);
+    if (tempBarcodePhoto || barcodeData.capturedImage) {
+      const barcodeImg = tempBarcodePhoto || barcodeData.capturedImage;
+      if (barcodeImg && !allPhotos.includes(barcodeImg)) {
+        allPhotos.push(barcodeImg);
+      }
+    }
+    if (barcodeData.photoUrl && !allPhotos.includes(barcodeData.photoUrl)) {
+      allPhotos.push(barcodeData.photoUrl);
+    }
+    
+    // Сохраняем все фото в постоянную базу если есть название
+    if (barcodeData.name && allPhotos.length > 0) {
+      console.log(`💾 Saving ${allPhotos.length} product photos to database...`);
+      for (const photoUrl of allPhotos) {
         const saved = await saveProductImage(
           sanitizedBarcode || `no-barcode-${Date.now()}`,
           barcodeData.name,
-          imageToSave
+          photoUrl
         );
         if (saved) {
           console.log('✅ Photo saved successfully');
@@ -196,9 +210,9 @@ export const InventoryTab = () => {
       unit: 'шт',
       expiryDate: '',
       supplier: '',
-      photos: [],
-      frontPhoto: tempFrontPhoto || barcodeData.frontPhoto,
-      barcodePhoto: tempBarcodePhoto || barcodeData.barcodePhoto || barcodeData.capturedImage,
+      photos: allPhotos,
+      frontPhoto: tempFrontPhoto || undefined,
+      barcodePhoto: (tempBarcodePhoto || barcodeData.capturedImage) || undefined,
     };
 
     // Если есть штрихкод, ищем в базе для автозаполнения
@@ -209,19 +223,23 @@ export const InventoryTab = () => {
         newPendingProduct.purchasePrice = existing.purchasePrice.toString();
         newPendingProduct.retailPrice = existing.retailPrice.toString();
         newPendingProduct.unit = existing.unit;
-        newPendingProduct.photos = existing.photos;
+        // Объединяем фото из базы с новыми фото
+        const existingPhotos = existing.photos || [];
+        newPendingProduct.photos = [...new Set([...allPhotos, ...existingPhotos])];
         toast.info('✅ Товар найден в базе, цены автозаполнены');
       }
     }
 
     setPendingProducts(prev => [...prev, newPendingProduct]);
+    
+    // Очищаем временные фото после добавления в очередь
     setTempFrontPhoto('');
     setTempBarcodePhoto('');
     
     if (barcodeData.name) {
-      toast.success(`Добавлен в очередь: ${barcodeData.name}`);
+      toast.success(`📦 Добавлен в очередь: ${barcodeData.name}`);
     } else if (sanitizedBarcode) {
-      toast.success(`Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
+      toast.success(`📦 Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
     }
   };
 
@@ -305,17 +323,25 @@ export const InventoryTab = () => {
 
       for (const product of pendingProducts) {
         try {
-          // Сохраняем фотографии
-          const allPhotos = [...product.photos];
-          if (product.frontPhoto) allPhotos.push(product.frontPhoto);
-          if (product.barcodePhoto) allPhotos.push(product.barcodePhoto);
+          // Сохраняем фотографии - собираем все уникальные фото
+          const allPhotos = [...new Set([
+            ...product.photos,
+            ...(product.frontPhoto ? [product.frontPhoto] : []),
+            ...(product.barcodePhoto ? [product.barcodePhoto] : [])
+          ])];
+
+          console.log(`📸 Сохранение ${allPhotos.length} фото для товара ${product.name}`);
 
           for (const photoUrl of allPhotos) {
-            await saveProductImage(
-              product.barcode || `product-${Date.now()}`,
-              product.name,
-              photoUrl
-            );
+            try {
+              await saveProductImage(
+                product.barcode || `product-${Date.now()}`,
+                product.name,
+                photoUrl
+              );
+            } catch (err) {
+              console.error('Ошибка сохранения фото:', err);
+            }
           }
 
           // Сохраняем товар
@@ -637,15 +663,25 @@ export const InventoryTab = () => {
             <>
               <Button 
                 onClick={() => {
-                  setPhotoStep('front');
-                  setAiScanMode('product');
-                  setShowAIScanner(true);
-                  toast.info('📸 Сфотографируйте лицевую сторону товара');
-                }} 
-                variant="outline"
+                  if (photoStep === 'barcode') {
+                    // Продолжаем со второго фото
+                    setAiScanMode('barcode');
+                    setShowAIScanner(true);
+                    toast.info('📸 Сфотографируйте штрих-код товара');
+                  } else {
+                    // Начинаем с первого фото
+                    setPhotoStep('front');
+                    setAiScanMode('product');
+                    setShowAIScanner(true);
+                    toast.info('📸 Шаг 1: Сфотографируйте лицевую сторону товара');
+                  }
+                }}
+                variant={photoStep === 'barcode' ? 'default' : 'outline'}
               >
                 <Camera className="h-4 w-4 mr-2" />
-                AI Сканирование (2 фото)
+                {photoStep === 'none' && 'AI Сканирование (2 фото)'}
+                {photoStep === 'front' && 'Шаг 1/2: Лицевая сторона'}
+                {photoStep === 'barcode' && 'Шаг 2/2: Штрих-код'}
               </Button>
               <Button onClick={() => setShowImportDialog(true)} variant="outline">
                 <Upload className="h-4 w-4 mr-2" />

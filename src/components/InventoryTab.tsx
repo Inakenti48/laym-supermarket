@@ -83,6 +83,32 @@ export const InventoryTab = () => {
     };
     loadSuppliers();
 
+    // Загрузка pending products из Supabase
+    const loadPendingProducts = async () => {
+      const { data, error } = await supabase
+        .from('vremenno_product_foto')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        const loaded: PendingProduct[] = data.map(item => ({
+          id: item.id,
+          barcode: item.barcode,
+          name: item.product_name,
+          category: '',
+          purchasePrice: '',
+          retailPrice: '',
+          quantity: '1',
+          unit: 'шт',
+          photos: [item.image_url],
+          frontPhoto: item.image_url,
+        }));
+        setPendingProducts(loaded);
+        console.log(`📦 Loaded ${loaded.length} pending products from database`);
+      }
+    };
+    loadPendingProducts();
+
     // Подписка на реалтайм обновления товаров и фото
     const productsChannel = supabase
       .channel('products_changes')
@@ -129,10 +155,60 @@ export const InventoryTab = () => {
       )
       .subscribe();
 
+    // Подписка на реалтайм обновления временных фото товаров
+    const tempPhotosChannel = supabase
+      .channel('temp_photos_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'vremenno_product_foto'
+        },
+        (payload) => {
+          console.log('🔄 New pending product added on another device');
+          const newItem = payload.new as any;
+          const newProduct: PendingProduct = {
+            id: newItem.id,
+            barcode: newItem.barcode,
+            name: newItem.product_name,
+            category: '',
+            purchasePrice: '',
+            retailPrice: '',
+            quantity: '1',
+            unit: 'шт',
+            photos: [newItem.image_url],
+            frontPhoto: newItem.image_url,
+          };
+          setPendingProducts(prev => {
+            // Проверяем, не существует ли уже такой товар
+            if (prev.some(p => p.id === newProduct.id)) {
+              return prev;
+            }
+            return [newProduct, ...prev];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'vremenno_product_foto'
+        },
+        (payload) => {
+          console.log('🔄 Pending product deleted on another device');
+          const deletedId = payload.old.id;
+          setPendingProducts(prev => prev.filter(p => p.id !== deletedId));
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(productsChannel);
       supabase.removeChannel(imagesChannel);
       supabase.removeChannel(suppliersChannel);
+      supabase.removeChannel(tempPhotosChannel);
     };
   }, []);
 

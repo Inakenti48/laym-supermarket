@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -37,6 +37,7 @@ export const InventoryTab = () => {
   const [photoStep, setPhotoStep] = useState<'front' | 'barcode' | 'none'>('none');
   const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
+  const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
   
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
@@ -286,6 +287,49 @@ export const InventoryTab = () => {
 
   const removePhoto = (index: number) => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRecognizeExpiry = async () => {
+    if (photos.length === 0) {
+      toast.error('Загрузите фото упаковки с датами');
+      return;
+    }
+
+    setIsRecognizingExpiry(true);
+    try {
+      // Используем последнее загруженное фото
+      const imageBase64 = photos[photos.length - 1];
+      
+      const { data: functionData, error: functionError } = await supabase.functions.invoke('recognize-expiry-date', {
+        body: { imageBase64 }
+      });
+
+      if (functionError) {
+        console.error('Ошибка функции:', functionError);
+        throw functionError;
+      }
+
+      if (!functionData?.success) {
+        throw new Error(functionData?.error || 'Не удалось распознать даты');
+      }
+
+      const { manufacturingDate, expiryDate, confidence } = functionData;
+
+      if (expiryDate) {
+        setCurrentProduct({ ...currentProduct, expiryDate });
+        toast.success(`✅ Срок годности: ${expiryDate}${manufacturingDate ? `, изготовлено: ${manufacturingDate}` : ''} (точность: ${Math.round(confidence * 100)}%)`);
+      } else if (manufacturingDate) {
+        toast.info(`ℹ️ Найдена только дата изготовления: ${manufacturingDate}`);
+      } else {
+        toast.warning('⚠️ Даты не найдены на изображении. Попробуйте сфотографировать упаковку более четко.');
+      }
+
+    } catch (error: any) {
+      console.error('Ошибка распознавания срока годности:', error);
+      toast.error('Ошибка при распознавании дат. Попробуйте еще раз.');
+    } finally {
+      setIsRecognizingExpiry(false);
+    }
   };
 
   const handleUpdatePendingProduct = (id: string, updates: Partial<PendingProduct>) => {
@@ -844,12 +888,27 @@ export const InventoryTab = () => {
 
             <div>
               <label className="text-xs sm:text-sm font-medium mb-1 sm:mb-2 block">Срок годности</label>
-              <Input
-                className="text-sm"
-                type="date"
-                value={currentProduct.expiryDate}
-                onChange={(e) => setCurrentProduct({ ...currentProduct, expiryDate: e.target.value })}
-              />
+              <div className="flex gap-2">
+                <Input
+                  className="text-sm flex-1"
+                  type="date"
+                  value={currentProduct.expiryDate}
+                  onChange={(e) => setCurrentProduct({ ...currentProduct, expiryDate: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleRecognizeExpiry}
+                  disabled={isRecognizingExpiry || photos.length === 0}
+                  title="AI распознавание срока годности"
+                >
+                  <CalendarClock className={`h-4 w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {photos.length > 0 ? 'Нажмите AI кнопку для распознавания дат' : 'Загрузите фото упаковки с датами'}
+              </p>
             </div>
 
             <div>

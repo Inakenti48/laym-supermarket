@@ -18,3 +18,6 @@ verify_jwt = false  # Called by cron job, validated internally
 
 [functions.bulk-import-products]
 verify_jwt = true
+
+[functions.recognize-expiry-date]
+verify_jwt = true

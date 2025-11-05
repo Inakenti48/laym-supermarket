@@ -97,38 +97,40 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
   };
 
   return (
-    <Card className="p-4 space-y-3">
+    <Card className="p-3 md:p-4 space-y-2 md:space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Scan className="w-5 h-5" />
-          <h3 className="font-semibold text-sm">Сканер штрихкодов</h3>
+        <div className="flex items-center gap-1.5 md:gap-2 min-w-0 flex-1">
+          <Scan className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+          <h3 className="font-semibold text-xs md:text-sm truncate">Сканер</h3>
         </div>
         {scannerConnected && (
-          <div className="flex items-center gap-1 text-xs text-green-600">
-            <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
-            Подключен
+          <div className="flex items-center gap-1 text-[10px] md:text-xs text-green-600 dark:text-green-400 flex-shrink-0">
+            <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-600 dark:bg-green-400 animate-pulse" />
+            <span className="hidden xs:inline">Подключен</span>
+            <span className="xs:hidden">✓</span>
           </div>
         )}
       </div>
 
       <div>
-        <form onSubmit={handleManualSubmit} className="space-y-2">
-          <div className="flex items-center gap-2">
+        <form onSubmit={handleManualSubmit} className="space-y-1.5 md:space-y-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <Input
               ref={inputRef}
               type="text"
-              placeholder="Отсканируйте или введите штрихкод"
+              placeholder="Штрихкод"
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
-              className="text-sm"
+              className="text-xs md:text-sm h-8 md:h-10"
               autoFocus={autoFocus}
             />
-            <Button type="submit" size="sm" disabled={!barcode.trim()}>
-              <Scan className="w-4 h-4" />
+            <Button type="submit" size="sm" disabled={!barcode.trim()} className="h-8 w-8 md:h-10 md:w-10 p-0">
+              <Scan className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            USB-сканер подключен. Сканируйте товар или введите штрихкод вручную
+          <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-1">
+            <span className="hidden md:inline">USB-сканер подключен. Сканируйте товар или введите вручную</span>
+            <span className="md:hidden">Сканируйте или введите вручную</span>
           </p>
         </form>
       </div>

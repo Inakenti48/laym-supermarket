@@ -944,12 +944,12 @@ export const InventoryTab = () => {
       />
 
       {/* Main Content */}
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 space-y-3 md:space-y-4">
         {/* Scanner and Import - Оптимизировано для мобильных */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
           {isAdmin && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-1.5 md:gap-2 flex-wrap">
               <Button 
                 onClick={() => {
                   setAiScanMode('dual');
@@ -957,10 +957,11 @@ export const InventoryTab = () => {
                   toast.info('📸 Сделайте 2 фото: сначала лицевая сторона, потом штрихкод');
                 }}
                 variant="secondary"
-                className="flex-1 min-w-[160px] whitespace-nowrap"
+                size="sm"
+                className="flex-1 min-w-[140px] md:min-w-[160px] whitespace-nowrap h-9 text-xs md:text-sm"
               >
-                <Sparkles className="h-4 w-4 mr-2 flex-shrink-0" />
-                <span className="truncate">AI Сканирование</span>
+                <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 flex-shrink-0" />
+                <span className="truncate">AI Скан</span>
               </Button>
               <Button 
                 onClick={() => {
@@ -969,10 +970,12 @@ export const InventoryTab = () => {
                   toast.info('📸 Сфотографируйте упаковку с датой производства и сроком годности');
                 }}
                 variant="outline"
-                className="flex-1 min-w-[140px] whitespace-nowrap"
+                size="sm"
+                className="flex-1 min-w-[120px] md:min-w-[140px] whitespace-nowrap h-9 text-xs md:text-sm"
               >
-                <CalendarClock className="h-4 w-4 mr-2 flex-shrink-0" />
-                <span className="truncate">Срок годности</span>
+                <CalendarClock className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 flex-shrink-0" />
+                <span className="truncate hidden xs:inline">Срок годности</span>
+                <span className="truncate xs:hidden">Срок</span>
               </Button>
               
               {/* Кнопки импорта - только на десктопе */}
@@ -997,77 +1000,77 @@ export const InventoryTab = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
         {/* Add Product Form */}
-        <Card className="p-3 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
-            <Plus className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+        <Card className="p-3 md:p-4 lg:p-6">
+          <h3 className="text-sm md:text-base lg:text-lg font-semibold mb-2 md:mb-3 lg:mb-4 flex items-center gap-1.5 md:gap-2">
+            <Plus className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
             <span className="truncate">Добавить товар</span>
           </h3>
 
           {showSuggestion && suggestedProduct && (
-            <div className="mb-3 sm:mb-4 p-3 bg-primary/10 border border-primary rounded-lg">
-              <div className="flex justify-between items-start gap-2 mb-2">
+            <div className="mb-2 md:mb-3 p-2 md:p-3 bg-primary/10 border border-primary rounded-lg">
+              <div className="flex justify-between items-start gap-1.5 md:gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-xs sm:text-sm">Товар найден в базе!</p>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">{suggestedProduct.name}</p>
-                  <div className="text-xs space-y-1 mt-2">
+                  <p className="font-medium text-[10px] md:text-xs">Товар найден!</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1 truncate">{suggestedProduct.name}</p>
+                  <div className="text-[10px] md:text-xs space-y-0.5 md:space-y-1 mt-1 md:mt-2">
                     <div>Закуп: {suggestedProduct.purchasePrice}₽</div>
                     {isAdmin && <div>Розница: {suggestedProduct.retailPrice}₽</div>}
                     <div className="truncate">Категория: {suggestedProduct.category}</div>
                   </div>
                 </div>
-                <div className="flex gap-1 sm:gap-2 flex-shrink-0">
-                  <Button size="sm" variant="outline" onClick={acceptSuggestion} className="text-xs px-2">
-                    Принять
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="sm" variant="outline" onClick={acceptSuggestion} className="text-[10px] md:text-xs px-1.5 md:px-2 h-7 md:h-8">
+                    ✓
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={rejectSuggestion} className="px-2">
-                    <X className="h-4 w-4" />
+                  <Button size="sm" variant="ghost" onClick={rejectSuggestion} className="px-1.5 md:px-2 h-7 md:h-8">
+                    <X className="h-3 w-3 md:h-4 md:w-4" />
                   </Button>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="space-y-3 sm:space-y-4">
+          <div className="space-y-2 md:space-y-3">
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">
                 Штрихкод <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-sm h-9 sm:h-10"
+                className="text-xs md:text-sm h-8 md:h-9"
                 value={currentProduct.barcode}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
-                placeholder="Используйте сканер"
+                placeholder="Сканируйте"
               />
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
-                Название товара <span className="text-destructive">*</span>
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                Название <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-sm h-9 sm:h-10"
+                className="text-xs md:text-sm h-8 md:h-9"
                 value={currentProduct.name}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, name: e.target.value })}
-                placeholder="Введите название"
+                placeholder="Название"
               />
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">
                 Категория <span className="text-destructive">*</span>
               </label>
               <Input
-                className="text-sm h-9 sm:h-10"
+                className="text-xs md:text-sm h-8 md:h-9"
                 value={currentProduct.category}
                 onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
-                placeholder="Молочные продукты"
+                placeholder="Категория"
               />
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Поставщик</label>
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">Поставщик</label>
               <Select
                 value={currentProduct.supplier}
                 onValueChange={(value) => {
@@ -1078,15 +1081,15 @@ export const InventoryTab = () => {
                   }
                 }}
               >
-                <SelectTrigger className="text-sm h-9 sm:h-10">
-                  <SelectValue placeholder="Выберите" />
+                <SelectTrigger className="text-xs md:text-sm h-8 md:h-9">
+                  <SelectValue placeholder="Выбрать" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  <SelectItem value="__add_new__" className="text-primary font-medium text-xs sm:text-sm">
+                  <SelectItem value="__add_new__" className="text-primary font-medium text-[10px] md:text-xs">
                     + Добавить
                   </SelectItem>
                   {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name} className="text-xs sm:text-sm">
+                    <SelectItem key={supplier.id} value={supplier.name} className="text-[10px] md:text-xs">
                       {supplier.name}
                     </SelectItem>
                   ))}
@@ -1094,13 +1097,13 @@ export const InventoryTab = () => {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 gap-1.5 md:gap-2">
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                <label className="text-[11px] md:text-xs font-medium mb-1 block">
                   Закуп (₽) <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  className="text-sm h-9 sm:h-10"
+                  className="text-xs md:text-sm h-8 md:h-9"
                   type="number"
                   step="0.01"
                   value={currentProduct.purchasePrice}
@@ -1110,11 +1113,11 @@ export const InventoryTab = () => {
               </div>
               {isAdmin && (
                 <div>
-                  <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                  <label className="text-[11px] md:text-xs font-medium mb-1 block">
                     Розница (₽) <span className="text-destructive">*</span>
                   </label>
                   <Input
-                    className="text-sm h-9 sm:h-10"
+                    className="text-xs md:text-sm h-8 md:h-9"
                     type="number"
                     step="0.01"
                     value={currentProduct.retailPrice}
@@ -1125,13 +1128,13 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 gap-1.5 md:gap-2">
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
+                <label className="text-[11px] md:text-xs font-medium mb-1 block">
                   Кол-во <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  className="text-sm h-9 sm:h-10"
+                  className="text-xs md:text-sm h-8 md:h-9"
                   type="number"
                   step="0.01"
                   value={currentProduct.quantity}
@@ -1140,8 +1143,8 @@ export const InventoryTab = () => {
                 />
               </div>
               <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 block">
-                  Единица <span className="text-destructive">*</span>
+                <label className="text-[11px] md:text-xs font-medium mb-1 block">
+                  Ед. <span className="text-destructive">*</span>
                 </label>
                 <Select
                   value={currentProduct.unit}
@@ -1149,22 +1152,22 @@ export const InventoryTab = () => {
                     setCurrentProduct({ ...currentProduct, unit: value })
                   }
                 >
-                  <SelectTrigger className="text-sm h-9 sm:h-10">
+                  <SelectTrigger className="text-xs md:text-sm h-8 md:h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="шт" className="text-xs sm:text-sm">Штуки</SelectItem>
-                    <SelectItem value="кг" className="text-xs sm:text-sm">Килограммы</SelectItem>
+                    <SelectItem value="шт" className="text-[10px] md:text-xs">шт</SelectItem>
+                    <SelectItem value="кг" className="text-[10px] md:text-xs">кг</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Срок годности</label>
-              <div className="flex gap-2">
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">Срок</label>
+              <div className="flex gap-1.5 md:gap-2">
                 <Input
-                  className="text-sm flex-1 h-9 sm:h-10"
+                  className="text-xs md:text-sm flex-1 h-8 md:h-9"
                   type="date"
                   value={currentProduct.expiryDate}
                   onChange={(e) => setCurrentProduct({ ...currentProduct, expiryDate: e.target.value })}
@@ -1175,38 +1178,38 @@ export const InventoryTab = () => {
                   size="icon"
                   onClick={handleRecognizeExpiry}
                   disabled={isRecognizingExpiry || photos.length === 0}
-                  title="AI распознавание"
-                  className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
+                  title="AI"
+                  className="h-8 w-8 md:h-9 md:w-9 flex-shrink-0"
                 >
-                  <CalendarClock className={`h-4 w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
+                  <CalendarClock className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isRecognizingExpiry ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                {photos.length > 0 ? 'Нажмите AI кнопку' : 'Загрузите фото'}
+              <p className="text-[9px] md:text-[10px] text-muted-foreground mt-0.5">
+                {photos.length > 0 ? 'AI кнопка' : 'Загрузите фото'}
               </p>
             </div>
 
             <div>
-              <label className="text-xs sm:text-sm font-medium mb-1.5 block">Фото товара (до 3)</label>
+              <label className="text-[11px] md:text-xs font-medium mb-1 block">Фото (до 3)</label>
               <Input
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handlePhotoUpload}
-                className="text-xs sm:text-sm h-9 sm:h-10"
+                className="text-[10px] md:text-xs h-8 md:h-9"
               />
               {photos.length > 0 && (
-                <div className="flex gap-2 mt-2 flex-wrap">
+                <div className="flex gap-1.5 md:gap-2 mt-1.5 md:mt-2 flex-wrap">
                   {photos.map((photo, idx) => (
                     <div key={idx} className="relative">
-                      <img src={photo} alt={`Preview ${idx + 1}`} className="h-14 w-14 sm:h-16 sm:w-16 object-cover rounded border" />
+                      <img src={photo} alt={`${idx + 1}`} className="h-12 w-12 md:h-14 md:w-14 object-cover rounded border" />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full"
+                        className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 rounded-full p-0"
                         onClick={() => removePhoto(idx)}
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-2.5 w-2.5 md:h-3 md:w-3" />
                       </Button>
                     </div>
                   ))}
@@ -1214,9 +1217,9 @@ export const InventoryTab = () => {
               )}
             </div>
 
-            <Button onClick={addProduct} className="w-full h-10 sm:h-11 text-sm sm:text-base">
-              <Plus className="h-4 w-4 mr-2" />
-              Сохранить товар
+            <Button onClick={addProduct} className="w-full h-9 md:h-10 text-xs md:text-sm font-medium">
+              <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
+              Сохранить
             </Button>
           </div>
         </Card>

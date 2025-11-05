@@ -29,7 +29,7 @@ export const InventoryTab = () => {
   const [photos, setPhotos] = useState<string[]>([]);
   const [capturedImage, setCapturedImage] = useState<string>('');
   const [showAIScanner, setShowAIScanner] = useState(false);
-  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode'>('product');
+  const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode' | 'expiry'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
@@ -212,8 +212,30 @@ export const InventoryTab = () => {
     };
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
+    
+    // Если это режим распознавания срока годности
+    if (aiScanMode === 'expiry') {
+      console.log('📅 Обработка распознанных дат:', { expiryDate: barcodeData.expiryDate, manufacturingDate: barcodeData.manufacturingDate });
+      
+      if (barcodeData.expiryDate) {
+        setCurrentProduct({ ...currentProduct, expiryDate: barcodeData.expiryDate });
+        toast.success(`✅ Срок годности: ${new Date(barcodeData.expiryDate).toLocaleDateString('ru-RU')}`);
+      }
+      
+      if (barcodeData.manufacturingDate) {
+        toast.info(`📦 Дата производства: ${new Date(barcodeData.manufacturingDate).toLocaleDateString('ru-RU')}`);
+      }
+      
+      // Добавляем фото в список
+      if (barcodeData.capturedImage && !photos.includes(barcodeData.capturedImage)) {
+        setPhotos([...photos, barcodeData.capturedImage]);
+      }
+      
+      setShowAIScanner(false);
+      return;
+    }
     
     const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
     
@@ -845,25 +867,14 @@ export const InventoryTab = () => {
             <>
               <Button 
                 onClick={() => {
-                  if (photoStep === 'barcode') {
-                    // Продолжаем со второго фото
-                    setAiScanMode('barcode');
-                    setShowAIScanner(true);
-                    toast.info('📸 Сфотографируйте штрих-код товара');
-                  } else {
-                    // Начинаем с первого фото
-                    setPhotoStep('front');
-                    setAiScanMode('product');
-                    setShowAIScanner(true);
-                    toast.info('📸 Шаг 1: Сфотографируйте лицевую сторону товара');
-                  }
+                  setAiScanMode('expiry');
+                  setShowAIScanner(true);
+                  toast.info('📸 Сфотографируйте упаковку с датой производства и сроком годности');
                 }}
-                variant={photoStep === 'barcode' ? 'default' : 'outline'}
+                variant="outline"
               >
-                <Camera className="h-4 w-4 mr-2" />
-                {photoStep === 'none' && 'AI Сканирование (2 фото)'}
-                {photoStep === 'front' && 'Шаг 1/2: Лицевая сторона'}
-                {photoStep === 'barcode' && 'Шаг 2/2: Штрих-код'}
+                <CalendarClock className="h-4 w-4 mr-2" />
+                Срок годности
               </Button>
               <Button onClick={() => setShowImportDialog(true)} variant="outline">
                 <Upload className="h-4 w-4 mr-2" />

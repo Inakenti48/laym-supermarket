@@ -6,8 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number }) => void;
-  mode?: 'product' | 'barcode';
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string }) => void;
+  mode?: 'product' | 'barcode' | 'expiry';
   hidden?: boolean;
 }
 
@@ -311,7 +311,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     };
   };
 
-  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
+  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
     // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
     console.log('🔍 Step 1: Searching for similar photo in database...');
     
@@ -417,6 +417,52 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       if (!image) {
         setNotification('❌ Ошибка');
         setTimeout(() => setNotification(''), 1000);
+        return;
+      }
+      
+      // Если режим распознавания срока годности
+      if (mode === 'expiry') {
+        setNotification('🔍 Распознавание дат...');
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('recognize-expiry-date', {
+            body: { imageBase64: image }
+          });
+
+          if (error) {
+            console.error('Ошибка вызова recognize-expiry-date:', error);
+            setNotification('❌ Ошибка');
+            setTimeout(() => setNotification(''), 1500);
+            toast.error('Ошибка при распознавании дат');
+            return;
+          }
+
+          console.log('📅 Результат распознавания дат:', data);
+
+          if (data?.manufacturingDate || data?.expiryDate) {
+            setNotification('✅ Даты распознаны!');
+            
+            onProductFound({ 
+              barcode: '', 
+              capturedImage: image,
+              expiryDate: data.expiryDate,
+              manufacturingDate: data.manufacturingDate 
+            });
+            
+            setTimeout(() => setNotification(''), 1000);
+          } else {
+            setNotification('❌ Даты не найдены');
+            setTimeout(() => setNotification(''), 1500);
+            toast.warning('⚠️ Даты не найдены на изображении');
+          }
+        } catch (err: any) {
+          console.error('Ошибка распознавания срока годности:', err);
+          setNotification('❌ Ошибка');
+          setTimeout(() => setNotification(''), 1500);
+          toast.error('Ошибка при распознавании дат');
+        }
+        
+        setIsProcessing(false);
         return;
       }
       

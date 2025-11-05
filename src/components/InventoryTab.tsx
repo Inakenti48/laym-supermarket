@@ -923,9 +923,9 @@ export const InventoryTab = () => {
 
       {/* Main Content */}
       <div className="flex-1 space-y-4">
-        {/* Scanner and Import - Реорганизация: AI кнопки слева, USB сканер справа */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
-          {/* Левая часть - AI кнопки и импорт */}
+        {/* Scanner and Import - Оптимизировано для мобильных */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+          {/* Левая часть - AI кнопки */}
           {isAdmin && (
             <div className="flex gap-2 flex-wrap">
               <Button 
@@ -935,10 +935,10 @@ export const InventoryTab = () => {
                   toast.info('📸 Сделайте 2 фото: сначала лицевая сторона, потом штрихкод');
                 }}
                 variant="secondary"
-                className="flex-1 min-w-[180px]"
+                className="flex-1 min-w-[160px] whitespace-nowrap"
               >
-                <Sparkles className="h-4 w-4 mr-2" />
-                AI Сканирование
+                <Sparkles className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span className="truncate">AI Сканирование</span>
               </Button>
               <Button 
                 onClick={() => {
@@ -947,26 +947,30 @@ export const InventoryTab = () => {
                   toast.info('📸 Сфотографируйте упаковку с датой производства и сроком годности');
                 }}
                 variant="outline"
-                className="flex-1 min-w-[150px]"
+                className="flex-1 min-w-[140px] whitespace-nowrap"
               >
-                <CalendarClock className="h-4 w-4 mr-2" />
-                Срок годности
+                <CalendarClock className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span className="truncate">Срок годности</span>
               </Button>
-              <Button 
-                onClick={() => setShowImportDialog(true)} 
-                variant="outline"
-                className="flex-1 min-w-[140px]"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Импорт CSV
-              </Button>
-              <BulkImportButton />
-              <BulkCSVImport />
+              
+              {/* Кнопки импорта - только на десктопе */}
+              <div className="hidden lg:flex gap-2 flex-wrap">
+                <Button 
+                  onClick={() => setShowImportDialog(true)} 
+                  variant="outline"
+                  className="whitespace-nowrap"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Импорт CSV
+                </Button>
+                <BulkImportButton />
+                <BulkCSVImport />
+              </div>
             </div>
           )}
           
           {/* Правая часть - USB сканер */}
-          <div className="min-w-[280px]">
+          <div className="w-full lg:min-w-[280px]">
             <BarcodeScanner onScan={handleScan} />
           </div>
         </div>

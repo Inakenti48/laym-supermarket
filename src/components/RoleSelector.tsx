@@ -1,9 +1,11 @@
-import { Shield, ShoppingCart, Package, User } from 'lucide-react';
+import { Shield, ShoppingCart, Package, Users } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { AppRole } from '@/lib/supabaseAuth';
 
 interface RoleSelectorProps {
   onSelectRole: (email: string, password: string) => void;
+  onEmployeeLogin: () => void;
 }
 
 const roles = [
@@ -41,7 +43,7 @@ const roles = [
   }
 ];
 
-export const RoleSelector = ({ onSelectRole }: RoleSelectorProps) => {
+export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProps) => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-4xl">
@@ -69,6 +71,18 @@ export const RoleSelector = ({ onSelectRole }: RoleSelectorProps) => {
               </Card>
             );
           })}
+        </div>
+
+        <div className="mt-8 flex justify-center">
+          <Button 
+            onClick={onEmployeeLogin} 
+            variant="outline"
+            size="lg"
+            className="w-full max-w-md h-14 text-base sm:text-lg font-semibold"
+          >
+            <Users className="h-5 w-5 sm:h-6 sm:w-6 mr-2" />
+            Вход для сотрудников
+          </Button>
         </div>
       </div>
     </div>

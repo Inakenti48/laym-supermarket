@@ -166,17 +166,7 @@ const Index = () => {
     if (showEmployeeLogin) {
       return <EmployeeLoginScreen onLogin={handleEmployeeLogin} />;
     }
-    return (
-      <div>
-        <RoleSelector onSelectRole={handleLogin} />
-        <div className="fixed bottom-4 right-4">
-          <Button onClick={() => setShowEmployeeLogin(true)} variant="outline">
-            <Users className="h-4 w-4 mr-2" />
-            Вход для сотрудников
-          </Button>
-        </div>
-      </div>
-    );
+    return <RoleSelector onSelectRole={handleLogin} onEmployeeLogin={() => setShowEmployeeLogin(true)} />;
   }
 
   return (

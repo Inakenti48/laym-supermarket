@@ -15,6 +15,7 @@ import { EmployeesTab } from '@/components/EmployeesTab';
 import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
 import { CancellationsTab } from '@/components/CancellationsTab';
+import { PendingProductsTab } from '@/components/PendingProductsTab';
 import { RoleSelector } from '@/components/RoleSelector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -23,7 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { isSessionExpired } from '@/lib/auth';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -148,6 +149,7 @@ const Index = () => {
     { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard },
     { id: 'inventory' as Tab, label: 'Товары', icon: Package },
     { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart },
+    { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload },
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2 },
     { id: 'reports' as Tab, label: 'Отчёты', icon: FileText },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle },
@@ -241,13 +243,14 @@ const Index = () => {
             {activeTab === 'dashboard' && <DashboardTab />}
             {activeTab === 'cashier' && <CashierTab />}
             {activeTab === 'inventory' && <InventoryTab />}
+            {activeTab === 'pending-products' && <PendingProductsTab />}
             {activeTab === 'suppliers' && <SuppliersTab />}
             {activeTab === 'reports' && <ReportsTab />}
             {activeTab === 'expiry' && <ExpiryTab />}
             {activeTab === 'logs' && <LogsTab />}
             {activeTab === 'employees' && <EmployeesTab />}
             {activeTab === 'cancellations' && <CancellationsTab />}
-            {!['dashboard', 'cashier', 'inventory', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'cancellations'].includes(activeTab) && (
+            {!['dashboard', 'cashier', 'inventory', 'pending-products', 'suppliers', 'reports', 'expiry', 'logs', 'employees', 'cancellations'].includes(activeTab) && (
               <div className="text-center py-12">
                 <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
                 <p className="text-muted-foreground">

@@ -3,6 +3,7 @@ import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles } from 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
@@ -982,8 +983,21 @@ export const InventoryTab = () => {
         }}
       />
 
-      {/* Main Content */}
-      <div className="space-y-3 md:space-y-4">
+      {/* Main Content with Tabs */}
+      <Tabs defaultValue="add-product" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="add-product">
+            <Plus className="h-4 w-4 mr-2" />
+            Добавить товар
+          </TabsTrigger>
+          <TabsTrigger value="queue">
+            <Package className="h-4 w-4 mr-2" />
+            Очередь товаров ({pendingProducts.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Add Product Tab */}
+        <TabsContent value="add-product" className="space-y-3 md:space-y-4">
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
@@ -1307,18 +1321,19 @@ export const InventoryTab = () => {
           </div>
         </Card>
         </div>
-      </div>
+        </TabsContent>
 
-      {/* Pending Products List - Below Form */}
-      <div className="mt-10">
-        <PendingProductsList
-          products={pendingProducts}
-          onUpdateProduct={handleUpdatePendingProduct}
-          onRemoveProduct={handleRemovePendingProduct}
-          onSaveAll={handleSaveAllProducts}
-          onClearAll={handleClearAllProducts}
-        />
-      </div>
+        {/* Queue Tab */}
+        <TabsContent value="queue">
+          <PendingProductsList
+            products={pendingProducts}
+            onUpdateProduct={handleUpdatePendingProduct}
+            onRemoveProduct={handleRemovePendingProduct}
+            onSaveAll={handleSaveAllProducts}
+            onClearAll={handleClearAllProducts}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

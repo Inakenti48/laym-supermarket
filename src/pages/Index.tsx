@@ -34,6 +34,9 @@ const Index = () => {
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
   const [sessionTimeRemaining, setSessionTimeRemaining] = useState<string>('');
+  
+  // Проверяем роль админа
+  const isAdmin = user?.email?.includes('admin') || false;
 
   useEffect(() => {
     // Проверка текущей сессии
@@ -149,7 +152,7 @@ const Index = () => {
     { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard },
     { id: 'inventory' as Tab, label: 'Товары', icon: Package },
     { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart },
-    { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload },
+    ...(isAdmin ? [{ id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload }] : []),
     { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2 },
     { id: 'reports' as Tab, label: 'Отчёты', icon: FileText },
     { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle },

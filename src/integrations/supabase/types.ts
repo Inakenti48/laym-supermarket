@@ -392,30 +392,60 @@ export type Database = {
       vremenno_product_foto: {
         Row: {
           barcode: string
+          category: string | null
           created_at: string | null
           created_by: string | null
+          debt_amount: number | null
+          expiry_date: string | null
           id: string
           image_url: string
+          paid_amount: number | null
+          payment_type: string | null
           product_name: string
+          purchase_price: number | null
+          quantity: number | null
+          retail_price: number | null
           storage_path: string
+          supplier: string | null
+          unit: string | null
         }
         Insert: {
           barcode: string
+          category?: string | null
           created_at?: string | null
           created_by?: string | null
+          debt_amount?: number | null
+          expiry_date?: string | null
           id?: string
           image_url: string
+          paid_amount?: number | null
+          payment_type?: string | null
           product_name: string
+          purchase_price?: number | null
+          quantity?: number | null
+          retail_price?: number | null
           storage_path: string
+          supplier?: string | null
+          unit?: string | null
         }
         Update: {
           barcode?: string
+          category?: string | null
           created_at?: string | null
           created_by?: string | null
+          debt_amount?: number | null
+          expiry_date?: string | null
           id?: string
           image_url?: string
+          paid_amount?: number | null
+          payment_type?: string | null
           product_name?: string
+          purchase_price?: number | null
+          quantity?: number | null
+          retail_price?: number | null
           storage_path?: string
+          supplier?: string | null
+          unit?: string | null
         }
         Relationships: []
       }

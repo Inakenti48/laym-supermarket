@@ -727,31 +727,27 @@ export const InventoryTab = () => {
 
   const addProduct = async () => {
     try {
-      console.log('🔄 Начало добавления товара...');
-      
-      if (!navigator.onLine) {
-        toast.info('⚠️ Нет соединения. Товар будет сохранен локально и синхронизирован позже.');
-        console.warn('⚠️ Режим оффлайн - данные будут синхронизированы при восстановлении соединения');
-      }
+      console.log('🔄 Добавление товара в очередь...');
       
       console.log('🔐 Проверка авторизации...');
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
-      if (authError) {
-        console.error('❌ Ошибка авторизации:', authError);
-        toast.error(`Ошибка авторизации: ${authError.message}`);
-        return;
-      }
-      
-      if (!user) {
-        console.error('❌ Пользователь не авторизован');
+      if (authError || !user) {
+        console.error('❌ Ошибка авторизации');
         toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
         return;
       }
       
       console.log('✅ Пользователь авторизован:', user.id);
       
+      // Проверка только обязательных полей: штрихкод, название, категория
       console.log('📋 Проверка обязательных полей...');
+      if (!currentProduct.barcode?.trim()) {
+        console.error('❌ Штрихкод пустой');
+        toast.error('❌ Введите штрихкод товара');
+        return;
+      }
+      
       if (!currentProduct.name?.trim()) {
         console.error('❌ Название товара пустое');
         toast.error('❌ Введите название товара');
@@ -764,171 +760,78 @@ export const InventoryTab = () => {
         return;
       }
       
-      if (!currentProduct.purchasePrice) {
-        console.error('❌ Закупочная цена не указана');
-        toast.error('❌ Укажите закупочную цену');
-        return;
-      }
-      
-      if (!currentProduct.quantity) {
-        console.error('❌ Количество не указано');
-        toast.error('❌ Укажите количество товара');
-        return;
-      }
+      console.log('✅ Обязательные поля заполнены');
 
-      if (isAdmin && !currentProduct.retailPrice) {
-        console.warn('⚠️ Администратор не указал розничную цену');
-        toast.error('❌ Укажите розничную цену');
-        return;
-      }
+      // Сохраняем фото если есть
+      let imageUrl = '';
+      let storagePath = '';
       
-      console.log('✅ Все обязательные поля заполнены');
-
-      const purchasePrice = parseFloat(currentProduct.purchasePrice);
-      const retailPrice = parseFloat(currentProduct.retailPrice) || purchasePrice;
-      const quantity = parseFloat(currentProduct.quantity);
-      
-      if (quantity <= 0) {
-        console.error('❌ Некорректное количество:', quantity);
-        toast.error('❌ Количество должно быть больше 0');
-        return;
-      }
-      
-      if (purchasePrice < 0 || retailPrice < 0) {
-        console.error('❌ Некорректные цены:', { purchasePrice, retailPrice });
-        toast.error('❌ Цены не могут быть отрицательными');
-        return;
-      }
-
-      console.log('📝 Валидированные данные товара:', {
-        name: currentProduct.name,
-        barcode: currentProduct.barcode || 'НЕТ',
-        category: currentProduct.category,
-        purchasePrice,
-        retailPrice,
-        quantity
-      });
-
       if (photos.length > 0 || capturedImage) {
         const imagesToSave = [...photos];
         if (capturedImage && !photos.includes(capturedImage)) {
           imagesToSave.push(capturedImage);
         }
         
-        console.log(`📷 Сохранение ${imagesToSave.length} фото товара...`);
-        
-        for (const imageUrl of imagesToSave) {
-          try {
-            const saved = await saveProductImage(
-              currentProduct.barcode || `product-${Date.now()}`,
-              currentProduct.name,
-              imageUrl
-            );
-            if (saved) {
-              console.log('✅ Фото сохранено');
-            }
-          } catch (imgError: any) {
-            console.error('❌ Ошибка сохранения фото:', imgError.message);
-          }
+        if (imagesToSave.length > 0) {
+          imageUrl = imagesToSave[0]; // Берем первое фото
+          storagePath = `product-photos/${currentProduct.barcode}-${Date.now()}`;
         }
       }
-      
-      const productData: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'> = {
-        barcode: currentProduct.barcode,
-        name: currentProduct.name,
-        category: currentProduct.category,
-        purchasePrice,
-        retailPrice,
-        quantity,
-        unit: currentProduct.unit,
-        expiryDate: currentProduct.expiryDate || undefined,
-        photos,
-        paymentType: 'full',
-        paidAmount: purchasePrice * quantity,
-        debtAmount: 0,
-        addedBy: currentUser?.role || 'unknown',
-        supplier: currentProduct.supplier || undefined,
-      };
 
-      console.log('💾 Начинается сохранение товара...');
-      const saved = await saveProduct(productData, currentUser?.username || 'unknown');
-      console.log('💾 Результат сохранения:', saved);
-      
-      if (saved) {
-        addLog(`Добавлен товар: ${currentProduct.name} (${quantity} ${currentProduct.unit})`);
-        
-        if (suggestedProduct && 
-            (suggestedProduct.purchasePrice !== purchasePrice || 
-             suggestedProduct.retailPrice !== retailPrice)) {
-          const priceDiff = purchasePrice - suggestedProduct.purchasePrice;
-          addLog(`Изменение цены "${currentProduct.name}": ${priceDiff > 0 ? '+' : ''}${priceDiff.toFixed(2)}₽`);
-        }
-        
-        console.log('✅ Товар успешно сохранен');
-        toast.success('✅ Товар сохранён и доступен на кассе!');
-        
-        setCurrentProduct({
-          barcode: '',
-          name: '',
-          category: '',
-          purchasePrice: '',
-          retailPrice: '',
-          quantity: '',
-          unit: 'шт',
-          expiryDate: '',
-          supplier: '',
+      // Добавляем товар в очередь (vremenno_product_foto)
+      const { error: insertError } = await supabase
+        .from('vremenno_product_foto')
+        .insert({
+          barcode: currentProduct.barcode,
+          product_name: currentProduct.name,
+          category: currentProduct.category,
+          supplier: currentProduct.supplier || null,
+          unit: currentProduct.unit,
+          purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
+          retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
+          quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : null,
+          expiry_date: currentProduct.expiryDate || null,
+          payment_type: 'full',
+          paid_amount: (currentProduct.purchasePrice && currentProduct.quantity) 
+            ? parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity) 
+            : 0,
+          debt_amount: 0,
+          image_url: imageUrl || `https://via.placeholder.com/150?text=${encodeURIComponent(currentProduct.name)}`,
+          storage_path: storagePath || '',
+          created_by: user.id,
         });
-        setPhotos([]);
-        setCapturedImage('');
-        setSuggestedProduct(null);
-        localStorage.removeItem('inventory_form_data');
-      } else {
-        throw new Error('saveProduct вернула false');
-      }
-    } catch (error: any) {
-      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении товара:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        stack: error.stack,
-        name: error.name
-      });
-      
-      let errorMessage = 'Неизвестная ошибка при сохранении товара';
-      
-      if (error.message?.includes('duplicate')) {
-        errorMessage = 'Товар с таким штрихкодом уже существует';
-      } else if (error.code === '23505') {
-        errorMessage = 'Товар с такими данными уже существует';
-      } else if (error.message?.includes('не авторизован')) {
-        errorMessage = 'Необходимо войти в систему';
-      } else if (error.message?.includes('Network')) {
-        errorMessage = 'Ошибка сети. Проверьте интернет-соединение';
-      } else if (error.message) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-      
-      toast.error(`❌ Ошибка: ${errorMessage}`);
-    }
 
-    setCurrentProduct({
-      barcode: '',
-      name: '',
-      category: '',
-      purchasePrice: '',
-      retailPrice: '',
-      quantity: '',
-      unit: 'шт',
-      expiryDate: '',
-      supplier: '',
-    });
-    setPhotos([]);
-    setCapturedImage('');
-    setSuggestedProduct(null);
-    localStorage.removeItem('inventory_form_data');
+      if (insertError) {
+        console.error('❌ Ошибка добавления в очередь:', insertError);
+        toast.error(`❌ Ошибка: ${insertError.message}`);
+        return;
+      }
+
+      console.log('✅ Товар добавлен в очередь');
+      toast.success('✅ Товар добавлен в очередь!');
+      addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
+      
+      // Очищаем форму
+      setCurrentProduct({
+        barcode: '',
+        name: '',
+        category: '',
+        purchasePrice: '',
+        retailPrice: '',
+        quantity: '',
+        unit: 'шт',
+        expiryDate: '',
+        supplier: '',
+      });
+      setPhotos([]);
+      setCapturedImage('');
+      setSuggestedProduct(null);
+      localStorage.removeItem('inventory_form_data');
+      
+    } catch (error: any) {
+      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error);
+      toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`);
+    }
   };
 
   // Удалена функция saveAllProducts - товары теперь сохраняются сразу при добавлении
@@ -1301,7 +1204,7 @@ export const InventoryTab = () => {
 
             <Button onClick={addProduct} className="w-full h-12 md:h-10 text-base md:text-sm font-medium mt-2">
               <Plus className="h-5 w-5 md:h-4 md:w-4 mr-2 md:mr-2" />
-              Сохранить
+              В очередь
             </Button>
           </div>
         </Card>

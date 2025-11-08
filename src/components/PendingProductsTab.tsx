@@ -60,7 +60,7 @@ export const PendingProductsTab = () => {
         const products = data.map((item: any) => ({
           id: item.id,
           barcode: item.barcode || '',
-          name: item.name || '',
+          name: item.product_name || '',
           category: item.category || '',
           purchasePrice: item.purchase_price?.toString() || '',
           retailPrice: item.retail_price?.toString() || '',
@@ -68,7 +68,7 @@ export const PendingProductsTab = () => {
           unit: (item.unit || 'шт') as 'шт' | 'кг',
           expiryDate: item.expiry_date || '',
           supplier: item.supplier || '',
-          photos: [item.front_photo, item.barcode_photo].filter(Boolean) as string[],
+          photos: item.image_url ? [item.image_url] : [],
         }));
         setPendingProducts(products);
       }
@@ -97,11 +97,36 @@ export const PendingProductsTab = () => {
     };
   }, []);
 
-  const handleUpdatePendingProduct = (id: string, updates: Partial<PendingProduct>) => {
-    // Обновляем только локальный state, так как vremenno_product_foto
-    // хранит только базовую информацию (barcode, product_name, image_url)
+  const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
+    // Обновляем и в базе и в локальном state
+    const product = pendingProducts.find(p => p.id === id);
+    if (!product) return;
+
+    const updatedProduct = { ...product, ...updates };
+
+    const { error } = await supabase
+      .from('vremenno_product_foto')
+      .update({
+        barcode: updatedProduct.barcode,
+        product_name: updatedProduct.name,
+        category: updatedProduct.category,
+        supplier: updatedProduct.supplier || null,
+        unit: updatedProduct.unit,
+        purchase_price: updatedProduct.purchasePrice ? parseFloat(updatedProduct.purchasePrice) : null,
+        retail_price: updatedProduct.retailPrice ? parseFloat(updatedProduct.retailPrice) : null,
+        quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : null,
+        expiry_date: updatedProduct.expiryDate || null,
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating pending product:', error);
+      toast.error('Ошибка обновления товара');
+      return;
+    }
+
     setPendingProducts(prev =>
-      prev.map(p => p.id === id ? { ...p, ...updates } : p)
+      prev.map(p => p.id === id ? updatedProduct : p)
     );
   };
 
@@ -128,11 +153,11 @@ export const PendingProductsTab = () => {
     }
 
     const allComplete = pendingProducts.every(p =>
-      p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
+      p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
     );
 
     if (!allComplete) {
-      toast.error('Заполните все обязательные поля для всех товаров');
+      toast.error('Заполните штрихкод, название, категорию, цены и количество для всех товаров');
       return;
     }
 
@@ -219,7 +244,7 @@ export const PendingProductsTab = () => {
   };
 
   const allComplete = pendingProducts.length > 0 && pendingProducts.every(p =>
-    p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
+    p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
   );
 
   return (

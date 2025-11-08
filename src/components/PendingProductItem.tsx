@@ -1,9 +1,10 @@
-import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
 
 export interface PendingProduct {
@@ -22,13 +23,23 @@ export interface PendingProduct {
   barcodePhoto?: string;
 }
 
-interface PendingProductItemProps {
-  product: PendingProduct;
-  onUpdate: (id: string, updates: Partial<PendingProduct>) => void;
-  onRemove: (id: string) => void;
+interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  contactPerson?: string;
+  address?: string;
 }
 
-export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProductItemProps) => {
+interface PendingProductItemProps {
+  product: PendingProduct;
+  suppliers: Supplier[];
+  onUpdate: (id: string, updates: Partial<PendingProduct>) => void;
+  onRemove: (id: string) => void;
+  onSave: (id: string) => void;
+}
+
+export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onSave }: PendingProductItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState(product);
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
@@ -110,6 +121,21 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
                 placeholder="Количество"
                 className="h-10 text-sm"
               />
+              <Select
+                value={editedProduct.supplier || ''}
+                onValueChange={(value) => setEditedProduct({ ...editedProduct, supplier: value })}
+              >
+                <SelectTrigger className="h-10 text-sm">
+                  <SelectValue placeholder="Выберите поставщика" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.name}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           ) : (
             <>
@@ -127,6 +153,7 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
                 {product.purchasePrice && <p className="leading-relaxed">Закуп: {product.purchasePrice}₽</p>}
                 {product.retailPrice && <p className="leading-relaxed">Розница: {product.retailPrice}₽</p>}
                 {product.quantity && <p className="leading-relaxed">Кол-во: {product.quantity} {product.unit}</p>}
+                {product.supplier && <p className="leading-relaxed">Поставщик: {product.supplier}</p>}
               </div>
               {(product.frontPhoto || product.barcodePhoto || product.photos.length > 0) && (
                 <div className="flex gap-2 mt-3 flex-wrap">
@@ -177,9 +204,20 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
               <Check className="h-4 w-4" />
             </Button>
           ) : (
-            <Button size="icon" variant="ghost" onClick={() => setIsEditing(true)} className="h-8 w-8">
-              <Edit2 className="h-4 w-4" />
-            </Button>
+            <>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={() => onSave(product.id)} 
+                className="h-8 w-8"
+                disabled={!isComplete}
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => setIsEditing(true)} className="h-8 w-8">
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </>
           )}
           <Button size="icon" variant="ghost" onClick={() => onRemove(product.id)} className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
             <X className="h-4 w-4" />

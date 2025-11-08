@@ -148,6 +148,77 @@ export const PendingProductsTab = () => {
     toast.success('Товар удален из очереди');
   };
 
+  const handleSaveSingleProduct = async (id: string) => {
+    const product = pendingProducts.find(p => p.id === id);
+    if (!product) return;
+
+    // Проверяем обязательные поля
+    if (!product.barcode || !product.name || !product.category || !product.purchasePrice || !product.retailPrice || !product.quantity) {
+      toast.error('Заполните все обязательные поля (штрихкод, название, категория, цены, количество)');
+      return;
+    }
+
+    if (!product.frontPhoto && !product.barcodePhoto && product.photos.length === 0) {
+      toast.error('Добавьте хотя бы одну фотографию');
+      return;
+    }
+
+    // Получаем текущего пользователя
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Необходима авторизация');
+      return;
+    }
+
+    try {
+      const supplier = suppliers.find(s => s.name === product.supplier);
+
+      const productData = {
+        barcode: product.barcode,
+        name: product.name,
+        category: product.category,
+        purchasePrice: parseFloat(product.purchasePrice),
+        retailPrice: parseFloat(product.retailPrice),
+        quantity: parseFloat(product.quantity),
+        unit: product.unit,
+        expiryDate: product.expiryDate || undefined,
+        supplier: product.supplier,
+        supplierPhone: supplier?.phone,
+        paymentType: 'full' as const,
+        paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
+        debtAmount: 0,
+        addedBy: user.id,
+        photos: [],
+      };
+
+      await saveProduct(productData, user.id);
+
+      // Сохраняем все фотографии включая лицевую и штрихкод
+      const allPhotos = [
+        ...(product.frontPhoto ? [product.frontPhoto] : []),
+        ...(product.barcodePhoto ? [product.barcodePhoto] : []),
+        ...product.photos
+      ];
+
+      for (const photo of allPhotos) {
+        await saveProductImage(product.barcode, product.name, photo);
+      }
+
+      await supabase
+        .from('vremenno_product_foto')
+        .delete()
+        .eq('id', id);
+
+      addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
+
+      setPendingProducts(prev => prev.filter(p => p.id !== id));
+      toast.success(`Товар "${product.name}" успешно добавлен`);
+    } catch (error) {
+      console.error('Error saving product:', error);
+      toast.error('Ошибка при добавлении товара');
+    }
+  };
+
   const handleSaveAllProducts = async () => {
     if (pendingProducts.length === 0) {
       toast.info('Нет товаров для сохранения');
@@ -303,8 +374,10 @@ export const PendingProductsTab = () => {
                 <PendingProductItem
                   key={product.id}
                   product={product}
+                  suppliers={suppliers}
                   onUpdate={handleUpdatePendingProduct}
                   onRemove={handleRemovePendingProduct}
+                  onSave={handleSaveSingleProduct}
                 />
               ))}
             </div>

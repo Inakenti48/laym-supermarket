@@ -4,18 +4,30 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
 
+interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  contactPerson?: string;
+  address?: string;
+}
+
 interface PendingProductsListProps {
   products: PendingProduct[];
+  suppliers: Supplier[];
   onUpdateProduct: (id: string, updates: Partial<PendingProduct>) => void;
   onRemoveProduct: (id: string) => void;
+  onSaveProduct: (id: string) => void;
   onSaveAll: () => void;
   onClearAll: () => void;
 }
 
 export const PendingProductsList = ({
   products,
+  suppliers,
   onUpdateProduct,
   onRemoveProduct,
+  onSaveProduct,
   onSaveAll,
   onClearAll,
 }: PendingProductsListProps) => {
@@ -67,8 +79,10 @@ export const PendingProductsList = ({
               <PendingProductItem
                 key={product.id}
                 product={product}
+                suppliers={suppliers}
                 onUpdate={onUpdateProduct}
                 onRemove={onRemoveProduct}
+                onSave={onSaveProduct}
               />
             ))}
           </div>

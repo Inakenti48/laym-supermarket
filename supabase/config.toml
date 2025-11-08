@@ -21,3 +21,6 @@ verify_jwt = true
 
 [functions.recognize-expiry-date]
 verify_jwt = true
+
+[functions.scan-product-photos]
+verify_jwt = true

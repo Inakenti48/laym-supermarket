@@ -448,62 +448,77 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         } else if (dualPhotoStep === 'barcode') {
           // Сохраняем штрихкод
           setTempBarcodePhoto(image);
-          setNotification('🔍 Распознавание...');
+          setNotification('🔍 AI сканирование фотографий...');
           
           try {
             // Сжимаем изображения перед отправкой
             const compressedFront = await compressForAI(tempFrontPhoto);
             const compressedBarcode = await compressForAI(image);
             
-            // Отправляем оба фото на распознавание
-            const { data, error } = await supabase.functions.invoke('recognize-product-by-photo', {
+            // Вызываем новую функцию для автоматического сканирования обеих фотографий
+            console.log('📷 Запуск автоматического AI-сканирования фотографий...');
+            const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
               body: { 
                 frontPhoto: compressedFront,
                 barcodePhoto: compressedBarcode
               }
             });
 
-            if (error) {
-              console.error('Ошибка распознавания:', error);
-              setNotification('❌ Ошибка');
+            if (scanError) {
+              console.error('Ошибка AI-сканирования:', scanError);
+              setNotification('❌ Ошибка сканирования');
               setTimeout(() => setNotification(''), 1500);
-              toast.error('Не удалось распознать товар');
+              toast.error('Ошибка при AI-сканировании фотографий');
               setDualPhotoStep('none');
               setTempFrontPhoto('');
               setTempBarcodePhoto('');
               return;
             }
 
-            console.log('📦 Результат распознавания:', data);
+            console.log('✅ Результат AI-сканирования:', scanData);
 
-            if (data?.result?.recognized && (data?.result?.barcode || data?.result?.name)) {
-              setNotification('✅ Товар распознан!');
+            // Извлекаем данные из ответа
+            const scannedBarcode = scanData?.barcode || '';
+            const scannedName = scanData?.name || '';
+
+            if (scannedBarcode || scannedName) {
+              setNotification('✅ Данные извлечены!');
               
+              // Передаем данные родителю с обеими фотографиями
               onProductFound({
-                barcode: data.result.barcode || '',
-                name: data.result.name || '',
-                category: data.result.category || '',
+                barcode: scannedBarcode,
+                name: scannedName,
+                category: '',
                 frontPhoto: tempFrontPhoto,
                 barcodePhoto: image
               });
+              
+              // Показываем что именно распознано
+              if (scannedBarcode && scannedName) {
+                toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`);
+              } else if (scannedBarcode) {
+                toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
+              } else if (scannedName) {
+                toast.success(`📦 Название распознано: ${scannedName}`);
+              }
               
               setTimeout(() => setNotification(''), 1000);
               setDualPhotoStep('none');
               setTempFrontPhoto('');
               setTempBarcodePhoto('');
             } else {
-              setNotification('❌ Не распознано');
+              setNotification('❌ Ничего не распознано');
               setTimeout(() => setNotification(''), 1500);
-              toast.warning('Товар не распознан, попробуйте снова');
+              toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.');
               setDualPhotoStep('none');
               setTempFrontPhoto('');
               setTempBarcodePhoto('');
             }
           } catch (err: any) {
-            console.error('Ошибка при распознавании:', err);
+            console.error('Ошибка при AI-сканировании:', err);
             setNotification('❌ Ошибка');
             setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при распознавании товара');
+            toast.error('Ошибка при AI-сканировании товара');
             setDualPhotoStep('none');
             setTempFrontPhoto('');
             setTempBarcodePhoto('');

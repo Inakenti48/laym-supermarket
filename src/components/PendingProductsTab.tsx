@@ -68,6 +68,8 @@ export const PendingProductsTab = () => {
           unit: (item.unit || 'шт') as 'шт' | 'кг',
           expiryDate: item.expiry_date || '',
           supplier: item.supplier || '',
+          frontPhoto: item.front_photo || undefined,
+          barcodePhoto: item.barcode_photo || undefined,
           photos: item.image_url ? [item.image_url] : [],
         }));
         setPendingProducts(products);
@@ -153,11 +155,12 @@ export const PendingProductsTab = () => {
     }
 
     const allComplete = pendingProducts.every(p =>
-      p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
+      p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
+      (p.frontPhoto || p.barcodePhoto || p.photos.length > 0)
     );
 
     if (!allComplete) {
-      toast.error('Заполните штрихкод, название, категорию, цены и количество для всех товаров');
+      toast.error('Заполните все поля (штрихкод, название, категория, цены, количество) и добавьте хотя бы одну фотографию для всех товаров');
       return;
     }
 
@@ -195,10 +198,15 @@ export const PendingProductsTab = () => {
 
         await saveProduct(productData, user.id);
 
-        if (product.photos && product.photos.length > 0) {
-          for (const photo of product.photos) {
-            await saveProductImage(product.barcode, product.name, photo);
-          }
+        // Сохраняем все фотографии включая лицевую и штрихкод
+        const allPhotos = [
+          ...(product.frontPhoto ? [product.frontPhoto] : []),
+          ...(product.barcodePhoto ? [product.barcodePhoto] : []),
+          ...product.photos
+        ];
+
+        for (const photo of allPhotos) {
+          await saveProductImage(product.barcode, product.name, photo);
         }
 
         await supabase
@@ -244,7 +252,8 @@ export const PendingProductsTab = () => {
   };
 
   const allComplete = pendingProducts.length > 0 && pendingProducts.every(p =>
-    p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
+    p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
+    (p.frontPhoto || p.barcodePhoto || p.photos.length > 0) // Хотя бы одна фотография
   );
 
   return (

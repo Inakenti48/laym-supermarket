@@ -392,11 +392,15 @@ export type Database = {
       vremenno_product_foto: {
         Row: {
           barcode: string
+          barcode_photo: string | null
+          barcode_photo_storage_path: string | null
           category: string | null
           created_at: string | null
           created_by: string | null
           debt_amount: number | null
           expiry_date: string | null
+          front_photo: string | null
+          front_photo_storage_path: string | null
           id: string
           image_url: string
           paid_amount: number | null
@@ -411,11 +415,15 @@ export type Database = {
         }
         Insert: {
           barcode: string
+          barcode_photo?: string | null
+          barcode_photo_storage_path?: string | null
           category?: string | null
           created_at?: string | null
           created_by?: string | null
           debt_amount?: number | null
           expiry_date?: string | null
+          front_photo?: string | null
+          front_photo_storage_path?: string | null
           id?: string
           image_url: string
           paid_amount?: number | null
@@ -430,11 +438,15 @@ export type Database = {
         }
         Update: {
           barcode?: string
+          barcode_photo?: string | null
+          barcode_photo_storage_path?: string | null
           category?: string | null
           created_at?: string | null
           created_by?: string | null
           debt_amount?: number | null
           expiry_date?: string | null
+          front_photo?: string | null
+          front_photo_storage_path?: string | null
           id?: string
           image_url?: string
           paid_amount?: number | null

@@ -256,6 +256,10 @@ export const InventoryTab = () => {
     if (aiScanMode === 'dual' && barcodeData.frontPhoto && barcodeData.barcodePhoto) {
       const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
       
+      // Сохраняем фотографии во временные переменные
+      setTempFrontPhoto(barcodeData.frontPhoto);
+      setTempBarcodePhoto(barcodeData.barcodePhoto);
+      
       // Автозаполнение полей формы
       if (sanitizedBarcode) {
         setCurrentProduct(prev => ({ ...prev, barcode: sanitizedBarcode }));
@@ -762,21 +766,19 @@ export const InventoryTab = () => {
       
       console.log('✅ Обязательные поля заполнены');
 
-      // Сохраняем фото если есть
-      let imageUrl = '';
-      let storagePath = '';
+      // Определяем какие фотографии сохранять
+      let frontPhoto = tempFrontPhoto || '';
+      let barcodePhoto = tempBarcodePhoto || '';
       
-      if (photos.length > 0 || capturedImage) {
-        const imagesToSave = [...photos];
-        if (capturedImage && !photos.includes(capturedImage)) {
-          imagesToSave.push(capturedImage);
-        }
-        
-        if (imagesToSave.length > 0) {
-          imageUrl = imagesToSave[0]; // Берем первое фото
-          storagePath = `product-photos/${currentProduct.barcode}-${Date.now()}`;
+      // Если нет отдельных фото, используем обычные загруженные
+      if (!frontPhoto && !barcodePhoto && photos.length > 0) {
+        frontPhoto = photos[0]; // Первая фото как лицевая
+        if (photos.length > 1) {
+          barcodePhoto = photos[1]; // Вторая как штрихкод
         }
       }
+
+      const imageUrl = frontPhoto || barcodePhoto || `https://via.placeholder.com/150?text=${encodeURIComponent(currentProduct.name)}`;
 
       // Добавляем товар в очередь (vremenno_product_foto)
       const { error: insertError } = await supabase
@@ -796,8 +798,12 @@ export const InventoryTab = () => {
             ? parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity) 
             : 0,
           debt_amount: 0,
-          image_url: imageUrl || `https://via.placeholder.com/150?text=${encodeURIComponent(currentProduct.name)}`,
-          storage_path: storagePath || '',
+          image_url: imageUrl,
+          storage_path: `product-photos/${currentProduct.barcode}-${Date.now()}`,
+          front_photo: frontPhoto || null,
+          barcode_photo: barcodePhoto || null,
+          front_photo_storage_path: frontPhoto ? `product-photos/${currentProduct.barcode}-front-${Date.now()}` : null,
+          barcode_photo_storage_path: barcodePhoto ? `product-photos/${currentProduct.barcode}-barcode-${Date.now()}` : null,
           created_by: user.id,
         });
 
@@ -811,7 +817,7 @@ export const InventoryTab = () => {
       toast.success('✅ Товар добавлен в очередь!');
       addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
       
-      // Очищаем форму
+      // Очищаем форму и временные фото
       setCurrentProduct({
         barcode: '',
         name: '',
@@ -825,6 +831,8 @@ export const InventoryTab = () => {
       });
       setPhotos([]);
       setCapturedImage('');
+      setTempFrontPhoto('');
+      setTempBarcodePhoto('');
       setSuggestedProduct(null);
       localStorage.removeItem('inventory_form_data');
       

@@ -66,7 +66,8 @@ export const PendingProductItem = ({ product, onUpdate, onRemove }: PendingProdu
     setIsEditing(false);
   };
 
-  const isComplete = product.name && product.category && product.purchasePrice && product.retailPrice && product.quantity;
+  const isComplete = product.barcode && product.name && product.category && product.purchasePrice && product.retailPrice && product.quantity &&
+    (product.frontPhoto || product.barcodePhoto || product.photos.length > 0);
 
   return (
     <Card className="p-4 space-y-3 bg-background/50 shadow-sm hover:shadow-md transition-shadow">

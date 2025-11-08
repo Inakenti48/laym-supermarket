@@ -1,10 +1,11 @@
-import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { useState } from 'react';
 
 export interface PendingProduct {
@@ -44,6 +45,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
   const [editedProduct, setEditedProduct] = useState(product);
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [showSupplierDialog, setShowSupplierDialog] = useState(false);
 
   // Собираем все фото в один массив
   const allPhotos = [
@@ -121,21 +123,33 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                 placeholder="Количество"
                 className="h-10 text-sm"
               />
-              <Select
-                value={editedProduct.supplier || ''}
-                onValueChange={(value) => setEditedProduct({ ...editedProduct, supplier: value })}
-              >
-                <SelectTrigger className="h-10 text-sm">
-                  <SelectValue placeholder="Выберите поставщика" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name}>
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Select
+                  value={editedProduct.supplier || ''}
+                  onValueChange={(value) => setEditedProduct({ ...editedProduct, supplier: value })}
+                >
+                  <SelectTrigger className="h-10 text-sm">
+                    <SelectValue placeholder="Выберите поставщика" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background">
+                    {suppliers.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.name}>
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSupplierDialog(true)}
+                  className="w-full h-8 text-xs"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Добавить поставщика
+                </Button>
+              </div>
             </div>
           ) : (
             <>
@@ -224,6 +238,16 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
           </Button>
         </div>
       </div>
+
+      {/* Quick Supplier Dialog */}
+      <QuickSupplierDialog
+        open={showSupplierDialog}
+        onClose={() => setShowSupplierDialog(false)}
+        onSupplierAdded={(newSupplier) => {
+          setEditedProduct({ ...editedProduct, supplier: newSupplier.name });
+          setShowSupplierDialog(false);
+        }}
+      />
 
       {/* Dialog для увеличенного просмотра фото */}
       <Dialog open={enlargedPhoto !== null} onOpenChange={(open) => !open && setEnlargedPhoto(null)}>

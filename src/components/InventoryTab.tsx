@@ -337,13 +337,37 @@ export const InventoryTab = () => {
           return;
         }
         
-        // 1. Собираем все фотографии (до 3 штук)
-        const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto];
+        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
+        console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name });
+        setCurrentProduct(prev => ({
+          ...prev,
+          barcode: sanitizedBarcode,
+          name: barcodeData.name,
+          category: barcodeData.category || prev.category
+        }));
         
-        // 2. Ищем товар в базе для автозаполнения цен
+        // 2. Собираем все фотографии (до 3 штук) и добавляем в поле "фото"
+        const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto];
+        setPhotos(allPhotos);
+        setTempFrontPhoto(barcodeData.frontPhoto);
+        setTempBarcodePhoto(barcodeData.barcodePhoto);
+        
+        // 3. Ищем товар в базе для автозаполнения цен
         const existing = await findProductByBarcode(sanitizedBarcode);
         
-        // 3. Создаем товар для очереди
+        if (existing) {
+          // Автозаполняем цены из базы
+          setCurrentProduct(prev => ({
+            ...prev,
+            category: existing.category,
+            purchasePrice: existing.purchasePrice.toString(),
+            retailPrice: existing.retailPrice.toString(),
+            unit: existing.unit,
+            supplier: existing.supplier || prev.supplier
+          }));
+        }
+        
+        // 4. ТАКЖЕ добавляем товар в очередь
         const newPendingProduct: PendingProduct = {
           id: `pending-${Date.now()}-${Math.random()}`,
           barcode: sanitizedBarcode,
@@ -360,7 +384,6 @@ export const InventoryTab = () => {
           barcodePhoto: barcodeData.barcodePhoto,
         };
         
-        // 4. Добавляем в очередь
         setPendingProducts(prev => [...prev, newPendingProduct]);
         
         // 5. Сохраняем фотографии в product_images для истории
@@ -368,16 +391,15 @@ export const InventoryTab = () => {
         for (const photoUrl of allPhotos) {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl);
         }
-        console.log('✅ Фотографии сохранены');
         
         // 6. Уведомления
         if (existing) {
-          toast.success(`✅ "${barcodeData.name}" добавлен в очередь! Цены автозаполнены из базы`);
+          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Цены из базы`);
         } else {
-          toast.success(`✅ "${barcodeData.name}" добавлен в очередь! Заполните цены и сохраните`);
+          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Введите цены`);
         }
         
-        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) добавлен в очередь`);
+        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - форма заполнена + в очередь`);
         
         // Закрываем сканер
         setShowAIScanner(false);

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles, Users } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles, Users, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
@@ -11,6 +12,7 @@ import { BulkImportButton } from './BulkImportButton';
 import { BulkCSVImport } from './BulkCSVImport';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { PendingProduct } from './PendingProductItem';
+import { ProductReturnsTab } from './ProductReturnsTab';
 
 import { addLog, getCurrentUser } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -892,10 +894,22 @@ export const InventoryTab = () => {
         }}
       />
 
-      {/* Main Content */}
-      <div className="space-y-3 md:space-y-4">
-        {/* Панель активных пользователей */}
-        {isAdmin && otherUsersStates.length > 0 && (
+      {/* Tabs for Inventory and Returns */}
+      <Tabs defaultValue="inventory" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="inventory">
+            <Package className="h-4 w-4 mr-2" />
+            Склад
+          </TabsTrigger>
+          <TabsTrigger value="returns">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Возврат товара
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inventory" className="space-y-3 md:space-y-4">
+          {/* Панель активных пользователей */}
+          {isAdmin && otherUsersStates.length > 0 && (
           <Card className="p-3 bg-muted/30 border-primary/20">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-primary animate-pulse" />
@@ -1243,7 +1257,12 @@ export const InventoryTab = () => {
           </div>
         </Card>
         </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="returns">
+          <ProductReturnsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

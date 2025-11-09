@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getAllProducts, getExpiringProducts, exportAllData } from '@/lib/storage';
 import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
 import { useProductsSync } from '@/hooks/useProductsSync';
+import { supabase } from '@/integrations/supabase/client';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [recentReturns, setRecentReturns] = useState<any[]>([]);
   
   // Realtime синхронизация товаров
   useProductsSync(() => {
@@ -71,10 +74,29 @@ export const DashboardTab = () => {
       });
     };
 
+    const loadRecentReturns = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('product_returns')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) throw error;
+        setRecentReturns(data || []);
+      } catch (error) {
+        console.error('Error loading returns:', error);
+      }
+    };
+
     calculateStats();
+    loadRecentReturns();
     
     // Обновление каждые 30 секунд
-    const interval = setInterval(calculateStats, 30000);
+    const interval = setInterval(() => {
+      calculateStats();
+      loadRecentReturns();
+    }, 30000);
     
     return () => clearInterval(interval);
   }, [refreshTrigger]); // Добавляем refreshTrigger как зависимость
@@ -223,6 +245,47 @@ export const DashboardTab = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Returns Section */}
+      {recentReturns.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ArrowLeft className="h-5 w-5 text-primary" />
+              Последние возвраты
+            </CardTitle>
+            <CardDescription>История возвратов товара</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Дата</TableHead>
+                  <TableHead>Товар</TableHead>
+                  <TableHead>Количество</TableHead>
+                  <TableHead>Сумма</TableHead>
+                  <TableHead>Поставщик</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentReturns.map((returnItem) => (
+                  <TableRow key={returnItem.id}>
+                    <TableCell>
+                      {new Date(returnItem.created_at).toLocaleDateString('ru-RU')}
+                    </TableCell>
+                    <TableCell>{returnItem.product_name}</TableCell>
+                    <TableCell>{returnItem.quantity}</TableCell>
+                    <TableCell>
+                      ₽{(returnItem.purchase_price * returnItem.quantity).toFixed(2)}
+                    </TableCell>
+                    <TableCell>{returnItem.supplier || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

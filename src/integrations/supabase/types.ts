@@ -173,6 +173,39 @@ export type Database = {
         }
         Relationships: []
       }
+      product_returns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          product_name: string
+          purchase_price: number
+          quantity: number
+          supplier: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          product_name: string
+          purchase_price: number
+          quantity: number
+          supplier?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          product_name?: string
+          purchase_price?: number
+          quantity?: number
+          supplier?: string | null
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           barcode: string

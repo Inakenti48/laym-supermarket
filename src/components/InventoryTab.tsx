@@ -324,12 +324,12 @@ export const InventoryTab = () => {
       try {
         const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
         
-        // Проверяем авторизацию
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-          toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
-          return;
-        }
+        console.log('📸 Обработка режима двух фото (dual)');
+        console.log('✍️ Заполняем поля формы внизу:', { 
+          barcode: sanitizedBarcode, 
+          name: barcodeData.name, 
+          category: barcodeData.category 
+        });
 
         // Проверяем обязательные поля
         if (!sanitizedBarcode) {
@@ -342,67 +342,47 @@ export const InventoryTab = () => {
           return;
         }
         
-        // Ищем в базе для автозаполнения
-        let category = barcodeData.category || '';
-        let purchasePrice: number | null = null;
-        let retailPrice: number | null = null;
-        let unit = 'шт';
+        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
+        setCurrentProduct(prev => ({
+          ...prev,
+          barcode: sanitizedBarcode,
+          name: barcodeData.name || '',
+          category: barcodeData.category || prev.category
+        }));
         
-        if (sanitizedBarcode) {
-          const existing = await findProductByBarcode(sanitizedBarcode);
-          if (existing) {
-            category = existing.category;
-            purchasePrice = existing.purchasePrice;
-            retailPrice = existing.retailPrice;
-            unit = existing.unit;
-            toast.info('✅ Товар найден в базе, данные автозаполнены');
-          }
+        // 2. Сохраняем фотографии в состояние
+        const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto];
+        setPhotos(allPhotos);
+        setTempFrontPhoto(barcodeData.frontPhoto);
+        setTempBarcodePhoto(barcodeData.barcodePhoto);
+        
+        // 3. Ищем товар в базе для автозаполнения цен
+        const existing = await findProductByBarcode(sanitizedBarcode);
+        if (existing) {
+          setCurrentProduct(prev => ({
+            ...prev,
+            category: existing.category,
+            purchasePrice: existing.purchasePrice.toString(),
+            retailPrice: existing.retailPrice.toString(),
+            unit: existing.unit,
+            supplier: existing.supplier || prev.supplier
+          }));
+          toast.success(`✅ Товар "${barcodeData.name}" найден! Цены автозаполнены. Введите количество ниже ⬇️`);
+        } else {
+          toast.success(`✅ Поля заполнены! Теперь введите цены и количество ниже ⬇️`);
         }
-
-        // Сохраняем товар в vremenno_product_foto СРАЗУ
-        const imageUrl = barcodeData.frontPhoto; // Лицевая фото как основная
         
-        const { data: insertedData, error: insertError } = await supabase
-          .from('vremenno_product_foto')
-          .insert({
-            barcode: sanitizedBarcode,
-            product_name: barcodeData.name,
-            category: category || null,
-            supplier: null,
-            unit: unit,
-            purchase_price: purchasePrice,
-            retail_price: retailPrice,
-            quantity: 1,
-            expiry_date: null,
-            payment_type: 'full',
-            paid_amount: purchasePrice ? purchasePrice : 0,
-            debt_amount: 0,
-            image_url: imageUrl,
-            storage_path: `product-photos/${sanitizedBarcode}-${Date.now()}`,
-            front_photo: barcodeData.frontPhoto,
-            barcode_photo: barcodeData.barcodePhoto,
-            front_photo_storage_path: `product-photos/${sanitizedBarcode}-front-${Date.now()}`,
-            barcode_photo_storage_path: `product-photos/${sanitizedBarcode}-barcode-${Date.now()}`,
-            created_by: user.id,
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          console.error('❌ Ошибка сохранения в базу:', insertError);
-          toast.error(`❌ Ошибка сохранения: ${insertError.message}`);
-          return;
+        // 4. Сохраняем фотографии в product_images для истории
+        console.log(`💾 Сохраняем ${allPhotos.length} фото в базу...`);
+        for (const photoUrl of allPhotos) {
+          await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl);
         }
-
-        console.log('✅ Товар сохранен в базу vremenno_product_foto с обоими фото');
+        console.log('✅ Фотографии сохранены в базу');
         
+        // Закрываем сканер
         setShowAIScanner(false);
         setAiScanMode('product');
-        setTempFrontPhoto('');
-        setTempBarcodePhoto('');
         
-        toast.success(`✅ Товар "${barcodeData.name}" сохранен в очередь с фотографиями`);
-        addLog(`AI-распознавание: ${barcodeData.name} (${sanitizedBarcode}) добавлен в очередь`);
       } catch (error: any) {
         console.error('❌ Ошибка handleScan:', error);
         toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`);

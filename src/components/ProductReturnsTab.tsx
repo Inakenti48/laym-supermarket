@@ -93,6 +93,7 @@ export const ProductReturnsTab = () => {
 
     setLoading(true);
     try {
+      // Добавляем возврат
       const { error } = await supabase
         .from('product_returns')
         .insert({
@@ -105,7 +106,49 @@ export const ProductReturnsTab = () => {
 
       if (error) throw error;
 
-      toast.success('Возврат добавлен');
+      // Находим товар по названию и удаляем из базы
+      const { data: product, error: findError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('name', formData.productName)
+        .maybeSingle();
+
+      if (findError) {
+        console.error('Error finding product:', findError);
+      }
+
+      if (product) {
+        const returnQty = parseInt(formData.quantity);
+        const newQuantity = product.quantity - returnQty;
+
+        if (newQuantity <= 0) {
+          // Удаляем товар полностью
+          const { error: deleteError } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', product.id);
+
+          if (deleteError) {
+            console.error('Error deleting product:', deleteError);
+          } else {
+            console.log('✅ Товар полностью удален из базы');
+          }
+        } else {
+          // Уменьшаем количество
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ quantity: newQuantity })
+            .eq('id', product.id);
+
+          if (updateError) {
+            console.error('Error updating product:', updateError);
+          } else {
+            console.log('✅ Количество товара уменьшено');
+          }
+        }
+      }
+
+      toast.success('Возврат добавлен, товар удален из базы');
       setFormData({
         productName: '',
         purchasePrice: '',

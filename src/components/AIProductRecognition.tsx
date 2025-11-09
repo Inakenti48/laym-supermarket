@@ -625,14 +625,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   useEffect(() => {
+    // Отключаем автоматическое сканирование для dual режима
+    if (mode === 'dual') {
+      return;
+    }
+
     if (!isProcessing && cameraReady) {
       const interval = setInterval(async () => {
         if (isProcessing || !isMountedRef.current || !cameraReady) return;
-
-        // Блокируем автоматическое сканирование если есть незавершенные товары в режиме dual
-        if (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none') {
-          return;
-        }
 
         setIsProcessing(true);
 
@@ -647,7 +647,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             return;
           }
           
-          const result = await recognizeProduct(image, mode === 'dual' ? 'product' : mode);
+          const result = await recognizeProduct(image, mode);
           
           if (mode === 'barcode') {
             if (result.barcode) {

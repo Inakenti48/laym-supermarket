@@ -258,8 +258,66 @@ export const InventoryTab = () => {
     };
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
+    
+    // КРИТИЧНО: Автоматическое добавление к существующему товару
+    if (barcodeData.autoAddToProducts && barcodeData.existingProductId) {
+      try {
+        console.log('🚀 Автоматическое добавление к существующему товару:', barcodeData.existingProductId);
+        
+        // Получаем текущий товар
+        const { data: existingProduct, error: fetchError } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', barcodeData.existingProductId)
+          .single();
+        
+        if (fetchError || !existingProduct) {
+          toast.error('Ошибка получения товара из базы');
+          return;
+        }
+        
+        // Увеличиваем количество на 1
+        const newQuantity = existingProduct.quantity + 1;
+        
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({ quantity: newQuantity })
+          .eq('id', barcodeData.existingProductId);
+        
+        if (updateError) {
+          console.error('Ошибка обновления количества:', updateError);
+          toast.error('Ошибка обновления количества товара');
+          return;
+        }
+        
+        // Сохраняем фото если есть
+        const allPhotos = [
+          ...(barcodeData.frontPhoto ? [barcodeData.frontPhoto] : []),
+          ...(barcodeData.barcodePhoto ? [barcodeData.barcodePhoto] : [])
+        ];
+        
+        if (allPhotos.length > 0 && barcodeData.barcode && barcodeData.name) {
+          console.log('📸 Сохранение фото в product_images...');
+          for (const photoUrl of allPhotos) {
+            await saveProductImage(barcodeData.barcode, barcodeData.name, photoUrl);
+          }
+        }
+        
+        toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} ${existingProduct.unit})`);
+        addLog(`Автодобавление: ${existingProduct.name} +1 (всего: ${newQuantity})`);
+        
+        setShowAIScanner(false);
+        setAiScanMode('product');
+        
+        return;
+      } catch (error: any) {
+        console.error('Ошибка автодобавления:', error);
+        toast.error('Ошибка при автоматическом добавлении товара');
+        return;
+      }
+    }
     
     // Если это режим двух фото
     if (aiScanMode === 'dual' && barcodeData.frontPhoto && barcodeData.barcodePhoto) {

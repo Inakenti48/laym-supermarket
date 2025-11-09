@@ -5,9 +5,19 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string }) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string; autoAddToProducts?: boolean; existingProductId?: string }) => void;
   mode?: 'product' | 'barcode' | 'expiry' | 'dual';
   hidden?: boolean;
   hasIncompleteProducts?: boolean; // Есть ли незавершенные товары в очереди
@@ -30,6 +40,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [dualPhotoStep, setDualPhotoStep] = useState<'front' | 'barcode' | 'ready' | 'none'>('none');
   const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
+  const [showExistingProductDialog, setShowExistingProductDialog] = useState(false);
+  const [existingProductData, setExistingProductData] = useState<any>(null);
+  const [pendingRecognitionData, setPendingRecognitionData] = useState<any>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -603,6 +616,38 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName });
 
       if (scannedBarcode || scannedName) {
+        // КРИТИЧНО: Проверяем существующий товар в базе перед добавлением
+        console.log('🔍 Проверяем наличие товара в базе...');
+        
+        const { data: existingProduct, error: checkError } = await supabase
+          .from('products')
+          .select('id, barcode, name, purchase_price, sale_price, quantity, unit, category, supplier')
+          .or(`barcode.eq.${scannedBarcode},name.ilike.%${scannedName}%`)
+          .maybeSingle();
+
+        if (checkError) {
+          console.error('Ошибка проверки товара:', checkError);
+        }
+
+        if (existingProduct) {
+          console.log('✅ Товар найден в базе:', existingProduct);
+          // Сохраняем данные для диалога подтверждения
+          setExistingProductData(existingProduct);
+          setPendingRecognitionData({
+            barcode: scannedBarcode,
+            name: scannedName,
+            category: '',
+            frontPhoto: tempFrontPhoto,
+            barcodePhoto: tempBarcodePhoto
+          });
+          setShowExistingProductDialog(true);
+          setNotification('');
+          setIsProcessing(false);
+          return;
+        }
+
+        // Товар не найден - обычная логика
+        console.log('ℹ️ Товар не найден в базе, добавляем в очередь');
         setNotification('✅ Данные извлечены!');
         
         console.log('✅ Передача данных родителю с обеими фотографиями');
@@ -648,6 +693,46 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     setIsProcessing(false);
   };
 
+  const handleConfirmExistingProduct = async () => {
+    if (!existingProductData || !pendingRecognitionData) return;
+
+    console.log('✅ Пользователь подтвердил использование существующих цен');
+    
+    // Отправляем в onProductFound с флагом автодобавления
+    onProductFound({
+      ...pendingRecognitionData,
+      autoAddToProducts: true,
+      existingProductId: existingProductData.id
+    });
+
+    // Очищаем состояние
+    setShowExistingProductDialog(false);
+    setExistingProductData(null);
+    setPendingRecognitionData(null);
+    setTempFrontPhoto('');
+    setTempBarcodePhoto('');
+    setDualPhotoStep('none');
+    
+    toast.success('✅ Товар добавлен в базу автоматически');
+  };
+
+  const handleRejectExistingProduct = () => {
+    console.log('❌ Пользователь отклонил использование существующих цен');
+    
+    // Отправляем в очередь для редактирования
+    if (pendingRecognitionData) {
+      onProductFound(pendingRecognitionData);
+    }
+
+    // Очищаем состояние
+    setShowExistingProductDialog(false);
+    setExistingProductData(null);
+    setPendingRecognitionData(null);
+    setTempFrontPhoto('');
+    setTempBarcodePhoto('');
+    setDualPhotoStep('none');
+  };
+
   const getStepIndicator = () => {
     return mode === 'barcode' ? '📷 Распознавание штрихкода' : '📷 Распознавание товара';
   };
@@ -670,19 +755,68 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   }
 
   return (
-    <div className="w-full">
-      <canvas ref={canvasRef} className="hidden" />
-      
-      <div className="bg-card rounded-lg shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between p-3 border-b bg-primary/5">
-          <div className="flex items-center gap-2">
-            <Camera className="h-5 w-5 text-primary" />
-            <h3 className="text-base font-semibold">AI-распознавание товаров</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              {getStepIndicator()}
-            </span>
+    <>
+      <AlertDialog open={showExistingProductDialog} onOpenChange={setShowExistingProductDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Товар найден в базе</AlertDialogTitle>
+            <AlertDialogDescription>
+              {existingProductData && (
+                <div className="space-y-2 mt-4">
+                  <p className="font-semibold text-foreground">
+                    {existingProductData.name}
+                  </p>
+                  <div className="bg-muted p-3 rounded-md space-y-1">
+                    <p className="text-sm">
+                      <span className="font-medium">Закупочная цена:</span>{' '}
+                      <span className="text-lg font-bold text-primary">
+                        {existingProductData.purchase_price} ₽
+                      </span>
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Розничная цена:</span>{' '}
+                      <span className="text-lg font-bold text-primary">
+                        {existingProductData.sale_price} ₽
+                      </span>
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Категория:</span> {existingProductData.category}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Остаток:</span> {existingProductData.quantity} {existingProductData.unit}
+                    </p>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    Хотите добавить товар с этими ценами? Он сразу попадет в базу.
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleRejectExistingProduct}>
+              Нет, изменить
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmExistingProduct}>
+              Да, добавить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="w-full">
+        <canvas ref={canvasRef} className="hidden" />
+        
+        <div className="bg-card rounded-lg shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b bg-primary/5">
+            <div className="flex items-center gap-2">
+              <Camera className="h-5 w-5 text-primary" />
+              <h3 className="text-base font-semibold">AI-распознавание товаров</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {getStepIndicator()}
+              </span>
             <div className="flex items-center gap-1 text-xs text-green-600">
               <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
               {cameraReady ? 'Готова' : 'Загрузка...'}
@@ -884,5 +1018,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         )}
       </div>
     </div>
+    </>
   );
 };

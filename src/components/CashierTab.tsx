@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CameraScanner } from './CameraScanner';
 import { BackgroundScanner } from './BackgroundScanner';
+import { AIProductRecognition } from './AIProductRecognition';
 import { CartItem } from './CashierCartItem';
 import {
   findProductByBarcode, 
@@ -106,6 +107,7 @@ export const CashierTab = () => {
   const [showDrawerSettings, setShowDrawerSettings] = useState(false);
   const [selectedDrawerCommand, setSelectedDrawerCommand] = useState<keyof typeof DRAWER_COMMANDS>('STANDARD');
   const [pendingReceiptData, setPendingReceiptData] = useState<ReceiptData | null>(null);
+  const [showAIScanner, setShowAIScanner] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const user = getCurrentUser();
@@ -886,25 +888,101 @@ export const CashierTab = () => {
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              {/* Background Scanner - автоматическое сканирование с визуализацией */}
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-full max-w-md">
-                  <BackgroundScanner 
-                    onProductFound={(data) => {
-                      if (data.barcode || data.name) {
-                        handleScan({ 
-                          barcode: data.barcode || '', 
-                          name: data.name 
+              {/* Кнопка AI-сканирования */}
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => setShowAIScanner(!showAIScanner)}
+                  variant={showAIScanner ? "default" : "outline"}
+                  className="w-full max-w-md"
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  {showAIScanner ? 'Закрыть AI-сканер' : 'AI-распознавание товара (2 фото)'}
+                </Button>
+              </div>
+
+              {/* AI Scanner - два фото для распознавания */}
+              {showAIScanner && (
+                <div className="flex flex-col items-center gap-3 p-4 bg-primary/5 rounded-lg">
+                  <AIProductRecognition
+                    mode="dual"
+                    onProductFound={async (data) => {
+                      console.log('🎯 AI-сканер вернул данные:', data);
+                      
+                      if (!data.barcode || !data.name) {
+                        toast.error('❌ Не удалось распознать товар');
+                        return;
+                      }
+                      
+                      // Ищем товар в базе
+                      const sanitizedBarcode = data.barcode.trim();
+                      let product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
+                      
+                      // Если не нашли по штрихкоду, ищем по названию
+                      if (!product) {
+                        product = productsNameMap.current.get(data.name.toLowerCase());
+                      }
+                      
+                      if (product) {
+                        // Товар найден - добавляем в корзину
+                        console.log('✅ Товар найден в базе:', product.name);
+                        
+                        // Проверяем срок годности
+                        if (isProductExpired(product)) {
+                          toast.error(`❌ ПРОСРОЧКА! Товар "${product.name}" истёк ${new Date(product.expiryDate!).toLocaleDateString('ru-RU')}. Продажа запрещена!`, {
+                            duration: 5000,
+                          });
+                          return;
+                        }
+                        
+                        // Проверяем остаток
+                        if (product.quantity <= 0) {
+                          toast.error(`❌ ТОВАР ЗАКОНЧИЛСЯ! "${product.name}" - остаток 0`, {
+                            duration: 4000,
+                          });
+                          return;
+                        }
+                        
+                        // Добавляем в корзину
+                        addToCart(product.name, product.retailPrice || 0, product.barcode);
+                        toast.success(`✅ "${product.name}" добавлен в корзину`);
+                        setShowAIScanner(false);
+                      } else {
+                        // Товар не найден в базе
+                        console.error('❌ Товар не найден в базе');
+                        toast.error(`❌ Товар "${data.name}" не найден в базе`, {
+                          duration: 4000,
+                          description: 'Добавьте товар через вкладку "Товары"'
                         });
                       }
                     }}
-                    autoStart={false}
                   />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Сделайте 2 фото: лицевую сторону товара и штрихкод
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Наведите камеру на штрихкод или переднюю часть упаковки
-                </p>
-              </div>
+              )}
+
+              {/* Background Scanner - автоматическое сканирование с визуализацией */}
+              {!showAIScanner && (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-full max-w-md">
+                    <BackgroundScanner 
+                      onProductFound={(data) => {
+                        if (data.barcode || data.name) {
+                          handleScan({ 
+                            barcode: data.barcode || '', 
+                            name: data.name 
+                          });
+                        }
+                      }}
+                      autoStart={false}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Наведите камеру на штрихкод или переднюю часть упаковки
+                  </p>
+                </div>
+              )}
             </div>
             <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />

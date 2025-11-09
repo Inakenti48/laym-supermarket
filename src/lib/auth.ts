@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { authClient, clearSession } from '@/lib/authClient';
 
 export type UserRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
 
@@ -74,10 +74,10 @@ export const login = async (
       console.log('🔐 Создание сессии Supabase для:', email);
       
       // Сначала выходим из текущей сессии, если есть
-      await supabase.auth.signOut();
+      await authClient.auth.signOut();
       
       // Пытаемся войти
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await authClient.auth.signInWithPassword({
         email,
         password,
       });
@@ -85,7 +85,7 @@ export const login = async (
       if (signInError) {
         console.log('👤 Пользователь не найден, создаем нового...');
         // Если пользователь не существует, создаем его
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await authClient.auth.signUp({
           email,
           password,
           options: {
@@ -115,7 +115,7 @@ export const login = async (
       }
       
       // Проверяем, что сессия действительно создана
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await authClient.auth.getSession();
       if (sessionError) {
         console.error('❌ Ошибка получения сессии:', sessionError);
         throw sessionError;
@@ -178,7 +178,8 @@ export const logout = async (preserveFormData: boolean = false) => {
   
   // Выходим из Supabase
   try {
-    await supabase.auth.signOut();
+    clearSession();
+    await authClient.auth.signOut();
   } catch (error) {
     console.error('Ошибка выхода из Supabase:', error);
   }

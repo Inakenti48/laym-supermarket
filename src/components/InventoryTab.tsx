@@ -325,11 +325,6 @@ export const InventoryTab = () => {
         const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
         
         console.log('📸 Обработка режима двух фото (dual)');
-        console.log('✍️ Заполняем поля формы внизу:', { 
-          barcode: sanitizedBarcode, 
-          name: barcodeData.name, 
-          category: barcodeData.category 
-        });
 
         // Проверяем обязательные поля
         if (!sanitizedBarcode) {
@@ -342,42 +337,47 @@ export const InventoryTab = () => {
           return;
         }
         
-        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
-        setCurrentProduct(prev => ({
-          ...prev,
-          barcode: sanitizedBarcode,
-          name: barcodeData.name || '',
-          category: barcodeData.category || prev.category
-        }));
-        
-        // 2. Сохраняем фотографии в состояние
+        // 1. Собираем все фотографии (до 3 штук)
         const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto];
-        setPhotos(allPhotos);
-        setTempFrontPhoto(barcodeData.frontPhoto);
-        setTempBarcodePhoto(barcodeData.barcodePhoto);
         
-        // 3. Ищем товар в базе для автозаполнения цен
+        // 2. Ищем товар в базе для автозаполнения цен
         const existing = await findProductByBarcode(sanitizedBarcode);
-        if (existing) {
-          setCurrentProduct(prev => ({
-            ...prev,
-            category: existing.category,
-            purchasePrice: existing.purchasePrice.toString(),
-            retailPrice: existing.retailPrice.toString(),
-            unit: existing.unit,
-            supplier: existing.supplier || prev.supplier
-          }));
-          toast.success(`✅ Товар "${barcodeData.name}" найден! Цены автозаполнены. Введите количество ниже ⬇️`);
-        } else {
-          toast.success(`✅ Поля заполнены! Теперь введите цены и количество ниже ⬇️`);
-        }
         
-        // 4. Сохраняем фотографии в product_images для истории
+        // 3. Создаем товар для очереди
+        const newPendingProduct: PendingProduct = {
+          id: `pending-${Date.now()}-${Math.random()}`,
+          barcode: sanitizedBarcode,
+          name: barcodeData.name,
+          category: barcodeData.category || (existing?.category || ''),
+          purchasePrice: existing?.purchasePrice.toString() || '',
+          retailPrice: existing?.retailPrice.toString() || '',
+          quantity: '1',
+          unit: existing?.unit || 'шт',
+          expiryDate: '',
+          supplier: existing?.supplier || '',
+          photos: allPhotos,
+          frontPhoto: barcodeData.frontPhoto,
+          barcodePhoto: barcodeData.barcodePhoto,
+        };
+        
+        // 4. Добавляем в очередь
+        setPendingProducts(prev => [...prev, newPendingProduct]);
+        
+        // 5. Сохраняем фотографии в product_images для истории
         console.log(`💾 Сохраняем ${allPhotos.length} фото в базу...`);
         for (const photoUrl of allPhotos) {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl);
         }
-        console.log('✅ Фотографии сохранены в базу');
+        console.log('✅ Фотографии сохранены');
+        
+        // 6. Уведомления
+        if (existing) {
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь! Цены автозаполнены из базы`);
+        } else {
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь! Заполните цены и сохраните`);
+        }
+        
+        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) добавлен в очередь`);
         
         // Закрываем сканер
         setShowAIScanner(false);

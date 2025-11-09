@@ -802,19 +802,24 @@ export const CashierTab = () => {
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              {/* Background Scanner - автоматическое сканирование */}
-              <div className="flex justify-center">
-                <BackgroundScanner 
-                  onProductFound={(data) => {
-                    if (data.barcode || data.name) {
-                      handleScan({ 
-                        barcode: data.barcode || '', 
-                        name: data.name 
-                      });
-                    }
-                  }}
-                  autoStart={false}
-                />
+              {/* Background Scanner - автоматическое сканирование с визуализацией */}
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-full max-w-md">
+                  <BackgroundScanner 
+                    onProductFound={(data) => {
+                      if (data.barcode || data.name) {
+                        handleScan({ 
+                          barcode: data.barcode || '', 
+                          name: data.name 
+                        });
+                      }
+                    }}
+                    autoStart={false}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Наведите камеру на штрихкод или переднюю часть упаковки
+                </p>
               </div>
             </div>
             <div className="relative" ref={searchRef}>

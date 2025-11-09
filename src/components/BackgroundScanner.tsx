@@ -179,37 +179,75 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
       {/* Скрытая область для html5-qrcode */}
       <div id={scannerIdRef.current} className="hidden" />
       
-      {/* Скрытое видео для OCR */}
-      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Кнопка управления сканированием */}
-      <Button
-        onClick={isScanning ? stopScanning : startScanning}
-        variant={isScanning ? "destructive" : "default"}
-        size="sm"
-        className="gap-2 relative"
-      >
-        {isScanning ? (
-          <>
-            <X className="w-4 h-4" />
-            Остановить
-          </>
-        ) : (
-          <>
-            <Scan className="w-4 h-4" />
-            Сканировать
-          </>
-        )}
-        
-        {/* Индикатор активного сканирования */}
+      <div className="flex flex-col items-center gap-3">
+        {/* Видео окно для сканирования */}
         {isScanning && (
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-          </span>
+          <div className="relative w-full max-w-sm rounded-lg overflow-hidden border-2 border-primary shadow-lg bg-black">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="w-full h-auto"
+              style={{ maxHeight: '300px', objectFit: 'cover' }}
+            />
+            
+            {/* Рамка сканирования */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-48 h-48 border-4 border-primary rounded-lg">
+                {/* Углы рамки */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500"></div>
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500"></div>
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500"></div>
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500"></div>
+                
+                {/* Анимированная линия сканирования */}
+                <div className="absolute inset-0 overflow-hidden">
+                  <div className="w-full h-1 bg-green-500 animate-scan-line"></div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Статус индикатор */}
+            <div className="absolute top-2 right-2 flex items-center gap-2 bg-black/70 px-3 py-1 rounded-full">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-xs text-white font-medium">Сканирование</span>
+            </div>
+          </div>
         )}
-      </Button>
+
+        {/* Кнопка управления сканированием */}
+        <Button
+          onClick={isScanning ? stopScanning : startScanning}
+          variant={isScanning ? "destructive" : "default"}
+          size="sm"
+          className="gap-2 relative"
+        >
+          {isScanning ? (
+            <>
+              <X className="w-4 h-4" />
+              Остановить камеру
+            </>
+          ) : (
+            <>
+              <Scan className="w-4 h-4" />
+              Запустить камеру
+            </>
+          )}
+        </Button>
+      </div>
+      
+      <style>{`
+        @keyframes scan-line {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(192px); }
+        }
+        .animate-scan-line {
+          animation: scan-line 2s linear infinite;
+        }
+      `}</style>
     </>
   );
 };

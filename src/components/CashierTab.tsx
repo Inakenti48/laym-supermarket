@@ -109,6 +109,34 @@ export const CashierTab = () => {
   const searchRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const user = getCurrentUser();
+  
+  // ОПТИМИЗАЦИЯ: Кешируем все товары один раз
+  const productsCache = useRef<any[]>([]);
+  const productsBarcodeMap = useRef<Map<string, any>>(new Map());
+  const productsNameMap = useRef<Map<string, any>>(new Map());
+  
+  // Загружаем товары один раз при монтировании
+  useEffect(() => {
+    const loadProductsCache = async () => {
+      const products = await getAllProducts();
+      productsCache.current = products;
+      
+      // Создаем быстрые индексы для поиска
+      productsBarcodeMap.current.clear();
+      productsNameMap.current.clear();
+      
+      products.forEach(product => {
+        if (product.barcode) {
+          productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
+        }
+        productsNameMap.current.set(product.name.toLowerCase(), product);
+      });
+      
+      console.log(`✅ Загружено ${products.length} товаров в кеш кассы`);
+    };
+    
+    loadProductsCache();
+  }, []);
 
   // Сохраняем корзину при изменении
   useEffect(() => {
@@ -143,8 +171,20 @@ export const CashierTab = () => {
           schema: 'public',
           table: 'products'
         },
-        () => {
-          console.log('🔄 Products updated on another device - refreshing search results');
+        async () => {
+          console.log('🔄 Products updated on another device - refreshing cache');
+          // ОПТИМИЗАЦИЯ: Обновляем кеш при изменениях
+          const products = await getAllProducts();
+          productsCache.current = products;
+          productsBarcodeMap.current.clear();
+          productsNameMap.current.clear();
+          products.forEach(product => {
+            if (product.barcode) {
+              productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
+            }
+            productsNameMap.current.set(product.name.toLowerCase(), product);
+          });
+          
           // Обновляем результаты поиска если есть активный поиск
           if (searchQuery.trim() && searchQuery.length >= 2) {
             const updateSearchResults = async () => {
@@ -234,20 +274,19 @@ export const CashierTab = () => {
     let isTemporary = false;
     const isFromPhotoScan = !!productName || !!barcodeData.photoUrl || !!barcodeData.capturedImage;
 
-    // Если есть штрихкод - ищем по штрихкоду только в основной базе
+    // ОПТИМИЗАЦИЯ: Используем кеш вместо обращения к базе
+    // Если есть штрихкод - ищем по штрихкоду в кеше
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
-      product = await findProductByBarcode(sanitizedBarcode);
-      console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, '-> найден:', !!product);
+      product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
+      console.log('🔍 Поиск по штрихкоду в кеше:', sanitizedBarcode, '-> найден:', !!product);
     }
     
-    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию (включая цвет и объем)
+    // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию в кеше
     if (!product && productName) {
-      const allProducts = await getAllProducts();
+      const allProducts = productsCache.current;
       
       // Сначала точное совпадение
-      product = allProducts.find(p => 
-        p.name.toLowerCase() === productName.toLowerCase()
-      );
+      product = productsNameMap.current.get(productName.toLowerCase());
       
       // Если не нашли, ищем частичное совпадение (учитываем цвет и объем)
       if (!product) {

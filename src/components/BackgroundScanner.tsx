@@ -122,7 +122,9 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         if (product) {
           setLastScanTime(now);
           onProductFound({ name: product.name, barcode: product.barcode });
-          toast.success(`Распознан: ${product.name}`);
+          toast.success(`✅ Распознан: ${product.name}`);
+        } else {
+          console.log('🔍 Товар не распознан на кадре');
         }
       }, 3000);
 

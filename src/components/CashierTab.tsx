@@ -373,6 +373,55 @@ export const CashierTab = () => {
     
     console.log('📦 Итоговый результат поиска товара:', product ? product.name : 'НЕ НАЙДЕН');
 
+    if (!product) {
+      // Товар не найден в базе - показываем явное уведомление
+      console.error('❌ ТОВАР НЕ НАЙДЕН В БАЗЕ');
+      
+      // Звуковой сигнал ошибки
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Тройной низкий beep для ошибки
+        oscillator.frequency.value = 200;
+        oscillator.type = 'square';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.15);
+        
+        // Второй beep
+        const osc2 = audioContext.createOscillator();
+        osc2.connect(gainNode);
+        osc2.frequency.value = 200;
+        osc2.type = 'square';
+        osc2.start(audioContext.currentTime + 0.2);
+        osc2.stop(audioContext.currentTime + 0.35);
+      } catch (e) {
+        console.log('Не удалось воспроизвести звук:', e);
+      }
+      
+      if (sanitizedBarcode) {
+        toast.error(`❌ ТОВАР НЕ НАЙДЕН!\nШтрихкод: ${sanitizedBarcode}`, {
+          duration: 4000,
+        });
+      } else if (productName) {
+        toast.error(`❌ ТОВАР НЕ НАЙДЕН!\nНазвание: ${productName}`, {
+          duration: 4000,
+        });
+      } else {
+        toast.error('❌ ТОВАР НЕ НАЙДЕН В БАЗЕ!', {
+          duration: 4000,
+        });
+      }
+      return;
+    }
+
     if (product) {
       // Проверка просрочки
       if (isProductExpired(product)) {
@@ -384,7 +433,9 @@ export const CashierTab = () => {
       
       // Проверка наличия
       if (product.quantity <= 0) {
-        toast.error(`ТОВАР ЗАКОНЧИЛСЯ ПОЭТОМУ НЕ ПРОБИВАЮ`);
+        toast.error(`❌ ТОВАР ЗАКОНЧИЛСЯ!\n"${product.name}" - остаток 0`, {
+          duration: 4000,
+        });
         return;
       }
       

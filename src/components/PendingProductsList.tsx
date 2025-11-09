@@ -31,7 +31,7 @@ export const PendingProductsList = ({
   onSaveAll,
   onClearAll,
 }: PendingProductsListProps) => {
-  const allComplete = products.length > 0 && products.every(p => 
+  const hasCompleteProducts = products.length > 0 && products.some(p => 
     p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
   );
 
@@ -48,7 +48,7 @@ export const PendingProductsList = ({
         <div className="flex gap-3">
           <Button
             onClick={onSaveAll}
-            disabled={!allComplete}
+            disabled={!hasCompleteProducts}
             className="flex-1 h-10"
           >
             <Save className="h-4 w-4 mr-2" />

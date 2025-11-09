@@ -225,13 +225,14 @@ export const PendingProductsTab = () => {
       return;
     }
 
-    const allComplete = pendingProducts.every(p =>
+    // Фильтруем только полностью заполненные товары
+    const completeProducts = pendingProducts.filter(p =>
       p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
       (p.frontPhoto || p.barcodePhoto || p.photos.length > 0)
     );
 
-    if (!allComplete) {
-      toast.error('Заполните все поля (штрихкод, название, категория, цены, количество) и добавьте хотя бы одну фотографию для всех товаров');
+    if (completeProducts.length === 0) {
+      toast.error('Нет готовых товаров для сохранения. Заполните все обязательные поля и добавьте фотографии');
       return;
     }
 
@@ -244,8 +245,9 @@ export const PendingProductsTab = () => {
 
     let successCount = 0;
     let errorCount = 0;
+    const skippedCount = pendingProducts.length - completeProducts.length;
 
-    for (const product of pendingProducts) {
+    for (const product of completeProducts) {
       try {
         const supplier = suppliers.find(s => s.name === product.supplier);
 
@@ -294,10 +296,13 @@ export const PendingProductsTab = () => {
       }
     }
 
-    setPendingProducts([]);
+    // Обновляем список, убирая только сохраненные товары
+    setPendingProducts(prev => prev.filter(p => 
+      !completeProducts.find(cp => cp.id === p.id)
+    ));
 
     if (successCount > 0) {
-      toast.success(`Успешно добавлено товаров: ${successCount}`);
+      toast.success(`Успешно добавлено товаров: ${successCount}${skippedCount > 0 ? `. Пропущено: ${skippedCount}` : ''}`);
     }
     if (errorCount > 0) {
       toast.error(`Ошибок при добавлении: ${errorCount}`);
@@ -322,7 +327,7 @@ export const PendingProductsTab = () => {
     toast.success('Очередь очищена');
   };
 
-  const allComplete = pendingProducts.length > 0 && pendingProducts.every(p =>
+  const hasCompleteProducts = pendingProducts.length > 0 && pendingProducts.some(p =>
     p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
     (p.frontPhoto || p.barcodePhoto || p.photos.length > 0) // Хотя бы одна фотография
   );
@@ -343,7 +348,7 @@ export const PendingProductsTab = () => {
           <div className="flex gap-3">
             <Button
               onClick={handleSaveAllProducts}
-              disabled={!allComplete}
+              disabled={!hasCompleteProducts}
               className="flex-1 h-10"
             >
               <Save className="h-4 w-4 mr-2" />

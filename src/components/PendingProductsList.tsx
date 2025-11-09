@@ -32,7 +32,8 @@ export const PendingProductsList = ({
   onClearAll,
 }: PendingProductsListProps) => {
   const hasCompleteProducts = products.length > 0 && products.some(p => 
-    p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity
+    p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
+    (p.frontPhoto || p.barcodePhoto || (p.photos && p.photos.length > 0))
   );
 
   return (

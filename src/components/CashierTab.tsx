@@ -908,18 +908,34 @@ export const CashierTab = () => {
                     onProductFound={async (data) => {
                       console.log('🎯 AI-сканер вернул данные:', data);
                       
-                      if (!data.barcode || !data.name) {
+                      if (!data.barcode && !data.name) {
                         toast.error('❌ Не удалось распознать товар');
                         return;
                       }
                       
-                      // Ищем товар в базе
-                      const sanitizedBarcode = data.barcode.trim();
-                      let product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
+                      let product;
+                      
+                      // Сначала ищем по штрихкоду, если есть
+                      if (data.barcode) {
+                        const sanitizedBarcode = data.barcode.trim();
+                        product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
+                        console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, product ? '✅ Найден' : '❌ Не найден');
+                      }
                       
                       // Если не нашли по штрихкоду, ищем по названию
-                      if (!product) {
+                      if (!product && data.name) {
+                        // Точное совпадение
                         product = productsNameMap.current.get(data.name.toLowerCase());
+                        
+                        // Если не нашли точное совпадение, ищем по части названия
+                        if (!product) {
+                          const searchName = data.name.toLowerCase();
+                          product = productsCache.current.find(p => 
+                            p.name.toLowerCase().includes(searchName) ||
+                            searchName.includes(p.name.toLowerCase())
+                          );
+                        }
+                        console.log('🔍 Поиск по названию:', data.name, product ? '✅ Найден' : '❌ Не найден');
                       }
                       
                       if (product) {

@@ -448,82 +448,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         } else if (dualPhotoStep === 'barcode') {
           // Сохраняем штрихкод
           setTempBarcodePhoto(image);
-          setNotification('🔍 AI сканирование фотографий...');
-          
-          try {
-            // Сжимаем изображения перед отправкой
-            const compressedFront = await compressForAI(tempFrontPhoto);
-            const compressedBarcode = await compressForAI(image);
-            
-            // Вызываем новую функцию для автоматического сканирования обеих фотографий
-            console.log('📷 Запуск автоматического AI-сканирования фотографий...');
-            const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
-              body: { 
-                frontPhoto: compressedFront,
-                barcodePhoto: compressedBarcode
-              }
-            });
-
-            if (scanError) {
-              console.error('Ошибка AI-сканирования:', scanError);
-              setNotification('❌ Ошибка сканирования');
-              setTimeout(() => setNotification(''), 1500);
-              toast.error('Ошибка при AI-сканировании фотографий');
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-              return;
-            }
-
-            console.log('✅ Результат AI-сканирования:', scanData);
-
-            // Извлекаем данные из ответа
-            const scannedBarcode = scanData?.barcode || '';
-            const scannedName = scanData?.name || '';
-
-            if (scannedBarcode || scannedName) {
-              setNotification('✅ Данные извлечены!');
-              
-              // Передаем данные родителю с обеими фотографиями
-              onProductFound({
-                barcode: scannedBarcode,
-                name: scannedName,
-                category: '',
-                frontPhoto: tempFrontPhoto,
-                barcodePhoto: image
-              });
-              
-              // Показываем что именно распознано
-              if (scannedBarcode && scannedName) {
-                toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`);
-              } else if (scannedBarcode) {
-                toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
-              } else if (scannedName) {
-                toast.success(`📦 Название распознано: ${scannedName}`);
-              }
-              
-              setTimeout(() => setNotification(''), 1000);
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-            } else {
-              setNotification('❌ Ничего не распознано');
-              setTimeout(() => setNotification(''), 1500);
-              toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.');
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-            }
-          } catch (err: any) {
-            console.error('Ошибка при AI-сканировании:', err);
-            setNotification('❌ Ошибка');
-            setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при AI-сканировании товара');
-            setDualPhotoStep('none');
-            setTempFrontPhoto('');
-            setTempBarcodePhoto('');
-          }
-          
+          setNotification('✅ Обе фотографии готовы! Нажмите "AI Распознавание"');
+          setTimeout(() => setNotification(''), 3000);
           setIsProcessing(false);
           return;
         }
@@ -697,6 +623,81 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     }
   }, [isProcessing, mode, cameraReady]);
 
+  const handleAIScan = async () => {
+    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) return;
+    
+    setIsProcessing(true);
+    setNotification('🔍 AI сканирование фотографий...');
+    
+    try {
+      // Сжимаем изображения перед отправкой
+      const compressedFront = await compressForAI(tempFrontPhoto);
+      const compressedBarcode = await compressForAI(tempBarcodePhoto);
+      
+      // Вызываем функцию для сканирования обеих фотографий
+      console.log('📷 Запуск AI-сканирования фотографий...');
+      const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
+        body: { 
+          frontPhoto: compressedFront,
+          barcodePhoto: compressedBarcode
+        }
+      });
+
+      if (scanError) {
+        console.error('Ошибка AI-сканирования:', scanError);
+        setNotification('❌ Ошибка сканирования');
+        setTimeout(() => setNotification(''), 1500);
+        toast.error('Ошибка при AI-сканировании фотографий');
+        setIsProcessing(false);
+        return;
+      }
+
+      console.log('✅ Результат AI-сканирования:', scanData);
+
+      // Извлекаем данные из ответа
+      const scannedBarcode = scanData?.barcode || '';
+      const scannedName = scanData?.name || '';
+
+      if (scannedBarcode || scannedName) {
+        setNotification('✅ Данные извлечены!');
+        
+        // Передаем данные родителю с обеими фотографиями
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: '',
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
+        
+        // Показываем что именно распознано
+        if (scannedBarcode && scannedName) {
+          toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`);
+        } else if (scannedBarcode) {
+          toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
+        } else if (scannedName) {
+          toast.success(`📦 Название распознано: ${scannedName}`);
+        }
+        
+        setTimeout(() => setNotification(''), 1000);
+        setDualPhotoStep('none');
+        setTempFrontPhoto('');
+        setTempBarcodePhoto('');
+      } else {
+        setNotification('❌ Ничего не распознано');
+        setTimeout(() => setNotification(''), 1500);
+        toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.');
+      }
+    } catch (err: any) {
+      console.error('Ошибка при AI-сканировании:', err);
+      setNotification('❌ Ошибка');
+      setTimeout(() => setNotification(''), 1500);
+      toast.error('Ошибка при AI-сканировании товара');
+    }
+    
+    setIsProcessing(false);
+  };
+
   const getStepIndicator = () => {
     return mode === 'barcode' ? '📷 Распознавание штрихкода' : '📷 Распознавание товара';
   };
@@ -823,17 +824,37 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                   +
                 </Button>
               </div>
-              <Button
-                onClick={handleManualCapture}
-                size="lg"
-                className="rounded-full shadow-lg w-full"
-                disabled={!cameraReady || (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none')}
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                {mode === 'dual' && dualPhotoStep === 'front' ? 'Сфотографировать лицевую' : 
-                 mode === 'dual' && dualPhotoStep === 'barcode' ? 'Сфотографировать штрихкод' :
-                 'Сфотографировать'}
-              </Button>
+              {mode === 'dual' && tempFrontPhoto && tempBarcodePhoto ? (
+                <Button
+                  onClick={handleAIScan}
+                  size="lg"
+                  className="rounded-full shadow-lg w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Распознавание...
+                    </>
+                  ) : (
+                    <>
+                      🤖 AI Распознавание
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleManualCapture}
+                  size="lg"
+                  className="rounded-full shadow-lg w-full"
+                  disabled={!cameraReady || (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none')}
+                >
+                  <Camera className="h-5 w-5 mr-2" />
+                  {mode === 'dual' && dualPhotoStep === 'front' ? 'Сфотографировать лицевую' : 
+                   mode === 'dual' && dualPhotoStep === 'barcode' ? 'Сфотографировать штрихкод' :
+                   'Сфотографировать'}
+                </Button>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -894,6 +894,32 @@ export const InventoryTab = () => {
 
       {/* Main Content */}
       <div className="space-y-3 md:space-y-4">
+        {/* Панель активных пользователей */}
+        {isAdmin && otherUsersStates.length > 0 && (
+          <Card className="p-3 bg-muted/30 border-primary/20">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary animate-pulse" />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-foreground mb-1">
+                  Активные пользователи ({otherUsersStates.length}):
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {otherUsersStates.map((state, idx) => (
+                    <Badge key={idx} variant="secondary" className="text-xs">
+                      {state.userName}
+                      {state.name && (
+                        <span className="ml-1 text-muted-foreground">
+                          → {state.name.substring(0, 15)}{state.name.length > 15 ? '...' : ''}
+                        </span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
@@ -1007,9 +1033,9 @@ export const InventoryTab = () => {
                 placeholder="Сканируйте"
               />
               {isAdmin && otherUsersStates.some(s => s.barcode) && (
-                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                  Другие: {otherUsersStates.filter(s => s.barcode).map(s => s.barcode).join(', ')}
-                </p>
+                <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                  👥 {otherUsersStates.filter(s => s.barcode).map(s => `${s.userName}: ${s.barcode}`).join(', ')}
+                </div>
               )}
             </div>
 
@@ -1024,9 +1050,9 @@ export const InventoryTab = () => {
                 placeholder="Название"
               />
               {isAdmin && otherUsersStates.some(s => s.name) && (
-                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                  Другие: {otherUsersStates.filter(s => s.name).map(s => s.name).join(', ')}
-                </p>
+                <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                  👥 {otherUsersStates.filter(s => s.name).map(s => `${s.userName}: ${s.name}`).join(' | ')}
+                </div>
               )}
             </div>
 
@@ -1041,9 +1067,9 @@ export const InventoryTab = () => {
                 placeholder="Категория"
               />
               {isAdmin && otherUsersStates.some(s => s.category) && (
-                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                  Другие: {otherUsersStates.filter(s => s.category).map(s => s.category).join(', ')}
-                </p>
+                <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                  👥 {otherUsersStates.filter(s => s.category).map(s => `${s.userName}: ${s.category}`).join(' | ')}
+                </div>
               )}
             </div>
 
@@ -1074,9 +1100,9 @@ export const InventoryTab = () => {
                 </SelectContent>
               </Select>
               {isAdmin && otherUsersStates.some(s => s.supplier) && (
-                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                  Другие: {otherUsersStates.filter(s => s.supplier).map(s => s.supplier).join(', ')}
-                </p>
+                <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                  👥 {otherUsersStates.filter(s => s.supplier).map(s => `${s.userName}: ${s.supplier}`).join(' | ')}
+                </div>
               )}
             </div>
 
@@ -1094,9 +1120,9 @@ export const InventoryTab = () => {
                 placeholder="0"
               />
               {isAdmin && otherUsersStates.some(s => s.purchasePrice) && (
-                <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                  Другие: {otherUsersStates.filter(s => s.purchasePrice).map(s => s.purchasePrice).join(', ')}₽
-                </p>
+                <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                  👥 {otherUsersStates.filter(s => s.purchasePrice).map(s => `${s.userName}: ${s.purchasePrice}₽`).join(' | ')}
+                </div>
               )}
             </div>
 
@@ -1114,9 +1140,9 @@ export const InventoryTab = () => {
                   placeholder="0"
                 />
                 {otherUsersStates.some(s => s.retailPrice) && (
-                  <p className="text-[10px] md:text-[10px] text-muted-foreground mt-1">
-                    Другие: {otherUsersStates.filter(s => s.retailPrice).map(s => s.retailPrice).join(', ')}₽
-                  </p>
+                  <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
+                    👥 {otherUsersStates.filter(s => s.retailPrice).map(s => `${s.userName}: ${s.retailPrice}₽`).join(' | ')}
+                  </div>
                 )}
               </div>
             )}

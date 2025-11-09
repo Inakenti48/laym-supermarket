@@ -166,6 +166,10 @@ export const CashierTab = () => {
 
   // Подписка на реалтайм обновления товаров
   useEffect(() => {
+    if (!cacheReady) return; // Ждем первой загрузки
+    
+    console.log('📡 Подписываемся на обновления товаров...');
+    
     const channel = supabase
       .channel('products_changes_cashier')
       .on(
@@ -175,19 +179,26 @@ export const CashierTab = () => {
           schema: 'public',
           table: 'products'
         },
-        async () => {
-          console.log('🔄 Products updated on another device - refreshing cache');
+        async (payload) => {
+          console.log('🔄 Получено обновление товаров:', payload.eventType, payload);
+          
           // ОПТИМИЗАЦИЯ: Обновляем кеш при изменениях
           const products = await getAllProducts();
           productsCache.current = products;
           productsBarcodeMap.current.clear();
           productsNameMap.current.clear();
+          
           products.forEach(product => {
             if (product.barcode) {
               productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
             }
             productsNameMap.current.set(product.name.toLowerCase(), product);
           });
+          
+          console.log(`✅ Кэш обновлен! Теперь ${products.length} товаров`);
+          console.log(`📊 Штрихкодов: ${productsBarcodeMap.current.size}, Названий: ${productsNameMap.current.size}`);
+          
+          toast.success('База товаров обновлена', { duration: 2000 });
           
           // Обновляем результаты поиска если есть активный поиск
           if (searchQuery.trim() && searchQuery.length >= 2) {
@@ -204,12 +215,15 @@ export const CashierTab = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Статус подписки:', status);
+      });
 
     return () => {
+      console.log('📡 Отписываемся от обновлений товаров');
       supabase.removeChannel(channel);
     };
-  }, [searchQuery]);
+  }, [searchQuery, cacheReady]);
 
   // Поиск товаров по названию
   const [searchResults, setSearchResults] = React.useState<any[]>([]);

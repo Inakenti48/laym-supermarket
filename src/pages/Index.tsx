@@ -17,7 +17,6 @@ import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { PendingProductsTab } from '@/components/PendingProductsTab';
 import { RoleSelector } from '@/components/RoleSelector';
-import { AIAssistant } from '@/components/AIAssistant';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -265,9 +264,6 @@ const Index = () => {
           </>
         )}
       </main>
-
-      {/* AI Assistant */}
-      <AIAssistant />
     </div>
   );
 };

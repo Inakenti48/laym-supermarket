@@ -120,24 +120,31 @@ export const InventoryTab = () => {
             return;
           }
 
-          // Применяем изменения из другой сессии
+          // Применяем изменения из другой сессии ТОЛЬКО если поля заполнены
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const formData = payload.new as any;
             
-            setCurrentProduct(prev => ({
-              ...prev,
-              barcode: formData.barcode || prev.barcode,
-              name: formData.name || prev.name,
-              category: formData.category || prev.category,
-              purchasePrice: formData.purchase_price?.toString() || prev.purchasePrice,
-              retailPrice: formData.retail_price?.toString() || prev.retailPrice,
-              quantity: formData.quantity?.toString() || prev.quantity,
-              unit: formData.unit || prev.unit,
-              expiryDate: formData.expiry_date || prev.expiryDate,
-              supplier: formData.supplier || prev.supplier,
-            }));
+            // Создаем обновление только с заполненными полями
+            const updates: Partial<typeof currentProduct> = {};
+            if (formData.barcode !== null && formData.barcode !== undefined) updates.barcode = formData.barcode;
+            if (formData.name !== null && formData.name !== undefined) updates.name = formData.name;
+            if (formData.category !== null && formData.category !== undefined) updates.category = formData.category;
+            if (formData.purchase_price !== null && formData.purchase_price !== undefined) updates.purchasePrice = formData.purchase_price.toString();
+            if (formData.retail_price !== null && formData.retail_price !== undefined) updates.retailPrice = formData.retail_price.toString();
+            if (formData.quantity !== null && formData.quantity !== undefined) updates.quantity = formData.quantity.toString();
+            if (formData.unit !== null && formData.unit !== undefined) updates.unit = formData.unit;
+            if (formData.expiry_date !== null && formData.expiry_date !== undefined) updates.expiryDate = formData.expiry_date;
+            if (formData.supplier !== null && formData.supplier !== undefined) updates.supplier = formData.supplier;
 
-            toast.info(`🔄 Данные обновлены из другой сессии (${formData.user_name})`);
+            // Применяем обновления только если есть что обновлять
+            if (Object.keys(updates).length > 0) {
+              setCurrentProduct(prev => ({
+                ...prev,
+                ...updates
+              }));
+
+              toast.info(`🔄 Данные обновлены из другой сессии (${formData.user_name})`);
+            }
           }
         }
       )

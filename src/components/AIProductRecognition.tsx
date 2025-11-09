@@ -27,7 +27,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [recognizedProducts, setRecognizedProducts] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [hasPermission, setHasPermission] = useState(false);
-  const [dualPhotoStep, setDualPhotoStep] = useState<'front' | 'barcode' | 'none'>('none');
+  const [dualPhotoStep, setDualPhotoStep] = useState<'front' | 'barcode' | 'ready' | 'none'>('none');
   const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
 
@@ -416,12 +416,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleManualCapture = async () => {
     if (isProcessing) return;
     
-    // Блокируем съемку если есть незавершенные товары в режиме dual
-    if (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none') {
-      toast.error('Завершите текущий товар (заполните штрихкод и название) перед сканированием следующего');
-      return;
-    }
-    
     setIsProcessing(true);
 
     try {
@@ -432,101 +426,29 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       if (!image) {
         setNotification('❌ Ошибка');
         setTimeout(() => setNotification(''), 1000);
+        setIsProcessing(false);
         return;
       }
       
-      // Если режим двух фото
+      // Режим двух фото - только захват без распознавания
       if (mode === 'dual') {
-        if (dualPhotoStep === 'none' || dualPhotoStep === 'front') {
-          // Сохраняем лицевую сторону
+        if (!tempFrontPhoto) {
+          // Захватываем лицевую сторону
           setTempFrontPhoto(image);
           setDualPhotoStep('barcode');
-          setNotification('✅ Лицевая сохранена! Теперь штрихкод');
-          setTimeout(() => setNotification(''), 2000);
-          setIsProcessing(false);
-          return;
-        } else if (dualPhotoStep === 'barcode') {
-          // Сохраняем штрихкод и сразу запускаем AI распознавание
+          setNotification('✅ Фото 1/2 - лицевая');
+          toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод');
+          setTimeout(() => setNotification(''), 1500);
+        } else if (!tempBarcodePhoto) {
+          // Захватываем штрихкод
           setTempBarcodePhoto(image);
-          setNotification('🔍 AI сканирование фотографий...');
-          
-          try {
-            // Сжимаем изображения перед отправкой
-            const compressedFront = await compressForAI(tempFrontPhoto);
-            const compressedBarcode = await compressForAI(image);
-            
-            // Вызываем функцию для автоматического сканирования обеих фотографий
-            console.log('📷 Запуск автоматического AI-сканирования фотографий...');
-            const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
-              body: { 
-                frontPhoto: compressedFront,
-                barcodePhoto: compressedBarcode
-              }
-            });
-
-            if (scanError) {
-              console.error('Ошибка AI-сканирования:', scanError);
-              setNotification('❌ Ошибка сканирования');
-              setTimeout(() => setNotification(''), 1500);
-              toast.error('Ошибка при AI-сканировании фотографий');
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-              return;
-            }
-
-            console.log('✅ Результат AI-сканирования:', scanData);
-
-            // Извлекаем данные из ответа
-            const scannedBarcode = scanData?.barcode || '';
-            const scannedName = scanData?.name || '';
-
-            if (scannedBarcode || scannedName) {
-              setNotification('✅ Данные извлечены!');
-              
-              // Передаем данные родителю с обеими фотографиями
-              onProductFound({
-                barcode: scannedBarcode,
-                name: scannedName,
-                category: '',
-                frontPhoto: tempFrontPhoto,
-                barcodePhoto: image
-              });
-              
-              // Показываем что именно распознано
-              if (scannedBarcode && scannedName) {
-                toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`);
-              } else if (scannedBarcode) {
-                toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
-              } else if (scannedName) {
-                toast.success(`📦 Название распознано: ${scannedName}`);
-              }
-              
-              setTimeout(() => setNotification(''), 1000);
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-            } else {
-              setNotification('❌ Ничего не распознано');
-              setTimeout(() => setNotification(''), 1500);
-              toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.');
-              setDualPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-            }
-          } catch (err: any) {
-            console.error('Ошибка при AI-сканировании:', err);
-            setNotification('❌ Ошибка');
-            setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при AI-сканировании товара');
-            setDualPhotoStep('none');
-            setTempFrontPhoto('');
-            setTempBarcodePhoto('');
-          }
-          
-          setIsProcessing(false);
-          return;
+          setDualPhotoStep('ready');
+          setNotification('✅ Фото 2/2 - штрихкод');
+          toast.success('📸 Обе фотографии готовы! Нажмите ✅ для распознавания');
+          setTimeout(() => setNotification(''), 1500);
         }
+        setIsProcessing(false);
+        return;
       }
       
       // Если режим распознавания срока годности
@@ -624,78 +546,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     }
   };
 
-  useEffect(() => {
-    // Отключаем автоматическое сканирование для dual режима
-    if (mode === 'dual') {
-      return;
-    }
-
-    if (!isProcessing && cameraReady) {
-      const interval = setInterval(async () => {
-        if (isProcessing || !isMountedRef.current || !cameraReady) return;
-
-        setIsProcessing(true);
-
-        try {
-          setNotification(mode === 'barcode' ? '📷 Сканирую...' : '📷 Сканирую...');
-          
-          const { image, isSharp } = captureSharpImage();
-          
-          if (!image || !isSharp) {
-            setIsProcessing(false);
-            setNotification('');
-            return;
-          }
-          
-          const result = await recognizeProduct(image, mode);
-          
-          if (mode === 'barcode') {
-            if (result.barcode) {
-              setNotification('✅ Распознан!');
-              
-              // Увеличиваем количество если товар уже был распознан
-              const productKey = result.barcode;
-              const currentQty = recognizedProducts.get(productKey) || 0;
-              const newQty = currentQty + quantity;
-              setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
-              
-              onProductFound({ ...result, capturedImage: image, quantity: newQty });
-              setTimeout(() => setNotification(''), 800);
-            } else {
-              setNotification('');
-            }
-          } else {
-            if (result.name || result.category) {
-              setNotification('✅ Распознан!');
-              
-              // Увеличиваем количество если товар уже был распознан
-              const productKey = result.barcode || result.name || '';
-              const currentQty = recognizedProducts.get(productKey) || 0;
-              const newQty = currentQty + quantity;
-              setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
-              
-              onProductFound({ ...result, capturedImage: image, quantity: newQty });
-              setTimeout(() => setNotification(''), 800);
-            } else {
-              setNotification('');
-            }
-          }
-        } catch (err: any) {
-          console.error('Recognition cycle error:', err);
-          if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
-            toast.error('Слишком много запросов, подождите немного');
-          } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
-            toast.error('Требуется пополнить баланс Lovable AI');
-          }
-          setNotification('');
-        } finally {
-          setIsProcessing(false);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [isProcessing, mode, cameraReady]);
+  // Удалили автоматическое сканирование - только ручной захват
 
   const handleAIScan = async () => {
     if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) return;
@@ -868,47 +719,81 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           {!isProcessing && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
-              {mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none' && (
-                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-2">
-                  <p className="text-destructive text-xs font-medium text-center">
-                    ⚠️ Завершите текущий товар перед сканированием следующего
-                  </p>
-                  <p className="text-destructive/80 text-[10px] text-center mt-1">
-                    Заполните штрихкод и название в очереди товаров
-                  </p>
+              {mode === 'dual' && (
+                <div className="mb-2 text-center space-y-1">
+                  {!tempFrontPhoto && !tempBarcodePhoto && (
+                    <p className="text-sm font-medium text-muted-foreground">📸 Шаг 1/2: Снимите лицевую сторону</p>
+                  )}
+                  {tempFrontPhoto && !tempBarcodePhoto && (
+                    <p className="text-sm font-medium text-green-600">✅ Лицевая готова! Шаг 2/2: Снимите штрихкод</p>
+                  )}
+                  {tempFrontPhoto && tempBarcodePhoto && (
+                    <p className="text-sm font-medium text-green-600">✅ Обе фото готовы! Нажмите кнопку ниже</p>
+                  )}
                 </div>
               )}
-              <div className="flex items-center gap-3 justify-center">
-                <span className="text-foreground text-sm font-medium">Штук:</span>
+              
+              {mode !== 'dual' && (
+                <div className="flex items-center gap-3 justify-center">
+                  <span className="text-foreground text-sm font-medium">Штук:</span>
+                  <Button
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8"
+                  >
+                    -
+                  </Button>
+                  <span className="text-foreground text-lg font-bold min-w-[40px] text-center">{quantity}</span>
+                  <Button
+                    onClick={() => setQuantity(quantity + 1)}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8"
+                  >
+                    +
+                  </Button>
+                </div>
+              )}
+              
+              {/* Кнопка захвата фото */}
+              {mode === 'dual' && dualPhotoStep !== 'ready' && (
                 <Button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8"
+                  onClick={handleManualCapture}
+                  size="lg"
+                  className="rounded-full shadow-lg w-full"
+                  disabled={!cameraReady}
                 >
-                  -
+                  <Camera className="h-5 w-5 mr-2" />
+                  {!tempFrontPhoto ? 'Снять лицевую (1/2)' : 'Снять штрихкод (2/2)'}
                 </Button>
-                <span className="text-foreground text-lg font-bold min-w-[40px] text-center">{quantity}</span>
+              )}
+              
+              {/* Кнопка AI распознавания после двух фото */}
+              {mode === 'dual' && dualPhotoStep === 'ready' && (
                 <Button
-                  onClick={() => setQuantity(quantity + 1)}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8"
+                  onClick={handleAIScan}
+                  size="lg"
+                  className="rounded-full shadow-lg w-full bg-green-600 hover:bg-green-700"
+                  disabled={!cameraReady}
                 >
-                  +
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  ✅ Распознать товар
                 </Button>
-              </div>
-              <Button
-                onClick={handleManualCapture}
-                size="lg"
-                className="rounded-full shadow-lg w-full"
-                disabled={!cameraReady || (mode === 'dual' && hasIncompleteProducts && dualPhotoStep === 'none')}
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                {mode === 'dual' && dualPhotoStep === 'front' ? 'Сфотографировать лицевую' : 
-                 mode === 'dual' && dualPhotoStep === 'barcode' ? 'Сфотографировать штрихкод' :
-                 'Сфотографировать'}
-              </Button>
+              )}
+              
+              {/* Кнопка для других режимов */}
+              {mode !== 'dual' && (
+                <Button
+                  onClick={handleManualCapture}
+                  size="lg"
+                  className="rounded-full shadow-lg w-full"
+                  disabled={!cameraReady}
+                >
+                  <Camera className="h-5 w-5 mr-2" />
+                  Сфотографировать
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -930,22 +815,27 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         ) : (
           <div className="p-4 text-center space-y-2">
             <p className="text-sm text-muted-foreground font-medium">
-              🤖 AI {mode === 'barcode' ? 'распознавание штрихкода' : 'распознавание товара'}
+              🤖 AI {mode === 'dual' ? 'распознавание товара (2 фото)' : mode === 'barcode' ? 'распознавание штрихкода' : 'распознавание товара'}
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              {mode === 'barcode' ? (
+              {mode === 'dual' ? (
+                <>
+                  <p>📱 Режим двух фотографий</p>
+                  <p>📷 1. Снимите лицевую сторону товара</p>
+                  <p>📷 2. Снимите штрихкод на обратной стороне</p>
+                  <p>✅ 3. Нажмите кнопку для распознавания</p>
+                </>
+              ) : mode === 'barcode' ? (
                 <>
                   <p>📱 Режим распознавания штрихкода</p>
                   <p>📷 Наведите камеру на штрихкод</p>
-                  <p>⚡ Автоматическое распознавание каждые 2 сек</p>
-                  <p>📸 Или нажмите кнопку для мгновенной съемки</p>
+                  <p>📸 Нажмите кнопку для съемки</p>
                 </>
               ) : (
                 <>
                   <p>📱 Режим распознавания товара</p>
                   <p>📷 Покажите переднюю часть упаковки</p>
-                  <p>⚡ Автоматическое распознавание каждые 2 сек</p>
-                  <p>📸 Или нажмите кнопку для мгновенной съемки</p>
+                  <p>📸 Нажмите кнопку для съемки</p>
                 </>
               )}
             </div>

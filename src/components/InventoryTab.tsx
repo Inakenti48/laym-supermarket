@@ -263,65 +263,91 @@ export const InventoryTab = () => {
     
     // Если это режим двух фото
     if (aiScanMode === 'dual' && barcodeData.frontPhoto && barcodeData.barcodePhoto) {
-      const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
-      
-      // Сохраняем фотографии во временные переменные
-      setTempFrontPhoto(barcodeData.frontPhoto);
-      setTempBarcodePhoto(barcodeData.barcodePhoto);
-      
-      // Автозаполнение полей формы
-      if (sanitizedBarcode) {
-        setCurrentProduct(prev => ({ ...prev, barcode: sanitizedBarcode }));
-      }
-      if (barcodeData.name) {
-        setCurrentProduct(prev => ({ ...prev, name: barcodeData.name || '' }));
-      }
-      if (barcodeData.category) {
-        setCurrentProduct(prev => ({ ...prev, category: barcodeData.category || '' }));
-      }
-      
-      // Сохраняем оба фото
-      const allPhotos: string[] = [];
-      if (barcodeData.frontPhoto) allPhotos.push(barcodeData.frontPhoto);
-      if (barcodeData.barcodePhoto) allPhotos.push(barcodeData.barcodePhoto);
-      
-      // Добавляем товар в очередь
-      const newPendingProduct: PendingProduct = {
-        id: `pending-${Date.now()}-${Math.random()}`,
-        barcode: sanitizedBarcode,
-        name: barcodeData.name || '',
-        category: barcodeData.category || '',
-        purchasePrice: '',
-        retailPrice: '',
-        quantity: '1',
-        unit: 'шт',
-        expiryDate: '',
-        supplier: '',
-        photos: allPhotos,
-        frontPhoto: barcodeData.frontPhoto,
-        barcodePhoto: barcodeData.barcodePhoto,
-      };
-
-      // Если есть штрихкод, ищем в базе для автозаполнения
-      if (sanitizedBarcode) {
-        const existing = await findProductByBarcode(sanitizedBarcode);
-        if (existing) {
-          newPendingProduct.category = existing.category;
-          newPendingProduct.purchasePrice = existing.purchasePrice.toString();
-          newPendingProduct.retailPrice = existing.retailPrice.toString();
-          newPendingProduct.unit = existing.unit;
-          toast.info('✅ Товар найден в базе, цены автозаполнены');
+      try {
+        const sanitizedBarcode = barcodeData.barcode?.trim().replace(/[<>'"]/g, '') || '';
+        
+        // Проверяем авторизацию
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
+          return;
         }
-      }
 
-      setPendingProducts(prev => [...prev, newPendingProduct]);
-      setShowAIScanner(false);
-      setAiScanMode('product');
-      
-      if (barcodeData.name) {
-        toast.success(`📦 Добавлен в очередь: ${barcodeData.name}`);
-      } else if (sanitizedBarcode) {
-        toast.success(`📦 Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
+        // Проверяем обязательные поля
+        if (!sanitizedBarcode) {
+          toast.error('❌ Штрихкод не распознан');
+          return;
+        }
+        
+        if (!barcodeData.name) {
+          toast.error('❌ Название товара не распознано');
+          return;
+        }
+        
+        // Ищем в базе для автозаполнения
+        let category = barcodeData.category || '';
+        let purchasePrice: number | null = null;
+        let retailPrice: number | null = null;
+        let unit = 'шт';
+        
+        if (sanitizedBarcode) {
+          const existing = await findProductByBarcode(sanitizedBarcode);
+          if (existing) {
+            category = existing.category;
+            purchasePrice = existing.purchasePrice;
+            retailPrice = existing.retailPrice;
+            unit = existing.unit;
+            toast.info('✅ Товар найден в базе, данные автозаполнены');
+          }
+        }
+
+        // Сохраняем товар в vremenno_product_foto СРАЗУ
+        const imageUrl = barcodeData.frontPhoto; // Лицевая фото как основная
+        
+        const { data: insertedData, error: insertError } = await supabase
+          .from('vremenno_product_foto')
+          .insert({
+            barcode: sanitizedBarcode,
+            product_name: barcodeData.name,
+            category: category || null,
+            supplier: null,
+            unit: unit,
+            purchase_price: purchasePrice,
+            retail_price: retailPrice,
+            quantity: 1,
+            expiry_date: null,
+            payment_type: 'full',
+            paid_amount: purchasePrice ? purchasePrice : 0,
+            debt_amount: 0,
+            image_url: imageUrl,
+            storage_path: `product-photos/${sanitizedBarcode}-${Date.now()}`,
+            front_photo: barcodeData.frontPhoto,
+            barcode_photo: barcodeData.barcodePhoto,
+            front_photo_storage_path: `product-photos/${sanitizedBarcode}-front-${Date.now()}`,
+            barcode_photo_storage_path: `product-photos/${sanitizedBarcode}-barcode-${Date.now()}`,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('❌ Ошибка сохранения в базу:', insertError);
+          toast.error(`❌ Ошибка сохранения: ${insertError.message}`);
+          return;
+        }
+
+        console.log('✅ Товар сохранен в базу vremenno_product_foto с обоими фото');
+        
+        setShowAIScanner(false);
+        setAiScanMode('product');
+        setTempFrontPhoto('');
+        setTempBarcodePhoto('');
+        
+        toast.success(`✅ Товар "${barcodeData.name}" сохранен в очередь с фотографиями`);
+        addLog(`AI-распознавание: ${barcodeData.name} (${sanitizedBarcode}) добавлен в очередь`);
+      } catch (error: any) {
+        console.error('❌ Ошибка handleScan:', error);
+        toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`);
       }
       return;
     }

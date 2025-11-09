@@ -114,10 +114,12 @@ export const CashierTab = () => {
   const productsCache = useRef<any[]>([]);
   const productsBarcodeMap = useRef<Map<string, any>>(new Map());
   const productsNameMap = useRef<Map<string, any>>(new Map());
+  const [cacheReady, setCacheReady] = useState(false);
   
   // Загружаем товары один раз при монтировании
   useEffect(() => {
     const loadProductsCache = async () => {
+      console.log('🔄 Начинаем загрузку кэша товаров...');
       const products = await getAllProducts();
       productsCache.current = products;
       
@@ -132,7 +134,9 @@ export const CashierTab = () => {
         productsNameMap.current.set(product.name.toLowerCase(), product);
       });
       
-      console.log(`✅ Загружено ${products.length} товаров в кеш кассы`);
+      console.log(`✅ Кэш готов! Загружено ${products.length} товаров`);
+      console.log(`📊 Штрихкодов: ${productsBarcodeMap.current.size}, Названий: ${productsNameMap.current.size}`);
+      setCacheReady(true);
     };
     
     loadProductsCache();
@@ -264,6 +268,18 @@ export const CashierTab = () => {
     const productName = barcodeData.name?.trim() || '';
     
     console.log('🎯 handleScan получил данные:', { sanitizedBarcode, productName, barcodeData });
+    console.log('📦 Состояние кэша:', {
+      ready: cacheReady,
+      totalProducts: productsCache.current.length,
+      barcodes: productsBarcodeMap.current.size,
+      names: productsNameMap.current.size
+    });
+    
+    // Проверяем готовность кэша
+    if (!cacheReady) {
+      toast.error('Подождите, загружается база товаров...');
+      return;
+    }
     
     // Если все поля пустые - пропускаем
     if (!sanitizedBarcode && !productName) {
@@ -279,6 +295,9 @@ export const CashierTab = () => {
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
       product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
       console.log('🔍 Поиск по штрихкоду в кеше:', sanitizedBarcode, '-> найден:', !!product);
+      if (product) {
+        console.log('✅ Товар найден:', product.name, 'Цена:', product.retailPrice);
+      }
     }
     
     // Если штрихкода нет или товар не найден по штрихкоду, ищем по названию в кеше

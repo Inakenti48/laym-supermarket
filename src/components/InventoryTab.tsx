@@ -1199,11 +1199,17 @@ export const InventoryTab = () => {
                   <SelectItem value="__add_new__" className="text-primary font-medium text-sm md:text-xs">
                     + Добавить
                   </SelectItem>
-                  {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name} className="text-sm md:text-xs">
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
+                  {[...suppliers]
+                    .sort((a, b) => {
+                      if (a.name === 'ААА') return -1;
+                      if (b.name === 'ААА') return 1;
+                      return a.name.localeCompare(b.name);
+                    })
+                    .map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.name} className="text-sm md:text-xs">
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               {isAdmin && otherUsersStates.some(s => s.supplier) && (

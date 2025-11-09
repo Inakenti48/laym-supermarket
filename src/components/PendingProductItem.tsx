@@ -132,11 +132,17 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                     <SelectValue placeholder="Выберите поставщика" />
                   </SelectTrigger>
                   <SelectContent className="bg-background">
-                    {suppliers.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.name}>
-                        {supplier.name}
-                      </SelectItem>
-                    ))}
+                    {[...suppliers]
+                      .sort((a, b) => {
+                        if (a.name === 'ААА') return -1;
+                        if (b.name === 'ААА') return 1;
+                        return a.name.localeCompare(b.name);
+                      })
+                      .map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.name}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <Button

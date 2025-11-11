@@ -1,82 +1,75 @@
-import { Shield, ShoppingCart, Package, Users } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Users, KeyRound } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AppRole } from '@/lib/supabaseAuth';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useState } from 'react';
 
 interface RoleSelectorProps {
   onSelectRole: (login: string) => void;
   onEmployeeLogin: () => void;
 }
 
-const roles = [
-  {
-    login: '8080',
-    title: 'Администратор',
-    description: 'Полный доступ к системе',
-    icon: Shield,
-    color: 'text-primary'
-  },
-  {
-    login: '1020',
-    title: 'Касса 1',
-    description: 'Работа с кассой',
-    icon: ShoppingCart,
-    color: 'text-secondary'
-  },
-  {
-    login: '2030',
-    title: 'Касса 2',
-    description: 'Вторая касса',
-    icon: ShoppingCart,
-    color: 'text-green-500'
-  },
-  {
-    login: '3040',
-    title: 'Склад',
-    description: 'Управление товарами',
-    icon: Package,
-    color: 'text-accent-foreground'
-  }
-];
-
 export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProps) => {
+  const [login, setLogin] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (login.length === 4 && /^\d{4}$/.test(login)) {
+      onSelectRole(login);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">Система Учета Товаров</h1>
-          <p className="text-muted-foreground">Выберите роль для входа</p>
+          <p className="text-muted-foreground">Введите 4-значный логин для входа</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {roles.map((roleInfo) => {
-            const Icon = roleInfo.icon;
-            return (
-              <Card
-                key={roleInfo.login}
-                className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
-                onClick={() => onSelectRole(roleInfo.login)}
+        <Card>
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <KeyRound className="w-8 h-8 text-primary" />
+            </div>
+            <CardTitle>Вход в систему</CardTitle>
+            <CardDescription>Введите ваш 4-значный логин</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="login">Логин</Label>
+                <Input
+                  id="login"
+                  type="text"
+                  placeholder="0000"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  maxLength={4}
+                  className="text-center text-2xl tracking-widest"
+                  autoFocus
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={login.length !== 4 || !/^\d{4}$/.test(login)}
               >
-                <CardHeader className="text-center">
-                  <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                    <Icon className={`w-8 h-8 ${roleInfo.color}`} />
-                  </div>
-                  <CardTitle>{roleInfo.title}</CardTitle>
-                  <CardDescription>{roleInfo.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            );
-          })}
-        </div>
+                Войти
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         <div className="mt-8 flex justify-center">
           <Button 
             onClick={onEmployeeLogin} 
             variant="outline"
             size="lg"
-            className="w-full max-w-md h-14 text-base sm:text-lg font-semibold"
+            className="w-full h-14 text-base font-semibold"
           >
-            <Users className="h-5 w-5 sm:h-6 sm:w-6 mr-2" />
+            <Users className="h-5 w-5 mr-2" />
             Вход для сотрудников
           </Button>
         </div>

@@ -60,27 +60,55 @@ export const useRealtimeProducts = () => {
           table: 'products'
         },
         (payload) => {
-          console.log('🔄 Realtime обновление товаров:', payload.eventType);
+          console.log('🔄 Realtime обновление:', payload.eventType);
           
+          // Оптимизация: обновляем только измененный товар вместо перезагрузки всех
           if (payload.eventType === 'INSERT' && payload.new) {
-            toast.success(`✅ Добавлен товар: ${payload.new.name}`, {
-              description: `На другом устройстве`,
-              duration: 4000
-            });
+            const newProduct: StoredProduct = {
+              id: payload.new.id,
+              barcode: payload.new.barcode,
+              name: payload.new.name,
+              category: payload.new.category,
+              purchasePrice: Number(payload.new.purchase_price),
+              retailPrice: Number(payload.new.sale_price),
+              quantity: payload.new.quantity,
+              unit: payload.new.unit as 'шт' | 'кг',
+              expiryDate: payload.new.expiry_date || undefined,
+              photos: [],
+              paymentType: payload.new.payment_type as 'full' | 'partial' | 'debt',
+              paidAmount: Number(payload.new.paid_amount),
+              debtAmount: Number(payload.new.debt_amount),
+              addedBy: payload.new.created_by || '',
+              supplier: payload.new.supplier || undefined,
+              lastUpdated: payload.new.updated_at,
+              priceHistory: (payload.new.price_history as any) || []
+            };
+            setProducts(prev => [newProduct, ...prev]);
           } else if (payload.eventType === 'UPDATE' && payload.new) {
-            toast.info(`📝 Обновлен товар: ${payload.new.name}`, {
-              description: `На другом устройстве`,
-              duration: 4000
-            });
+            setProducts(prev => prev.map(p => 
+              p.id === payload.new.id ? {
+                id: payload.new.id,
+                barcode: payload.new.barcode,
+                name: payload.new.name,
+                category: payload.new.category,
+                purchasePrice: Number(payload.new.purchase_price),
+                retailPrice: Number(payload.new.sale_price),
+                quantity: payload.new.quantity,
+                unit: payload.new.unit as 'шт' | 'кг',
+                expiryDate: payload.new.expiry_date || undefined,
+                photos: [],
+                paymentType: payload.new.payment_type as 'full' | 'partial' | 'debt',
+                paidAmount: Number(payload.new.paid_amount),
+                debtAmount: Number(payload.new.debt_amount),
+                addedBy: payload.new.created_by || '',
+                supplier: payload.new.supplier || undefined,
+                lastUpdated: payload.new.updated_at,
+                priceHistory: (payload.new.price_history as any) || []
+              } : p
+            ));
           } else if (payload.eventType === 'DELETE' && payload.old) {
-            toast.info(`🗑️ Удален товар: ${payload.old.name}`, {
-              description: `На другом устройстве`,
-              duration: 4000
-            });
+            setProducts(prev => prev.filter(p => p.id !== payload.old.id));
           }
-
-          // Перезагружаем список товаров
-          fetchProducts();
         }
       )
       .subscribe((status) => {

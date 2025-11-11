@@ -22,89 +22,45 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
-import { isSessionExpired } from '@/lib/auth';
+import { AppRole, getUserRole } from '@/lib/supabaseAuth';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
-  const [sessionTimeRemaining, setSessionTimeRemaining] = useState<string>('');
-  
-  // Проверяем роль админа
-  const isAdmin = user?.email?.includes('admin') || false;
 
   useEffect(() => {
     // Проверка текущей сессии
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const role = await getUserRole(session.user.id);
+        setUserRole(role);
+      }
       setLoading(false);
     });
 
     // Подписка на изменения авторизации
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        const role = await getUserRole(session.user.id);
+        setUserRole(role);
+      } else {
+        setUserRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Периодическая проверка истечения сессии (каждые 60 секунд)
-  useEffect(() => {
-    const checkSession = () => {
-      if (user && isSessionExpired()) {
-        console.log('⏰ Сессия истекла через 24 часа, автоматический выход');
-        toast.info('Сессия истекла. Пожалуйста, войдите снова');
-        handleLogout();
-      }
-    };
-
-    // Проверяем сразу
-    checkSession();
-
-    // Проверяем каждую минуту
-    const interval = setInterval(checkSession, 60000);
-
-    return () => clearInterval(interval);
-  }, [user]);
-
-  // Обновление таймера оставшегося времени сессии
-  useEffect(() => {
-    const updateTimer = () => {
-      const loginTimeStr = localStorage.getItem('last_login_time');
-      if (!loginTimeStr) {
-        setSessionTimeRemaining('');
-        return;
-      }
-
-      const loginTime = parseInt(loginTimeStr);
-      const currentTime = Date.now();
-      const elapsed = currentTime - loginTime;
-      const remaining = (24 * 60 * 60 * 1000) - elapsed; // 24 часа в миллисекундах
-
-      if (remaining <= 0) {
-        setSessionTimeRemaining('Истекла');
-        return;
-      }
-
-      const hours = Math.floor(remaining / (1000 * 60 * 60));
-      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-      
-      setSessionTimeRemaining(`${hours}ч ${minutes}м`);
-    };
-
-    // Обновляем сразу
-    updateTimer();
-
-    // Обновляем каждую минуту
-    const interval = setInterval(updateTimer, 60000);
-
-    return () => clearInterval(interval);
-  }, [user]);
+  // Больше не проверяем истечение сессии - сессия бессрочная до выхода
 
   const handleLogin = async (email: string, password: string) => {
     try {
@@ -114,9 +70,6 @@ const Index = () => {
       });
 
       if (error) throw error;
-      
-      // ВАЖНО: Сохраняем время входа для работы таймера сессии
-      localStorage.setItem('last_login_time', Date.now().toString());
       
       toast.success('Вход выполнен успешно');
     } catch (error: any) {
@@ -148,18 +101,27 @@ const Index = () => {
     }
   };
 
-  const tabs = [
-    { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard },
-    { id: 'inventory' as Tab, label: 'Товары', icon: Package },
-    { id: 'cashier' as Tab, label: 'Касса', icon: ShoppingCart },
-    ...(isAdmin ? [{ id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload }] : []),
-    { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2 },
-    { id: 'reports' as Tab, label: 'Отчёты', icon: FileText },
-    { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle },
-    { id: 'employees' as Tab, label: 'Сотрудники', icon: Users },
-    { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle },
-    { id: 'logs' as Tab, label: 'Логи', icon: Activity },
-  ];
+  // Фильтруем табы в зависимости от роли
+  const getTabsByRole = (): typeof tabs => {
+    const allTabs = [
+      { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin', 'cashier', 'cashier2', 'inventory'] },
+      { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
+      { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+      { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
+      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin'] },
+      { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
+      { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
+      { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
+      { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+      { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
+      { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
+    ];
+
+    if (!userRole) return [];
+    return allTabs.filter(tab => tab.roles.includes(userRole));
+  };
+
+  const tabs = getTabsByRole();
 
   // Показываем экран входа если не авторизован
   if (loading) {
@@ -194,12 +156,6 @@ const Index = () => {
           </div>
           
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-            {sessionTimeRemaining && (
-              <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 border border-border">
-                <span className="text-xs text-muted-foreground">Сессия:</span>
-                <span className="text-xs font-mono font-semibold">{sessionTimeRemaining}</span>
-              </div>
-            )}
             <DatabaseBackupButton />
             <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -244,7 +200,8 @@ const Index = () => {
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardTab />}
-            {activeTab === 'cashier' && <CashierTab />}
+            {activeTab === 'cashier' && <CashierTab cashierRole="cashier" />}
+            {activeTab === 'cashier2' && <CashierTab cashierRole="cashier2" />}
             {activeTab === 'inventory' && <InventoryTab />}
             {activeTab === 'pending-products' && <PendingProductsTab />}
             {activeTab === 'suppliers' && <SuppliersTab />}

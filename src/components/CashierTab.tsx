@@ -72,7 +72,11 @@ const DEFAULT_QUICK_ITEMS: QuickItem[] = [
   { name: 'Вода', price: 40 },
 ];
 
-export const CashierTab = () => {
+interface CashierTabProps {
+  cashierRole?: 'cashier' | 'cashier2';
+}
+
+export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cashier_cart_data');
     if (saved) {
@@ -433,13 +437,7 @@ export const CashierTab = () => {
         return;
       }
       
-      // Проверка наличия
-      if (product.quantity <= 0) {
-        toast.error(`❌ ТОВАР ЗАКОНЧИЛСЯ!\n"${product.name}" - остаток 0`, {
-          duration: 4000,
-        });
-        return;
-      }
+      // РАЗРЕШАЕМ продажу в минус - убрали проверку quantity <= 0
       
       // Звуковой сигнал успешного сканирования - типичный звук кассового сканера
       try {
@@ -550,12 +548,12 @@ export const CashierTab = () => {
       return;
     }
 
-    // Уменьшаем количество товаров в базе
-    cart.forEach(item => {
+    // Уменьшаем количество товаров в базе (разрешаем уход в минус)
+    for (const item of cart) {
       if (item.barcode) {
-        updateProductQuantity(item.barcode, -item.quantity);
+        await updateProductQuantity(item.barcode, -item.quantity);
       }
-    });
+    }
 
     const now = new Date();
     const receiptData: ReceiptData = {
@@ -574,7 +572,38 @@ export const CashierTab = () => {
       change: showCalculator ? change : 0
     };
 
-    addLog(`Продажа завершена: ${total}₽ (${cart.length} товаров)`);
+    // Сохраняем продажу в базу данных с указанием кассы
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      const { error: saleError } = await supabase
+        .from('sales')
+        .insert({
+          total,
+          items: cart.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            barcode: item.barcode
+          })),
+          payment_method: showCalculator ? 'cash' : 'card',
+          cashier_name: user?.cashierName || 'Кассир',
+          cashier_role: cashierRole, // Указываем роль кассы (cashier или cashier2)
+          created_by: authUser?.id,
+          created_at: new Date().toISOString()
+        });
+
+      if (saleError) {
+        console.error('Ошибка сохранения продажи:', saleError);
+        toast.error('Ошибка сохранения продажи в базу');
+      } else {
+        console.log(`✅ Продажа сохранена с кассы: ${cashierRole}`);
+      }
+    } catch (error) {
+      console.error('Критическая ошибка при сохранении продажи:', error);
+    }
+
+    addLog(`Продажа завершена: ${total}₽ (${cart.length} товаров) - Касса: ${cashierRole === 'cashier' ? '1' : '2'}`);
     
     // Показываем диалог выбора печати
     setPendingReceiptData(receiptData);

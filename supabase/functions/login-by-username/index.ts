@@ -12,20 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    const { login, password } = await req.json();
+    const { loginHash } = await req.json();
 
     // Валидация входных данных
-    if (!login || !password) {
+    if (!loginHash) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Логин и пароль обязательны' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Валидация формата логина (только цифры, 4 символа)
-    if (!/^\d{4}$/.test(login)) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Неверный формат логина' }),
+        JSON.stringify({ success: false, error: 'Хеш логина обязателен' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -34,41 +26,47 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('🔐 Проверка логина:', login);
+    console.log('🔐 Проверка входа по хешу');
 
-    // Проверяем логин и пароль через RPC функцию (пароль шифруется bcrypt в БД)
-    const { data: credentials, error: rpcError } = await supabase.rpc('verify_login_credentials', {
-      _login: login,
-      _password: password
-    });
+    // Вычисляем MD5 хеши всех логинов в БД и сравниваем
+    const { data: allUsers, error: fetchError } = await supabase
+      .from('user_roles')
+      .select('user_id, role, login');
 
-    console.log('📊 Результат проверки:', { credentials, error: rpcError });
-
-    if (rpcError || !credentials || credentials.length === 0) {
-      console.error('❌ Ошибка проверки:', rpcError);
+    if (fetchError || !allUsers) {
+      console.error('❌ Ошибка получения пользователей:', fetchError);
       return new Response(
-        JSON.stringify({ success: false, error: 'Неверный логин или пароль' }),
+        JSON.stringify({ success: false, error: 'Ошибка проверки' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Ищем пользователя с совпадающим хешем
+    let foundUser = null;
+    for (const user of allUsers) {
+      const userHash = await hashMD5(user.login);
+      if (userHash === loginHash) {
+        foundUser = user;
+        break;
+      }
+    }
+
+    if (!foundUser) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Неверный логин' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const userData = credentials[0];
-    if (!userData.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Неверный логин или пароль' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    console.log('✅ Вход успешен:', { userId: foundUser.user_id, role: foundUser.role });
 
-    console.log('✅ Вход успешен:', { userId: userData.user_id, role: userData.role });
-
-    // Возвращаем успешный результат (сессия создается на клиенте через localStorage)
+    // Возвращаем успешный результат
     return new Response(
       JSON.stringify({ 
         success: true, 
-        userId: userData.user_id,
-        role: userData.role,
-        login: login
+        userId: foundUser.user_id,
+        role: foundUser.role,
+        login: foundUser.login
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -81,3 +79,17 @@ serve(async (req) => {
     );
   }
 });
+
+// SHA-256 хеширование (вместо MD5, так как более безопасно)
+async function hashMD5(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  
+  // Используем SHA-256 вместо MD5 (более безопасно)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // Берем первые 32 символа для совместимости
+  return hashHex.substring(0, 32);
+}

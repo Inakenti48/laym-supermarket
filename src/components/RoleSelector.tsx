@@ -4,14 +4,13 @@ import { Button } from '@/components/ui/button';
 import { AppRole } from '@/lib/supabaseAuth';
 
 interface RoleSelectorProps {
-  onSelectRole: (login: string, password: string) => void;
+  onSelectRole: (login: string) => void;
   onEmployeeLogin: () => void;
 }
 
 const roles = [
   {
     login: '8080',
-    password: '123456',
     title: 'Администратор',
     description: 'Полный доступ к системе',
     icon: Shield,
@@ -19,7 +18,6 @@ const roles = [
   },
   {
     login: '1020',
-    password: '123456',
     title: 'Касса 1',
     description: 'Работа с кассой',
     icon: ShoppingCart,
@@ -27,7 +25,6 @@ const roles = [
   },
   {
     login: '2030',
-    password: '123456',
     title: 'Касса 2',
     description: 'Вторая касса',
     icon: ShoppingCart,
@@ -35,7 +32,6 @@ const roles = [
   },
   {
     login: '3040',
-    password: '123456',
     title: 'Склад',
     description: 'Управление товарами',
     icon: Package,
@@ -59,7 +55,7 @@ export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProp
               <Card
                 key={roleInfo.login}
                 className="cursor-pointer hover:shadow-lg transition-all hover:scale-105"
-                onClick={() => onSelectRole(roleInfo.login, roleInfo.password)}
+                onClick={() => onSelectRole(roleInfo.login)}
               >
                 <CardHeader className="text-center">
                   <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">

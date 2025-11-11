@@ -400,7 +400,6 @@ export type Database = {
           created_at: string
           id: string
           login: string | null
-          password_hash: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
@@ -408,7 +407,6 @@ export type Database = {
           created_at?: string
           id?: string
           login?: string | null
-          password_hash?: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
@@ -416,7 +414,6 @@ export type Database = {
           created_at?: string
           id?: string
           login?: string | null
-          password_hash?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
@@ -508,7 +505,7 @@ export type Database = {
         Returns: boolean
       }
       verify_login_credentials: {
-        Args: { _login: string; _password: string }
+        Args: { _login: string; _password?: string }
         Returns: {
           role: Database["public"]["Enums"]["app_role"]
           success: boolean

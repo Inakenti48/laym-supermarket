@@ -57,11 +57,11 @@ const Index = () => {
 
   // Больше не проверяем истечение сессии - сессия бессрочная до выхода
 
-  const handleLogin = async (login: string, password: string) => {
+  const handleLogin = async (login: string) => {
     try {
       setLoading(true);
       
-      const result = await loginByUsername(login, password);
+      const result = await loginByUsername(login);
       
       if (!result.success) {
         toast.error(result.error || 'Ошибка входа');

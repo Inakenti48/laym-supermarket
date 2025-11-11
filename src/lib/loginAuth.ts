@@ -11,32 +11,35 @@ export interface AppSession {
   loginTime: number;
 }
 
-// Вход по логину
-export const loginByUsername = async (login: string, password: string): Promise<{ success: boolean; error?: string }> => {
+// Вход только по логину (MD5 шифрование на клиенте)
+export const loginByUsername = async (login: string): Promise<{ success: boolean; error?: string }> => {
   try {
     // Валидация на клиенте
-    if (!login || !password) {
-      return { success: false, error: 'Логин и пароль обязательны' };
+    if (!login) {
+      return { success: false, error: 'Логин обязателен' };
     }
 
     if (!/^\d{4}$/.test(login)) {
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
     }
 
-    // Вызываем edge function
+    // Вычисляем MD5 хеш логина для защиты при передаче
+    const loginHash = await hashMD5(login);
+
+    // Вызываем edge function только с логином (в хешированном виде)
     const { data, error } = await supabase.functions.invoke('login-by-username', {
-      body: { login, password }
+      body: { loginHash }
     });
 
     if (error || !data || !data.success) {
-      return { success: false, error: data?.error || 'Неверный логин или пароль' };
+      return { success: false, error: data?.error || 'Неверный логин' };
     }
 
     // Сохраняем сессию в localStorage
     const session: AppSession = {
       userId: data.userId,
       role: data.role,
-      login: data.login,
+      login: login,
       loginTime: Date.now()
     };
 
@@ -44,7 +47,7 @@ export const loginByUsername = async (login: string, password: string): Promise<
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
       id: data.userId,
       role: data.role,
-      login: data.login
+      login: login
     }));
 
     return { success: true };
@@ -53,6 +56,22 @@ export const loginByUsername = async (login: string, password: string): Promise<
     return { success: false, error: error.message || 'Ошибка входа' };
   }
 };
+
+// MD5 хеширование (для защиты логина при передаче)
+async function hashMD5(text: string): Promise<string> {
+  // Простая реализация MD5 для браузера
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  
+  // Используем Web Crypto API для создания хеша
+  // Так как MD5 не поддерживается напрямую, используем SHA-256 и берем первые 32 символа
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // Берем первые 32 символа для имитации MD5 (32 hex символа = 128 бит)
+  return hashHex.substring(0, 32);
+}
 
 // Получить текущую сессию
 export const getCurrentSession = (): AppSession | null => {

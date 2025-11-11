@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Package, Save, Trash2, Sparkles, X } from 'lucide-react';
+import { Package, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
-import { AIProductRecognition } from './AIProductRecognition';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { saveProduct, saveProductImage } from '@/lib/storage';
@@ -18,7 +17,6 @@ export const PendingProductsTab = () => {
   
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [showAIScanner, setShowAIScanner] = useState(false);
 
   // Загрузка поставщиков
   useEffect(() => {
@@ -339,77 +337,8 @@ export const PendingProductsTab = () => {
     (p.frontPhoto || p.barcodePhoto || p.photos.length > 0) // Хотя бы одна фотография
   );
 
-  const handleAIScan = async (data: {
-    barcode: string;
-    name?: string;
-    category?: string;
-    frontPhoto?: string;
-    barcodePhoto?: string;
-    quantity?: number;
-    expiryDate?: string;
-  }) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Необходима авторизация');
-        return;
-      }
-
-      // Добавляем товар в очередь
-      const insertData: any = {
-        barcode: data.barcode || '',
-        product_name: data.name || '',
-        category: data.category || '',
-        quantity: data.quantity || null,
-        expiry_date: data.expiryDate || null,
-        front_photo: data.frontPhoto || null,
-        barcode_photo: data.barcodePhoto || null,
-        front_photo_storage_path: data.frontPhoto ? `product-photos/${data.barcode}-front-${Date.now()}` : null,
-        barcode_photo_storage_path: data.barcodePhoto ? `product-photos/${data.barcode}-barcode-${Date.now()}` : null,
-        created_by: user.id,
-      };
-
-      const { error: insertError } = await supabase
-        .from('vremenno_product_foto')
-        .insert(insertData);
-
-      if (insertError) {
-        console.error('❌ Ошибка добавления в очередь:', insertError);
-        toast.error(`❌ Ошибка: ${insertError.message}`);
-        return;
-      }
-
-      console.log('✅ Товар добавлен в очередь через AI');
-      toast.success('✅ Товар добавлен в очередь!');
-      addLog(`Товар ${data.name} (${data.barcode}) добавлен в очередь через AI сканер`);
-      
-    } catch (error: any) {
-      console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error);
-      toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`);
-    }
-  };
-
   return (
     <div className="space-y-4">
-      {/* AI Product Recognition */}
-      {(isAdmin || isInventory) && showAIScanner && (
-        <div className="fixed inset-0 bg-background z-50">
-          <AIProductRecognition 
-            onProductFound={handleAIScan}
-            mode="dual"
-            hasIncompleteProducts={pendingProducts.some(p => !p.barcode || !p.name)}
-          />
-          <Button
-            onClick={() => setShowAIScanner(false)}
-            variant="outline"
-            className="absolute top-4 right-4 z-50"
-          >
-            <X className="h-4 w-4 mr-2" />
-            Закрыть
-          </Button>
-        </div>
-      )}
-
       <Card className="w-full bg-card">
         <div className="p-6 border-b space-y-4">
           <div className="flex items-center justify-between">
@@ -422,16 +351,6 @@ export const PendingProductsTab = () => {
             </span>
           </div>
           <div className="flex gap-3">
-            {(isAdmin || isInventory) && (
-              <Button
-                onClick={() => setShowAIScanner(true)}
-                variant="outline"
-                className="h-10"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                AI Скан
-              </Button>
-            )}
             <Button
               onClick={handleSaveAllProducts}
               disabled={!hasCompleteProducts}

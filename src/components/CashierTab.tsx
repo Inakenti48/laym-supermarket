@@ -19,7 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getCurrentUser, addLog } from '@/lib/auth';
+import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CameraScanner } from './CameraScanner';
@@ -114,7 +115,7 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
   const [showAIScanner, setShowAIScanner] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
-  const user = getCurrentUser();
+  const user = getCurrentLoginUser();
   
   // ОПТИМИЗАЦИЯ: Кешируем все товары один раз
   const productsCache = useRef<any[]>([]);

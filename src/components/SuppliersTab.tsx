@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentLoginUser } from '@/lib/loginAuth';
 import { getPendingSuppliersCount, syncSuppliersToCloud, setupSuppliersAutoSync } from '@/lib/suppliersOffline';
 
 interface PaymentHistoryItem {
@@ -40,7 +40,7 @@ interface Supplier {
 }
 
 export const SuppliersTab = () => {
-  const currentUser = getCurrentUser();
+  const currentUser = getCurrentLoginUser();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

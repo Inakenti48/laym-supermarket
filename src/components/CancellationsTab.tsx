@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentLoginUser } from '@/lib/loginAuth';
 
 interface CancellationItem {
   name: string;
@@ -25,7 +25,7 @@ interface CancellationRequest {
 }
 
 export const CancellationsTab = () => {
-  const currentUser = getCurrentUser();
+  const currentUser = getCurrentLoginUser();
   const [requests, setRequests] = useState<CancellationRequest[]>([]);
   const [loading, setLoading] = useState(true);
 

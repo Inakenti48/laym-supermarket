@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { AppRole, getUserRole } from '@/lib/supabaseAuth';
+import { loginByUsername, getCurrentSession, getCurrentLoginUser, logoutUser } from '@/lib/loginAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
@@ -36,50 +37,64 @@ const Index = () => {
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
 
   useEffect(() => {
-    // Проверка текущей сессии
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const role = await getUserRole(session.user.id);
-        setUserRole(role);
-      }
-      setLoading(false);
-    });
-
-    // Подписка на изменения авторизации
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const role = await getUserRole(session.user.id);
-        setUserRole(role);
-      } else {
-        setUserRole(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    // Проверка кастомной сессии (по логину)
+    const session = getCurrentSession();
+    const loginUser = getCurrentLoginUser();
+    
+    if (session && loginUser) {
+      // Создаем фейковый User объект для совместимости
+      const fakeUser = {
+        id: loginUser.id,
+        role: loginUser.role
+      } as any;
+      
+      setUser(fakeUser);
+      setUserRole(loginUser.role);
+    }
+    
+    setLoading(false);
   }, []);
 
   // Больше не проверяем истечение сессии - сессия бессрочная до выхода
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (login: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
+      setLoading(true);
       
-      toast.success('Вход выполнен успешно');
+      const result = await loginByUsername(login, password);
+      
+      if (!result.success) {
+        toast.error(result.error || 'Ошибка входа');
+        return;
+      }
+
+      // Получаем сохраненную сессию
+      const session = getCurrentSession();
+      const loginUser = getCurrentLoginUser();
+      
+      if (session && loginUser) {
+        // Создаем фейковый User объект
+        const fakeUser = {
+          id: loginUser.id,
+          role: loginUser.role
+        } as any;
+        
+        setUser(fakeUser);
+        setUserRole(loginUser.role);
+        toast.success('Вход выполнен успешно');
+      }
     } catch (error: any) {
-      toast.error('Ошибка входа: ' + error.message);
+      console.error('Login failed:', error);
+      toast.error('Ошибка входа');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    logoutUser();
     setUser(null);
+    setUserRole(null);
     setEmployeeId(null);
     setEmployeeName(null);
     setShowEmployeeLogin(false);

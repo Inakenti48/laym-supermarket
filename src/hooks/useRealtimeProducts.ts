@@ -9,10 +9,12 @@ export const useRealtimeProducts = () => {
 
   const fetchProducts = async () => {
     try {
+      // ОПТИМИЗАЦИЯ: Загружаем только первые 500 товаров + пагинация при необходимости
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
 
       if (error) throw error;
 

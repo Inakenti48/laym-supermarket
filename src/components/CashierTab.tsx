@@ -186,44 +186,75 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
           schema: 'public',
           table: 'products'
         },
-        async (payload) => {
-          console.log('🔄 Получено обновление товаров:', payload.eventType, payload);
+        (payload) => {
+          console.log('🔄 Получено обновление товаров:', payload.eventType);
           
-          // ОПТИМИЗАЦИЯ: Обновляем кеш при изменениях
-          const products = await getAllProducts();
-          productsCache.current = products;
-          productsBarcodeMap.current.clear();
-          productsNameMap.current.clear();
-          
-          products.forEach(product => {
-            if (product.barcode) {
-              productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
-            }
-            productsNameMap.current.set(product.name.toLowerCase(), product);
-          });
-          
-          console.log(`✅ Кэш обновлен! Теперь ${products.length} товаров`);
-          console.log(`📊 Штрихкодов: ${productsBarcodeMap.current.size}, Названий: ${productsNameMap.current.size}`);
-          
-          toast.success('База товаров обновлена', { duration: 2000 });
-          
-          // Обновляем результаты поиска если есть активный поиск
-          if (searchQuery.trim() && searchQuery.length >= 2) {
-            const updateSearchResults = async () => {
-              const query = searchQuery.toLowerCase().trim();
-              const searchWords = query.split(/\s+/);
-              const allProducts = await getAllProducts();
-              setSearchResults(
-                allProducts
-                  .filter(p => {
-                    const productName = p.name.toLowerCase();
-                    // Проверяем, содержит ли название товара хотя бы одно слово из поиска
-                    return searchWords.some(word => productName.includes(word));
-                  })
-                  .slice(0, 10)
-              );
+          // ОПТИМИЗАЦИЯ: Обновляем только измененный товар в кеше
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const newProduct = {
+              id: payload.new.id,
+              barcode: payload.new.barcode,
+              name: payload.new.name,
+              category: payload.new.category,
+              purchasePrice: Number(payload.new.purchase_price),
+              retailPrice: Number(payload.new.sale_price),
+              quantity: payload.new.quantity,
+              unit: payload.new.unit,
+              expiryDate: payload.new.expiry_date,
+              supplier: payload.new.supplier,
+              paymentType: payload.new.payment_type,
+              paidAmount: Number(payload.new.paid_amount),
+              debtAmount: Number(payload.new.debt_amount),
+              addedBy: payload.new.created_by,
+              lastUpdated: payload.new.updated_at,
+              priceHistory: payload.new.price_history || [],
+              photos: []
             };
-            updateSearchResults();
+            
+            productsCache.current = [newProduct, ...productsCache.current];
+            if (newProduct.barcode) {
+              productsBarcodeMap.current.set(newProduct.barcode.toLowerCase(), newProduct);
+            }
+            productsNameMap.current.set(newProduct.name.toLowerCase(), newProduct);
+            
+            console.log(`✅ Добавлен товар в кеш: ${newProduct.name}`);
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const updatedProduct = {
+              id: payload.new.id,
+              barcode: payload.new.barcode,
+              name: payload.new.name,
+              category: payload.new.category,
+              purchasePrice: Number(payload.new.purchase_price),
+              retailPrice: Number(payload.new.sale_price),
+              quantity: payload.new.quantity,
+              unit: payload.new.unit,
+              expiryDate: payload.new.expiry_date,
+              supplier: payload.new.supplier,
+              paymentType: payload.new.payment_type,
+              paidAmount: Number(payload.new.paid_amount),
+              debtAmount: Number(payload.new.debt_amount),
+              addedBy: payload.new.created_by,
+              lastUpdated: payload.new.updated_at,
+              priceHistory: payload.new.price_history || [],
+              photos: []
+            };
+            
+            const index = productsCache.current.findIndex(p => p.id === payload.new.id);
+            if (index !== -1) {
+              productsCache.current[index] = updatedProduct;
+              if (updatedProduct.barcode) {
+                productsBarcodeMap.current.set(updatedProduct.barcode.toLowerCase(), updatedProduct);
+              }
+              productsNameMap.current.set(updatedProduct.name.toLowerCase(), updatedProduct);
+              console.log(`✅ Обновлен товар в кеше: ${updatedProduct.name}`);
+            }
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            productsCache.current = productsCache.current.filter(p => p.id !== payload.old.id);
+            if (payload.old.barcode) {
+              productsBarcodeMap.current.delete(payload.old.barcode.toLowerCase());
+            }
+            productsNameMap.current.delete(payload.old.name.toLowerCase());
+            console.log(`✅ Удален товар из кеша: ${payload.old.name}`);
           }
         }
       )
@@ -237,30 +268,43 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
     };
   }, [searchQuery, cacheReady]);
 
-  // Поиск товаров по названию
+  // Поиск товаров по названию с дебаунсингом
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   React.useEffect(() => {
-    const updateSearchResults = async () => {
-      if (!searchQuery.trim() || searchQuery.length < 2) {
-        setSearchResults([]);
-        return;
-      }
+    // Очищаем предыдущий таймер
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    // ОПТИМИЗАЦИЯ: Дебаунсинг поиска - ждем 300мс после последнего ввода
+    searchTimeoutRef.current = setTimeout(() => {
       const query = searchQuery.toLowerCase().trim();
       const searchWords = query.split(/\s+/);
-      const allProducts = await getAllProducts();
-      setSearchResults(
-        allProducts
-          .filter(p => {
-            const productName = p.name.toLowerCase();
-            // Проверяем, содержит ли название товара хотя бы одно слово из поиска
-            return searchWords.some(word => productName.includes(word));
-          })
-          .slice(0, 10)
-      );
+      
+      // Используем кеш вместо getAllProducts
+      const results = productsCache.current
+        .filter(p => {
+          const productName = p.name.toLowerCase();
+          return searchWords.some(word => productName.includes(word));
+        })
+        .slice(0, 10);
+      
+      setSearchResults(results);
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
     };
-    updateSearchResults();
-  }, [searchQuery]);
+  }, [searchQuery, cacheReady]);
 
   const handleConnectPrinter = async () => {
     const connected = await connectPrinter();

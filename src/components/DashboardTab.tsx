@@ -31,17 +31,28 @@ export const DashboardTab = () => {
 
   useEffect(() => {
     const calculateStats = async () => {
-      // Получаем все товары
-      const products = await getAllProducts();
-      const totalProducts = products.reduce((sum, p) => sum + p.quantity, 0);
-      const totalPurchaseCost = products.reduce((sum, p) => sum + (p.purchasePrice * p.quantity), 0);
+      // ОПТИМИЗАЦИЯ: Получаем данные напрямую из Supabase с агрегацией
+      const { data: products } = await supabase
+        .from('products')
+        .select('quantity, purchase_price, sale_price, expiry_date, paid_amount')
+        .limit(1000);
+      
+      if (!products) return;
+      
+      const totalProducts = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+      const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.quantity || 0)), 0);
 
       // Подсчет товаров с низким остатком (менее 10 единиц)
-      const lowStockCount = products.filter(p => p.quantity < 10).length;
+      const lowStockCount = products.filter(p => (p.quantity || 0) < 10).length;
 
       // Истекающие товары (в течение 3 дней)
-      const expiringProducts = await getExpiringProducts(3);
-      const expiringCount = expiringProducts.length;
+      const threeDaysFromNow = new Date();
+      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+      const expiringCount = products.filter(p => {
+        if (!p.expiry_date) return false;
+        const expiryDate = new Date(p.expiry_date);
+        return expiryDate <= threeDaysFromNow;
+      }).length;
 
       // Активные сотрудники
       const employees = getEmployees();
@@ -56,11 +67,11 @@ export const DashboardTab = () => {
       ).length;
 
       // Подсчет выручки из проданных товаров
-      // Вычисляем разницу между текущим остатком и исходным количеством
       const totalRevenue = products.reduce((sum, p) => {
-        // Предполагаем что изначально было больше товаров
-        // Можно улучшить, сохраняя историю продаж
-        return sum + (p.retailPrice * (p.paidAmount / p.purchasePrice || 0));
+        const paidAmount = p.paid_amount || 0;
+        const purchasePrice = p.purchase_price || 1;
+        const retailPrice = p.sale_price || 0;
+        return sum + (retailPrice * (paidAmount / purchasePrice));
       }, 0);
 
       setStats({

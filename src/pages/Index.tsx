@@ -123,7 +123,7 @@ const Index = () => {
       { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
       { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
       { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
-      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin'] },
+      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
       { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
       { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
       { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },

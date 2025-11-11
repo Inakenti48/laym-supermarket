@@ -38,9 +38,10 @@ interface PendingProductItemProps {
   onUpdate: (id: string, updates: Partial<PendingProduct>) => void;
   onRemove: (id: string) => void;
   onSave: (id: string) => void;
+  onSupplierAdded: (supplier: Supplier) => void;
 }
 
-export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onSave }: PendingProductItemProps) => {
+export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onSave, onSupplierAdded }: PendingProductItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState(product);
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
@@ -264,6 +265,9 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
         open={showSupplierDialog}
         onClose={() => setShowSupplierDialog(false)}
         onSupplierAdded={(newSupplier) => {
+          // Добавляем поставщика в список
+          onSupplierAdded(newSupplier);
+          // Автоматически выбираем его
           setEditedProduct({ ...editedProduct, supplier: newSupplier.name });
           setShowSupplierDialog(false);
         }}

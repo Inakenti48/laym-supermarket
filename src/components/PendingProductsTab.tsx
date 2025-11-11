@@ -18,6 +18,11 @@ export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
+  // Обработчик добавления нового поставщика
+  const handleSupplierAdded = (newSupplier: Supplier) => {
+    setSuppliers(prev => [...prev, newSupplier]);
+  };
+
   // Загрузка поставщиков
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -388,6 +393,7 @@ export const PendingProductsTab = () => {
                   onUpdate={handleUpdatePendingProduct}
                   onRemove={handleRemovePendingProduct}
                   onSave={handleSaveSingleProduct}
+                  onSupplierAdded={handleSupplierAdded}
                 />
               ))}
             </div>

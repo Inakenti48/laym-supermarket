@@ -20,6 +20,7 @@ interface PendingProductsListProps {
   onSaveProduct: (id: string) => void;
   onSaveAll: () => void;
   onClearAll: () => void;
+  onSupplierAdded: (supplier: Supplier) => void;
 }
 
 export const PendingProductsList = ({
@@ -30,6 +31,7 @@ export const PendingProductsList = ({
   onSaveProduct,
   onSaveAll,
   onClearAll,
+  onSupplierAdded,
 }: PendingProductsListProps) => {
   const hasCompleteProducts = products.length > 0 && products.some(p => 
     p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
@@ -84,6 +86,7 @@ export const PendingProductsList = ({
                 onUpdate={onUpdateProduct}
                 onRemove={onRemoveProduct}
                 onSave={onSaveProduct}
+                onSupplierAdded={onSupplierAdded}
               />
             ))}
           </div>

@@ -11,7 +11,7 @@ export interface AppSession {
   loginTime: number;
 }
 
-// Вход только по логину (MD5 шифрование на клиенте)
+// Вход только по логину (пароль = логин)
 export const loginByUsername = async (login: string): Promise<{ success: boolean; error?: string }> => {
   try {
     // Валидация на клиенте
@@ -23,36 +23,60 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
     }
 
-    // Вычисляем MD5 хеш логина для защиты при передаче
-    const loginHash = await hashMD5(login);
+    // Создаём email на основе логина
+    const email = `user-${login}@system.local`;
+    const password = login; // Пароль = логин
 
-    // Вызываем edge function только с логином (в хешированном виде)
-    const { data, error } = await supabase.functions.invoke('login-by-username', {
-      body: { loginHash }
+    console.log('🔐 Попытка входа:', { email });
+
+    // Входим через Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
     });
 
-    if (error || !data || !data.success) {
-      return { success: false, error: data?.error || 'Неверный логин' };
+    if (authError) {
+      console.error('❌ Ошибка входа через Supabase Auth:', authError);
+      return { success: false, error: 'Неверный логин' };
     }
 
-    // Сохраняем сессию в localStorage
+    if (!authData.user) {
+      return { success: false, error: 'Ошибка получения данных пользователя' };
+    }
+
+    // Получаем роль пользователя
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', authData.user.id)
+      .maybeSingle();
+
+    if (roleError || !roleData) {
+      console.error('❌ Ошибка получения роли:', roleError);
+      await supabase.auth.signOut();
+      return { success: false, error: 'Ошибка получения роли пользователя' };
+    }
+
+    // Сохраняем данные в localStorage для совместимости
     const session: AppSession = {
-      userId: data.userId,
-      role: data.role,
+      userId: authData.user.id,
+      role: roleData.role,
       login: login,
       loginTime: Date.now()
     };
 
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
-      id: data.userId,
-      role: data.role,
-      login: login
+      id: authData.user.id,
+      role: roleData.role,
+      login: login,
+      username: login
     }));
 
+    console.log('✅ Вход выполнен:', { userId: authData.user.id, role: roleData.role });
     return { success: true };
   } catch (error: any) {
-    console.error('Login error:', error);
+    console.error('💥 Login error:', error);
     return { success: false, error: error.message || 'Ошибка входа' };
   }
 };
@@ -99,7 +123,11 @@ export const getCurrentLoginUser = () => {
 };
 
 // Выход
-export const logoutUser = () => {
+export const logoutUser = async () => {
+  // Выходим из Supabase Auth
+  await supabase.auth.signOut();
+  
+  // Очищаем localStorage
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SESSION_USER_KEY);
 };

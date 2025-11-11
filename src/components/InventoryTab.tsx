@@ -46,6 +46,7 @@ export const InventoryTab = () => {
   const [tempFrontPhoto, setTempFrontPhoto] = useState<string>('');
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
 
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
@@ -1184,36 +1185,49 @@ export const InventoryTab = () => {
 
             <div>
               <label className="text-sm md:text-xs font-medium mb-1.5 block">Поставщик</label>
-              <Select
-                value={currentProduct.supplier}
-                onValueChange={(value) => {
-                  if (value === '__add_new__') {
-                    setShowSupplierDialog(true);
-                  } else {
-                    setCurrentProduct({ ...currentProduct, supplier: value });
-                  }
-                }}
-              >
-                <SelectTrigger className="text-sm md:text-sm h-11 md:h-9">
-                  <SelectValue placeholder="Выбрать" />
-                </SelectTrigger>
-                <SelectContent className="bg-background z-50">
-                  <SelectItem value="__add_new__" className="text-primary font-medium text-sm md:text-xs">
-                    + Добавить
-                  </SelectItem>
-                  {[...suppliers]
-                    .sort((a, b) => {
-                      if (a.name === 'ААА') return -1;
-                      if (b.name === 'ААА') return 1;
-                      return a.name.localeCompare(b.name);
-                    })
-                    .map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.name} className="text-sm md:text-xs">
-                        {supplier.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Input
+                  placeholder="🔍 Поиск поставщика..."
+                  value={supplierSearch}
+                  onChange={(e) => setSupplierSearch(e.target.value)}
+                  className="text-sm md:text-sm h-11 md:h-9"
+                />
+                <Select
+                  value={currentProduct.supplier}
+                  onValueChange={(value) => {
+                    if (value === '__add_new__') {
+                      setShowSupplierDialog(true);
+                    } else {
+                      setCurrentProduct({ ...currentProduct, supplier: value });
+                      setSupplierSearch('');
+                    }
+                  }}
+                >
+                  <SelectTrigger className="text-sm md:text-sm h-11 md:h-9">
+                    <SelectValue placeholder="Выбрать" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="__add_new__" className="text-primary font-medium text-sm md:text-xs">
+                      + Добавить
+                    </SelectItem>
+                    {[...suppliers]
+                      .filter(s => 
+                        supplierSearch === '' || 
+                        s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+                      )
+                      .sort((a, b) => {
+                        if (a.name === 'ААА') return -1;
+                        if (b.name === 'ААА') return 1;
+                        return a.name.localeCompare(b.name);
+                      })
+                      .map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.name} className="text-sm md:text-xs">
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {isAdmin && otherUsersStates.some(s => s.supplier) && (
                 <div className="text-[10px] md:text-[10px] text-primary/70 mt-1 bg-primary/5 px-2 py-1 rounded">
                   👥 {otherUsersStates.filter(s => s.supplier).map(s => `${s.userName}: ${s.supplier}`).join(' | ')}

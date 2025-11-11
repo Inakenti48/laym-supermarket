@@ -46,6 +46,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
 
   // Собираем все фото в один массив
   const allPhotos = [
@@ -124,15 +125,28 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                 className="h-10 text-sm"
               />
               <div className="space-y-2">
+                <Input
+                  placeholder="🔍 Поиск поставщика..."
+                  value={supplierSearch}
+                  onChange={(e) => setSupplierSearch(e.target.value)}
+                  className="h-10 text-sm"
+                />
                 <Select
                   value={editedProduct.supplier || ''}
-                  onValueChange={(value) => setEditedProduct({ ...editedProduct, supplier: value })}
+                  onValueChange={(value) => {
+                    setEditedProduct({ ...editedProduct, supplier: value });
+                    setSupplierSearch('');
+                  }}
                 >
                   <SelectTrigger className="h-10 text-sm">
                     <SelectValue placeholder="Выберите поставщика" />
                   </SelectTrigger>
-                  <SelectContent className="bg-background">
+                  <SelectContent className="bg-background z-[100]">
                     {[...suppliers]
+                      .filter(s => 
+                        supplierSearch === '' || 
+                        s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+                      )
                       .sort((a, b) => {
                         if (a.name === 'ААА') return -1;
                         if (b.name === 'ААА') return 1;

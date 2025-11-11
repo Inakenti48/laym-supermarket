@@ -210,11 +210,16 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
           // Обновляем результаты поиска если есть активный поиск
           if (searchQuery.trim() && searchQuery.length >= 2) {
             const updateSearchResults = async () => {
-              const query = searchQuery.toLowerCase();
+              const query = searchQuery.toLowerCase().trim();
+              const searchWords = query.split(/\s+/);
               const allProducts = await getAllProducts();
               setSearchResults(
                 allProducts
-                  .filter(p => p.name.toLowerCase().includes(query))
+                  .filter(p => {
+                    const productName = p.name.toLowerCase();
+                    // Проверяем, содержит ли название товара хотя бы одно слово из поиска
+                    return searchWords.some(word => productName.includes(word));
+                  })
                   .slice(0, 10)
               );
             };
@@ -241,11 +246,16 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
         setSearchResults([]);
         return;
       }
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase().trim();
+      const searchWords = query.split(/\s+/);
       const allProducts = await getAllProducts();
       setSearchResults(
         allProducts
-          .filter(p => p.name.toLowerCase().includes(query))
+          .filter(p => {
+            const productName = p.name.toLowerCase();
+            // Проверяем, содержит ли название товара хотя бы одно слово из поиска
+            return searchWords.some(word => productName.includes(word));
+          })
           .slice(0, 10)
       );
     };

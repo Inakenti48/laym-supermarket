@@ -14,7 +14,7 @@ import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { PendingProduct } from './PendingProductItem';
 import { ProductReturnsTab } from './ProductReturnsTab';
 
-import { addLog, getCurrentUser } from '@/lib/auth';
+import { addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } from '@/lib/storage';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
@@ -23,9 +23,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { useFormSync } from '@/hooks/useFormSync';
 
+import { getCurrentLoginUser } from '@/lib/loginAuth';
+
 export const InventoryTab = () => {
-  const currentUser = getCurrentUser();
-  const isAdmin = currentUser?.role === 'admin';
+  const currentLoginUser = getCurrentLoginUser();
+  const isAdmin = currentLoginUser?.role === 'admin';
 
   // Realtime синхронизация товаров
   useProductsSync();
@@ -743,11 +745,11 @@ export const InventoryTab = () => {
             paymentType: 'full',
             paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
             debtAmount: 0,
-            addedBy: currentUser?.role || 'unknown',
+            addedBy: currentLoginUser?.role || 'unknown',
             supplier: product.supplier || undefined,
           };
 
-          const saved = await saveProduct(productData, currentUser?.username || 'unknown');
+          const saved = await saveProduct(productData, currentLoginUser?.login || 'unknown');
           
           if (saved) {
             successCount++;

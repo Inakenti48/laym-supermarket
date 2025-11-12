@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentLoginUser } from '@/lib/loginAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
 interface Device {
   id: string;
@@ -23,93 +25,65 @@ export const DiagnosticsTab = () => {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserLogin, setCurrentUserLogin] = useState<string>('');
   const [allDevices, setAllDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(false);
   
   // Настройки диагностики
   const [deviceName, setDeviceName] = useState(() => localStorage.getItem('device_name') || '');
   const [canSaveSingle, setCanSaveSingle] = useState(() => localStorage.getItem('can_save_single') !== 'false');
   const [canSaveQueue, setCanSaveQueue] = useState(() => localStorage.getItem('can_save_queue') !== 'false');
 
-  // Получаем роль пользователя и загружаем устройство
+  // Получаем роль пользователя при загрузке
   useEffect(() => {
-    const loadUserData = async () => {
+    const loadUserRole = async () => {
       const user = await getCurrentLoginUser();
       if (user) {
         setUserRole(user.role);
         setCurrentUserId(user.id);
         setCurrentUserLogin(user.login);
-        
-        // Загружаем данные устройства из БД
-        await loadDeviceFromDB(user.id);
-        
-        // Если админ, загружаем все устройства
-        if (user.role === 'admin') {
-          await loadAllDevices();
-        }
       }
     };
-    loadUserData();
+    loadUserRole();
   }, []);
 
-  const loadDeviceFromDB = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('devices')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        setDeviceName(data.device_name);
-        setCanSaveSingle(data.can_save_single);
-        setCanSaveQueue(data.can_save_queue);
-        
-        // Обновляем localStorage
-        localStorage.setItem('device_name', data.device_name);
-        localStorage.setItem('can_save_single', String(data.can_save_single));
-        localStorage.setItem('can_save_queue', String(data.can_save_queue));
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки данных устройства:', error);
+  // Загружаем все устройства для админа
+  useEffect(() => {
+    if (userRole === 'admin') {
+      loadAllDevices();
     }
-  };
+  }, [userRole]);
 
   const loadAllDevices = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('devices')
         .select('*')
         .order('last_active', { ascending: false });
 
       if (error) throw error;
-      
       setAllDevices(data || []);
     } catch (error) {
-      console.error('Ошибка загрузки списка устройств:', error);
-      toast.error('Не удалось загрузить список устройств');
-    } finally {
-      setLoading(false);
+      console.error('Ошибка загрузки устройств:', error);
     }
   };
 
   const handleSaveSettings = async () => {
-    if (!currentUserId || !currentUserLogin) {
-      toast.error('Пользователь не авторизован');
-      return;
-    }
+    // Сохраняем в localStorage
+    localStorage.setItem('device_name', deviceName);
+    localStorage.setItem('can_save_single', String(canSaveSingle));
+    localStorage.setItem('can_save_queue', String(canSaveQueue));
 
+    // Сохраняем в базу данных
     try {
-      setLoading(true);
-      
-      // Проверяем, существует ли запись для этого пользователя
+      if (!currentUserId || !currentUserLogin || !deviceName) {
+        toast.error('⚠️ Необходимо заполнить название устройства');
+        return;
+      }
+
+      // Проверяем, существует ли уже запись для этого пользователя
       const { data: existingDevice } = await supabase
         .from('devices')
         .select('id')
         .eq('user_id', currentUserId)
-        .maybeSingle();
+        .single();
 
       if (existingDevice) {
         // Обновляем существующую запись
@@ -119,7 +93,7 @@ export const DiagnosticsTab = () => {
             device_name: deviceName,
             can_save_single: canSaveSingle,
             can_save_queue: canSaveQueue,
-            last_active: new Date().toISOString()
+            last_active: new Date().toISOString(),
           })
           .eq('user_id', currentUserId);
 
@@ -133,28 +107,21 @@ export const DiagnosticsTab = () => {
             user_name: currentUserLogin,
             device_name: deviceName,
             can_save_single: canSaveSingle,
-            can_save_queue: canSaveQueue
+            can_save_queue: canSaveQueue,
           });
 
         if (error) throw error;
       }
 
-      // Обновляем localStorage
-      localStorage.setItem('device_name', deviceName);
-      localStorage.setItem('can_save_single', String(canSaveSingle));
-      localStorage.setItem('can_save_queue', String(canSaveQueue));
-      
       toast.success('✅ Настройки сохранены');
       
-      // Если админ, обновляем список всех устройств
+      // Перезагружаем список устройств если админ
       if (userRole === 'admin') {
-        await loadAllDevices();
+        loadAllDevices();
       }
     } catch (error) {
       console.error('Ошибка сохранения настроек:', error);
-      toast.error('Не удалось сохранить настройки');
-    } finally {
-      setLoading(false);
+      toast.error('❌ Ошибка при сохранении настроек');
     }
   };
 
@@ -245,9 +212,8 @@ export const DiagnosticsTab = () => {
         <Button 
           onClick={handleSaveSettings}
           className="w-full"
-          disabled={loading}
         >
-          {loading ? 'Сохранение...' : 'Сохранить настройки'}
+          Сохранить настройки
         </Button>
 
         {/* Предупреждение */}
@@ -281,65 +247,55 @@ export const DiagnosticsTab = () => {
       </Card>
 
       {/* Список всех устройств (только для админа) */}
-      {userRole === 'admin' && (
+      {userRole === 'admin' && allDevices.length > 0 && (
         <Card className="p-4">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Monitor className="h-5 w-5" />
-            Все устройства в системе
+            Все устройства в системе ({allDevices.length})
           </h3>
-
-          {loading && (
-            <div className="text-center py-4 text-muted-foreground">
-              Загрузка...
-            </div>
-          )}
-
-          {!loading && allDevices.length === 0 && (
-            <div className="text-center py-4 text-muted-foreground">
-              Нет зарегистрированных устройств
-            </div>
-          )}
-
-          {!loading && allDevices.length > 0 && (
-            <div className="space-y-3">
-              {allDevices.map((device) => (
-                <div 
-                  key={device.id} 
-                  className="p-3 border rounded-lg bg-muted/20"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-sm font-medium mb-1">
-                        {device.device_name || 'Устройство без имени'}
+          
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Пользователь</TableHead>
+                  <TableHead>Устройство</TableHead>
+                  <TableHead>Права</TableHead>
+                  <TableHead>Последняя активность</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allDevices.map((device) => (
+                  <TableRow key={device.id}>
+                    <TableCell className="font-medium">{device.user_name}</TableCell>
+                    <TableCell>{device.device_name}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 flex-wrap">
+                        {device.can_save_single && (
+                          <Badge variant="outline" className="text-xs">
+                            Одиночное
+                          </Badge>
+                        )}
+                        {device.can_save_queue && (
+                          <Badge variant="outline" className="text-xs">
+                            Очередь
+                          </Badge>
+                        )}
+                        {!device.can_save_single && !device.can_save_queue && (
+                          <Badge variant="destructive" className="text-xs">
+                            Нет прав
+                          </Badge>
+                        )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Пользователь: {device.user_name}
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className={device.can_save_single ? 'text-green-600' : 'text-red-600'}>
-                          {device.can_save_single ? '✅' : '❌'}
-                        </span>
-                        <span>Сохранение в одиночку</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className={device.can_save_queue ? 'text-green-600' : 'text-red-600'}>
-                          {device.can_save_queue ? '✅' : '❌'}
-                        </span>
-                        <span>Добавление в очередь</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
-                    Последняя активность: {new Date(device.last_active).toLocaleString('ru-RU')}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(device.last_active).toLocaleString('ru-RU')}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       )}
     </div>

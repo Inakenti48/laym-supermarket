@@ -68,8 +68,9 @@ export const InventoryTab = () => {
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
-  const canSaveSingle = localStorage.getItem('can_save_single') !== 'false';
-  const canSaveQueue = localStorage.getItem('can_save_queue') !== 'false';
+  // Проверяем права: админ и складская всегда могут сохранять, остальные проверяем по localStorage
+  const canSaveSingle = (userRole === 'admin' || userRole === 'inventory') ? true : (localStorage.getItem('can_save_single') !== 'false');
+  const canSaveQueue = (userRole === 'admin' || userRole === 'inventory') ? true : (localStorage.getItem('can_save_queue') !== 'false');
 
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');

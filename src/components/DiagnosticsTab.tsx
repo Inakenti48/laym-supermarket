@@ -40,8 +40,8 @@ export const DiagnosticsTab = () => {
         setCurrentUserId(user.id);
         setCurrentUserLogin(user.login);
         
-        // Если админ - автоматически даем все права
-        if (user.role === 'admin') {
+        // Если админ или складская - автоматически даем все права
+        if (user.role === 'admin' || user.role === 'inventory') {
           setCanSaveSingle(true);
           setCanSaveQueue(true);
           localStorage.setItem('can_save_single', 'true');
@@ -74,9 +74,9 @@ export const DiagnosticsTab = () => {
   };
 
   const handleSaveSettings = async () => {
-    // Для админа всегда даем все права
-    const finalCanSaveSingle = userRole === 'admin' ? true : canSaveSingle;
-    const finalCanSaveQueue = userRole === 'admin' ? true : canSaveQueue;
+    // Для админа и складской всегда даем все права
+    const finalCanSaveSingle = (userRole === 'admin' || userRole === 'inventory') ? true : canSaveSingle;
+    const finalCanSaveQueue = (userRole === 'admin' || userRole === 'inventory') ? true : canSaveQueue;
     
     // Сохраняем в localStorage
     localStorage.setItem('device_name', deviceName);
@@ -125,7 +125,8 @@ export const DiagnosticsTab = () => {
         if (error) throw error;
       }
 
-      toast.success('✅ Настройки сохранены' + (userRole === 'admin' ? ' (Админ: все права включены)' : ''));
+      const roleMessage = (userRole === 'admin' || userRole === 'inventory') ? ' (Все права включены автоматически)' : '';
+      toast.success('✅ Настройки сохранены' + roleMessage);
       
       // Перезагружаем список устройств если админ
       if (userRole === 'admin') {
@@ -187,10 +188,10 @@ export const DiagnosticsTab = () => {
         <div className="space-y-4 mb-6">
           <h4 className="font-medium text-sm">Права доступа на сохранение товаров:</h4>
           
-          {userRole === 'admin' && (
+          {(userRole === 'admin' || userRole === 'inventory') && (
             <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg mb-3">
               <p className="text-sm text-green-700 dark:text-green-400 font-medium">
-                ✅ Администратор: все права доступа включены автоматически
+                ✅ {userRole === 'admin' ? 'Администратор' : 'Складская'}: все права доступа включены автоматически
               </p>
             </div>
           )}
@@ -199,9 +200,9 @@ export const DiagnosticsTab = () => {
             <input
               type="checkbox"
               id="canSaveSingle"
-              checked={userRole === 'admin' ? true : canSaveSingle}
+              checked={(userRole === 'admin' || userRole === 'inventory') ? true : canSaveSingle}
               onChange={(e) => setCanSaveSingle(e.target.checked)}
-              disabled={userRole === 'admin'}
+              disabled={userRole === 'admin' || userRole === 'inventory'}
               className="mt-1"
             />
             <label htmlFor="canSaveSingle" className="flex-1 cursor-pointer">
@@ -216,9 +217,9 @@ export const DiagnosticsTab = () => {
             <input
               type="checkbox"
               id="canSaveQueue"
-              checked={userRole === 'admin' ? true : canSaveQueue}
+              checked={(userRole === 'admin' || userRole === 'inventory') ? true : canSaveQueue}
               onChange={(e) => setCanSaveQueue(e.target.checked)}
-              disabled={userRole === 'admin'}
+              disabled={userRole === 'admin' || userRole === 'inventory'}
               className="mt-1"
             />
             <label htmlFor="canSaveQueue" className="flex-1 cursor-pointer">

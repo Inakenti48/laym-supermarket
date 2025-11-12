@@ -125,14 +125,6 @@ export const PendingProductsTab = () => {
     const updatedProduct = { ...product, ...updates };
 
     try {
-      // Проверяем сессию
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        toast.error('Сессия истекла. Пожалуйста, войдите снова');
-        window.location.reload();
-        return;
-      }
-
       const { error } = await supabase
         .from('vremenno_product_foto')
         .update({
@@ -169,14 +161,6 @@ export const PendingProductsTab = () => {
 
   const handleRemovePendingProduct = async (id: string) => {
     try {
-      // Проверяем сессию
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        toast.error('Сессия истекла. Пожалуйста, войдите снова');
-        window.location.reload();
-        return;
-      }
-
       const { error } = await supabase
         .from('vremenno_product_foto')
         .delete()
@@ -374,14 +358,6 @@ export const PendingProductsTab = () => {
     if (pendingProducts.length === 0) return;
 
     try {
-      // Проверяем сессию
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        toast.error('Сессия истекла. Пожалуйста, войдите снова');
-        window.location.reload();
-        return;
-      }
-
       const { error } = await supabase
         .from('vremenno_product_foto')
         .delete()

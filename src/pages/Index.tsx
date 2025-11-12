@@ -28,13 +28,43 @@ import { loginByUsername, getCurrentSession, getCurrentLoginUser, getCurrentLogi
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
+
+  // Фильтруем табы в зависимости от роли
+  const getTabsByRole = (): Array<{ id: Tab; label: string; icon: any; roles: string[] }> => {
+    const allTabs = [
+      { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
+      { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
+      { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+      { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
+      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
+      { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
+      { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
+      { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
+      { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+      { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
+      { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
+    ];
+
+    if (!userRole) return [];
+    return allTabs.filter(tab => tab.roles.includes(userRole));
+  };
+
+  const tabs = getTabsByRole();
+  
+  // Устанавливаем начальный таб - первый доступный для роли
+  const getInitialTab = (): Tab => {
+    if (!userRole) return 'dashboard';
+    const availableTabs = getTabsByRole();
+    return availableTabs.length > 0 ? availableTabs[0].id : 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState<Tab>(getInitialTab());
 
   useEffect(() => {
     // Проверка кастомной сессии (по логину)
@@ -58,6 +88,14 @@ const Index = () => {
     
     checkSession();
   }, []);
+
+  // Обновляем activeTab при изменении роли
+  useEffect(() => {
+    if (userRole) {
+      const initialTab = getInitialTab();
+      setActiveTab(initialTab);
+    }
+  }, [userRole]);
 
   // Больше не проверяем истечение сессии - сессия бессрочная до выхода
 
@@ -120,27 +158,6 @@ const Index = () => {
     }
   };
 
-  // Фильтруем табы в зависимости от роли
-  const getTabsByRole = (): typeof tabs => {
-    const allTabs = [
-      { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin', 'cashier', 'cashier2', 'inventory'] },
-      { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
-      { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
-      { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
-      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
-      { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
-      { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
-      { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
-      { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
-      { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
-      { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
-    ];
-
-    if (!userRole) return [];
-    return allTabs.filter(tab => tab.roles.includes(userRole));
-  };
-
-  const tabs = getTabsByRole();
 
   // Показываем экран входа если не авторизован
   if (loading) {

@@ -39,6 +39,14 @@ export const DiagnosticsTab = () => {
         setUserRole(user.role);
         setCurrentUserId(user.id);
         setCurrentUserLogin(user.login);
+        
+        // Если админ - автоматически даем все права
+        if (user.role === 'admin') {
+          setCanSaveSingle(true);
+          setCanSaveQueue(true);
+          localStorage.setItem('can_save_single', 'true');
+          localStorage.setItem('can_save_queue', 'true');
+        }
       }
     };
     loadUserRole();
@@ -66,10 +74,14 @@ export const DiagnosticsTab = () => {
   };
 
   const handleSaveSettings = async () => {
+    // Для админа всегда даем все права
+    const finalCanSaveSingle = userRole === 'admin' ? true : canSaveSingle;
+    const finalCanSaveQueue = userRole === 'admin' ? true : canSaveQueue;
+    
     // Сохраняем в localStorage
     localStorage.setItem('device_name', deviceName);
-    localStorage.setItem('can_save_single', String(canSaveSingle));
-    localStorage.setItem('can_save_queue', String(canSaveQueue));
+    localStorage.setItem('can_save_single', String(finalCanSaveSingle));
+    localStorage.setItem('can_save_queue', String(finalCanSaveQueue));
 
     // Сохраняем в базу данных
     try {
@@ -91,8 +103,8 @@ export const DiagnosticsTab = () => {
           .from('devices')
           .update({
             device_name: deviceName,
-            can_save_single: canSaveSingle,
-            can_save_queue: canSaveQueue,
+            can_save_single: finalCanSaveSingle,
+            can_save_queue: finalCanSaveQueue,
             last_active: new Date().toISOString(),
           })
           .eq('user_id', currentUserId);
@@ -106,14 +118,14 @@ export const DiagnosticsTab = () => {
             user_id: currentUserId,
             user_name: currentUserLogin,
             device_name: deviceName,
-            can_save_single: canSaveSingle,
-            can_save_queue: canSaveQueue,
+            can_save_single: finalCanSaveSingle,
+            can_save_queue: finalCanSaveQueue,
           });
 
         if (error) throw error;
       }
 
-      toast.success('✅ Настройки сохранены');
+      toast.success('✅ Настройки сохранены' + (userRole === 'admin' ? ' (Админ: все права включены)' : ''));
       
       // Перезагружаем список устройств если админ
       if (userRole === 'admin') {
@@ -175,12 +187,21 @@ export const DiagnosticsTab = () => {
         <div className="space-y-4 mb-6">
           <h4 className="font-medium text-sm">Права доступа на сохранение товаров:</h4>
           
+          {userRole === 'admin' && (
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg mb-3">
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium">
+                ✅ Администратор: все права доступа включены автоматически
+              </p>
+            </div>
+          )}
+          
           <div className="flex items-start gap-3 p-3 border rounded-lg">
             <input
               type="checkbox"
               id="canSaveSingle"
-              checked={canSaveSingle}
+              checked={userRole === 'admin' ? true : canSaveSingle}
               onChange={(e) => setCanSaveSingle(e.target.checked)}
+              disabled={userRole === 'admin'}
               className="mt-1"
             />
             <label htmlFor="canSaveSingle" className="flex-1 cursor-pointer">
@@ -195,8 +216,9 @@ export const DiagnosticsTab = () => {
             <input
               type="checkbox"
               id="canSaveQueue"
-              checked={canSaveQueue}
+              checked={userRole === 'admin' ? true : canSaveQueue}
               onChange={(e) => setCanSaveQueue(e.target.checked)}
+              disabled={userRole === 'admin'}
               className="mt-1"
             />
             <label htmlFor="canSaveQueue" className="flex-1 cursor-pointer">

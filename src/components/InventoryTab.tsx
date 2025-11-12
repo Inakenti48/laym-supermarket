@@ -68,9 +68,10 @@ export const InventoryTab = () => {
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
-  // Проверяем права: админ и складская всегда могут сохранять, остальные проверяем по localStorage
-  const canSaveSingle = (userRole === 'admin' || userRole === 'inventory') ? true : (localStorage.getItem('can_save_single') !== 'false');
-  const canSaveQueue = (userRole === 'admin' || userRole === 'inventory') ? true : (localStorage.getItem('can_save_queue') !== 'false');
+  
+  // Вычисляем права доступа на основе текущей роли (динамически)
+  const canSaveSingle = (userRole === 'admin' || userRole === 'inventory') || (localStorage.getItem('can_save_single') !== 'false');
+  const canSaveQueue = (userRole === 'admin' || userRole === 'inventory') || (localStorage.getItem('can_save_queue') !== 'false');
 
   const [currentProduct, setCurrentProduct] = useState(() => {
     const saved = localStorage.getItem('inventory_form_data');
@@ -685,8 +686,12 @@ export const InventoryTab = () => {
   };
 
   const handleSaveAllProducts = async () => {
-    // Проверка прав доступа
-    if (!canSaveSingle) {
+    console.log('💾 Начало сохранения всех товаров');
+    console.log('👤 userRole:', userRole);
+    console.log('🔐 canSaveSingle:', canSaveSingle);
+    
+    // Проверка прав доступа - для админа и складской всегда разрешено
+    if (userRole !== 'admin' && userRole !== 'inventory' && !canSaveSingle) {
       toast.error('⚠️ У вас нет прав на сохранение товаров. Включите эту опцию в разделе Диагностика.');
       return;
     }
@@ -857,9 +862,11 @@ export const InventoryTab = () => {
   const addProduct = async () => {
     try {
       console.log('🔄 Добавление товара в очередь...');
+      console.log('👤 userRole:', userRole);
+      console.log('🔐 canSaveQueue:', canSaveQueue);
       
-      // Проверка прав доступа
-      if (!canSaveQueue) {
+      // Проверка прав доступа - для админа и складской всегда разрешено
+      if (userRole !== 'admin' && userRole !== 'inventory' && !canSaveQueue) {
         toast.error('⚠️ У вас нет прав на добавление товаров в очередь. Включите эту опцию в разделе Диагностика.');
         return;
       }

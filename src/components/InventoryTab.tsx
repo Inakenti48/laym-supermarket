@@ -1061,6 +1061,15 @@ export const InventoryTab = () => {
           </Card>
         )}
 
+        {/* ДИАГНОСТИКА - ПОКАЗЫВАЕТСЯ ВСЕГДА */}
+        <div className="p-3 bg-yellow-500/20 border-2 border-yellow-500 rounded-lg mb-3">
+          <p className="text-sm font-bold">🔍 ДИАГНОСТИКА:</p>
+          <p className="text-xs">userRole: {userRole || 'null'}</p>
+          <p className="text-xs">canUseAI: {canUseAI ? 'ДА ✅' : 'НЕТ ❌'}</p>
+          <p className="text-xs">currentUserId: {currentUserId || 'null'}</p>
+          <p className="text-xs">currentUserLogin: {currentUserLogin || 'null'}</p>
+        </div>
+
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}

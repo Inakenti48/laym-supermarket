@@ -218,10 +218,16 @@ export const PendingProductsTab = () => {
     try {
       // Получаем текущего пользователя из локальной сессии
       const loginUser = getCurrentLoginUser();
+      console.log('🔍 Проверка авторизации при сохранении:', loginUser);
+      console.log('🔍 localStorage app_user:', localStorage.getItem('app_user'));
+      
       if (!loginUser) {
-        toast.error('Необходима авторизация');
+        console.error('❌ getCurrentLoginUser вернул null');
+        toast.error('Необходима авторизация. Пожалуйста, войдите в систему снова.');
         return;
       }
+      
+      console.log('✅ Пользователь авторизован:', loginUser.id, loginUser.role);
       
       const supplier = suppliers.find(s => s.name === product.supplier);
 
@@ -295,8 +301,11 @@ export const PendingProductsTab = () => {
     try {
       // Получаем текущего пользователя из локальной сессии
       const loginUser = getCurrentLoginUser();
+      console.log('🔍 Проверка авторизации при массовом сохранении:', loginUser);
+      
       if (!loginUser) {
-        toast.error('Необходима авторизация');
+        console.error('❌ getCurrentLoginUser вернул null при массовом сохранении');
+        toast.error('Необходима авторизация. Пожалуйста, войдите в систему снова.');
         return;
       }
 

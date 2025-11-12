@@ -50,6 +50,39 @@ export type Database = {
         }
         Relationships: []
       }
+      devices: {
+        Row: {
+          can_save_queue: boolean
+          can_save_single: boolean
+          created_at: string
+          device_name: string
+          id: string
+          last_active: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          can_save_queue?: boolean
+          can_save_single?: boolean
+          created_at?: string
+          device_name: string
+          id?: string
+          last_active?: string
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          can_save_queue?: boolean
+          can_save_single?: boolean
+          created_at?: string
+          device_name?: string
+          id?: string
+          last_active?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
       employees: {
         Row: {
           created_at: string

@@ -1,39 +1,161 @@
 import { useState, useEffect } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, Monitor } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Device {
+  id: string;
+  user_id: string;
+  user_name: string;
+  device_name: string;
+  can_save_single: boolean;
+  can_save_queue: boolean;
+  last_active: string;
+  created_at: string;
+}
 
 export const DiagnosticsTab = () => {
   const [userRole, setUserRole] = useState<string>('');
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserLogin, setCurrentUserLogin] = useState<string>('');
+  const [allDevices, setAllDevices] = useState<Device[]>([]);
+  const [loading, setLoading] = useState(false);
   
   // Настройки диагностики
   const [deviceName, setDeviceName] = useState(() => localStorage.getItem('device_name') || '');
   const [canSaveSingle, setCanSaveSingle] = useState(() => localStorage.getItem('can_save_single') !== 'false');
   const [canSaveQueue, setCanSaveQueue] = useState(() => localStorage.getItem('can_save_queue') !== 'false');
 
-  // Получаем роль пользователя при загрузке
+  // Получаем роль пользователя и загружаем устройство
   useEffect(() => {
-    const loadUserRole = async () => {
+    const loadUserData = async () => {
       const user = await getCurrentLoginUser();
       if (user) {
         setUserRole(user.role);
         setCurrentUserId(user.id);
         setCurrentUserLogin(user.login);
+        
+        // Загружаем данные устройства из БД
+        await loadDeviceFromDB(user.id);
+        
+        // Если админ, загружаем все устройства
+        if (user.role === 'admin') {
+          await loadAllDevices();
+        }
       }
     };
-    loadUserRole();
+    loadUserData();
   }, []);
 
-  const handleSaveSettings = () => {
-    localStorage.setItem('device_name', deviceName);
-    localStorage.setItem('can_save_single', String(canSaveSingle));
-    localStorage.setItem('can_save_queue', String(canSaveQueue));
-    toast.success('✅ Настройки сохранены');
+  const loadDeviceFromDB = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setDeviceName(data.device_name);
+        setCanSaveSingle(data.can_save_single);
+        setCanSaveQueue(data.can_save_queue);
+        
+        // Обновляем localStorage
+        localStorage.setItem('device_name', data.device_name);
+        localStorage.setItem('can_save_single', String(data.can_save_single));
+        localStorage.setItem('can_save_queue', String(data.can_save_queue));
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки данных устройства:', error);
+    }
+  };
+
+  const loadAllDevices = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('devices')
+        .select('*')
+        .order('last_active', { ascending: false });
+
+      if (error) throw error;
+      
+      setAllDevices(data || []);
+    } catch (error) {
+      console.error('Ошибка загрузки списка устройств:', error);
+      toast.error('Не удалось загрузить список устройств');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!currentUserId || !currentUserLogin) {
+      toast.error('Пользователь не авторизован');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Проверяем, существует ли запись для этого пользователя
+      const { data: existingDevice } = await supabase
+        .from('devices')
+        .select('id')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+
+      if (existingDevice) {
+        // Обновляем существующую запись
+        const { error } = await supabase
+          .from('devices')
+          .update({
+            device_name: deviceName,
+            can_save_single: canSaveSingle,
+            can_save_queue: canSaveQueue,
+            last_active: new Date().toISOString()
+          })
+          .eq('user_id', currentUserId);
+
+        if (error) throw error;
+      } else {
+        // Создаем новую запись
+        const { error } = await supabase
+          .from('devices')
+          .insert({
+            user_id: currentUserId,
+            user_name: currentUserLogin,
+            device_name: deviceName,
+            can_save_single: canSaveSingle,
+            can_save_queue: canSaveQueue
+          });
+
+        if (error) throw error;
+      }
+
+      // Обновляем localStorage
+      localStorage.setItem('device_name', deviceName);
+      localStorage.setItem('can_save_single', String(canSaveSingle));
+      localStorage.setItem('can_save_queue', String(canSaveQueue));
+      
+      toast.success('✅ Настройки сохранены');
+      
+      // Если админ, обновляем список всех устройств
+      if (userRole === 'admin') {
+        await loadAllDevices();
+      }
+    } catch (error) {
+      console.error('Ошибка сохранения настроек:', error);
+      toast.error('Не удалось сохранить настройки');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -123,8 +245,9 @@ export const DiagnosticsTab = () => {
         <Button 
           onClick={handleSaveSettings}
           className="w-full"
+          disabled={loading}
         >
-          Сохранить настройки
+          {loading ? 'Сохранение...' : 'Сохранить настройки'}
         </Button>
 
         {/* Предупреждение */}
@@ -156,6 +279,69 @@ export const DiagnosticsTab = () => {
           </div>
         </div>
       </Card>
+
+      {/* Список всех устройств (только для админа) */}
+      {userRole === 'admin' && (
+        <Card className="p-4">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Monitor className="h-5 w-5" />
+            Все устройства в системе
+          </h3>
+
+          {loading && (
+            <div className="text-center py-4 text-muted-foreground">
+              Загрузка...
+            </div>
+          )}
+
+          {!loading && allDevices.length === 0 && (
+            <div className="text-center py-4 text-muted-foreground">
+              Нет зарегистрированных устройств
+            </div>
+          )}
+
+          {!loading && allDevices.length > 0 && (
+            <div className="space-y-3">
+              {allDevices.map((device) => (
+                <div 
+                  key={device.id} 
+                  className="p-3 border rounded-lg bg-muted/20"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-sm font-medium mb-1">
+                        {device.device_name || 'Устройство без имени'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Пользователь: {device.user_name}
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className={device.can_save_single ? 'text-green-600' : 'text-red-600'}>
+                          {device.can_save_single ? '✅' : '❌'}
+                        </span>
+                        <span>Сохранение в одиночку</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className={device.can_save_queue ? 'text-green-600' : 'text-red-600'}>
+                          {device.can_save_queue ? '✅' : '❌'}
+                        </span>
+                        <span>Добавление в очередь</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
+                    Последняя активность: {new Date(device.last_active).toLocaleString('ru-RU')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 };

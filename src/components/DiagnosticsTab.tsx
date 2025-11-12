@@ -8,6 +8,8 @@ import { getCurrentLoginUser } from '@/lib/loginAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { ActiveDevicesMonitor } from './ActiveDevicesMonitor';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Device {
   id: string;
@@ -139,8 +141,20 @@ export const DiagnosticsTab = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <Card className="p-4">
+    <Tabs defaultValue="settings" className="space-y-4">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="settings">
+          <Settings className="h-4 w-4 mr-2" />
+          Настройки
+        </TabsTrigger>
+        <TabsTrigger value="monitor">
+          <Monitor className="h-4 w-4 mr-2" />
+          Активные устройства
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="settings" className="space-y-4">
+        <Card className="p-4">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Settings className="h-5 w-5" />
           Настройки доступа и диагностика
@@ -321,6 +335,11 @@ export const DiagnosticsTab = () => {
           </div>
         </Card>
       )}
-    </div>
+      </TabsContent>
+
+      <TabsContent value="monitor">
+        <ActiveDevicesMonitor />
+      </TabsContent>
+    </Tabs>
   );
 };

@@ -247,20 +247,6 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
   } else {
     console.log('💾 Создание нового товара - сохранение в Supabase...');
     
-    // Проверяем авторизацию
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      console.error('❌ Ошибка авторизации:', {
-        message: authError.message,
-        code: authError.status
-      });
-      throw new Error('Ошибка авторизации');
-    }
-    if (!user) {
-      console.warn('⚠️ Пользователь не авторизован');
-      throw new Error('Пользователь не авторизован');
-    }
-    
     const newPriceHistory = [
       {
         date: now,
@@ -284,7 +270,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       debt_amount: product.debtAmount,
       supplier: product.supplier || null,
       price_history: newPriceHistory as any,
-      created_by: user.id
+      created_by: userId
     };
     
     console.log('☁️ Сохранение товара в Supabase...');
@@ -315,7 +301,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
       paymentType: data.payment_type as 'full' | 'partial' | 'debt',
       paidAmount: Number(data.paid_amount),
       debtAmount: Number(data.debt_amount),
-      addedBy: user.id,
+      addedBy: userId,
       supplier: data.supplier || undefined,
       lastUpdated: data.updated_at,
       priceHistory: newPriceHistory

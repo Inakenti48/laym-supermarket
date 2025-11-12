@@ -216,20 +216,13 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      // Проверяем сессию
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        toast.error('Сессия истекла. Пожалуйста, войдите снова');
-        window.location.reload();
-        return;
-      }
-
-      // Получаем текущего пользователя
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Получаем текущего пользователя из локальной сессии
+      const loginUser = getCurrentLoginUser();
+      if (!loginUser) {
         toast.error('Необходима авторизация');
         return;
       }
+      
       const supplier = suppliers.find(s => s.name === product.supplier);
 
       const productData = {
@@ -246,11 +239,11 @@ export const PendingProductsTab = () => {
         paymentType: 'full' as const,
         paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
         debtAmount: 0,
-        addedBy: user.id,
+        addedBy: loginUser.id,
         photos: [],
       };
 
-      await saveProduct(productData, user.id);
+      await saveProduct(productData, loginUser.id);
 
       // Сохраняем все фотографии включая лицевую и штрихкод
       const allPhotos = [
@@ -300,17 +293,9 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      // Проверяем сессию
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        toast.error('Сессия истекла. Пожалуйста, войдите снова');
-        window.location.reload();
-        return;
-      }
-
-      // Получаем текущего пользователя
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Получаем текущего пользователя из локальной сессии
+      const loginUser = getCurrentLoginUser();
+      if (!loginUser) {
         toast.error('Необходима авторизация');
         return;
       }
@@ -337,11 +322,11 @@ export const PendingProductsTab = () => {
             paymentType: 'full' as const,
             paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
             debtAmount: 0,
-            addedBy: user.id,
+            addedBy: loginUser.id,
             photos: [],
           };
 
-          await saveProduct(productData, user.id);
+          await saveProduct(productData, loginUser.id);
 
           // Сохраняем все фотографии включая лицевую и штрихкод
           const allPhotos = [

@@ -304,7 +304,7 @@ export const InventoryTab = () => {
         if (allPhotos.length > 0 && barcodeData.barcode && barcodeData.name) {
           console.log('📸 Сохранение фото в product_images...');
           for (const photoUrl of allPhotos) {
-            await saveProductImage(barcodeData.barcode, barcodeData.name, photoUrl);
+            await saveProductImage(barcodeData.barcode, barcodeData.name, photoUrl, currentLoginUser?.id);
           }
         }
         
@@ -392,7 +392,7 @@ export const InventoryTab = () => {
         // 5. Сохраняем фотографии в product_images для истории
         console.log(`💾 Сохраняем ${allPhotos.length} фото в базу...`);
         for (const photoUrl of allPhotos) {
-          await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl);
+          await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentLoginUser?.id);
         }
         
         // 6. Уведомления
@@ -495,7 +495,8 @@ export const InventoryTab = () => {
         const saved = await saveProductImage(
           sanitizedBarcode || `no-barcode-${Date.now()}`,
           barcodeData.name,
-          photoUrl
+          photoUrl,
+          currentLoginUser?.id
         );
         if (saved) {
           console.log('✅ Photo saved successfully');
@@ -725,7 +726,8 @@ export const InventoryTab = () => {
               await saveProductImage(
                 product.barcode || `product-${Date.now()}`,
                 product.name,
-                photoUrl
+                photoUrl,
+                currentLoginUser?.id
               );
             } catch (err) {
               console.error('Ошибка сохранения фото:', err);

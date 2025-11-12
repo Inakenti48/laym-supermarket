@@ -29,11 +29,10 @@ export interface StoredProduct {
 export const saveProductImage = async (
   barcode: string, 
   productName: string, 
-  imageBase64: string
+  imageBase64: string,
+  userId?: string
 ): Promise<boolean> => {
   try {
-    // Получаем текущего пользователя (если есть)
-    const { data: { user } } = await supabase.auth.getUser();
 
     // Конвертируем base64 в blob
     const base64Data = imageBase64.split(',')[1];
@@ -78,13 +77,15 @@ export const saveProductImage = async (
 
     if (existing) {
       // Обновляем существующую запись
+      const updateData: any = {
+        image_url: urlData.publicUrl,
+        storage_path: filePath,
+        updated_at: new Date().toISOString()
+      };
+
       const { error: updateError } = await supabase
         .from('product_images')
-        .update({
-          image_url: urlData.publicUrl,
-          storage_path: filePath,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', existing.id);
 
       if (updateError) {
@@ -93,15 +94,20 @@ export const saveProductImage = async (
       }
     } else {
       // Создаем новую запись
+      const insertData: any = {
+        barcode,
+        product_name: productName,
+        image_url: urlData.publicUrl,
+        storage_path: filePath
+      };
+      
+      if (userId) {
+        insertData.created_by = userId;
+      }
+
       const { error: dbError } = await supabase
         .from('product_images')
-        .insert({
-          barcode,
-          product_name: productName,
-          image_url: urlData.publicUrl,
-          storage_path: filePath,
-          created_by: user?.id
-        });
+        .insert(insertData);
 
       if (dbError) {
         console.error('Database insert error:', dbError);

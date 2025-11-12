@@ -422,7 +422,8 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
             const saved = await saveProductImage(
               product.barcode || `cashier-${Date.now()}`,
               product.name,
-              imageToSave
+              imageToSave,
+              user?.id
             );
             if (saved) {
               console.log('✅ Фото сохранено на кассе');

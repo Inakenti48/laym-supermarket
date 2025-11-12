@@ -253,7 +253,7 @@ export const PendingProductsTab = () => {
       ];
 
       for (const photo of allPhotos) {
-        await saveProductImage(product.barcode, product.name, photo);
+        await saveProductImage(product.barcode, product.name, photo, loginUser.id);
       }
 
       await supabase
@@ -336,7 +336,7 @@ export const PendingProductsTab = () => {
           ];
 
           for (const photo of allPhotos) {
-            await saveProductImage(product.barcode, product.name, photo);
+            await saveProductImage(product.barcode, product.name, photo, loginUser.id);
           }
 
           await supabase

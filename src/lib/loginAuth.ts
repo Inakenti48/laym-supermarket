@@ -15,27 +15,38 @@ export interface AppSession {
 // Вход только по логину (MD5 шифрование на клиенте)
 export const loginByUsername = async (login: string): Promise<{ success: boolean; error?: string }> => {
   try {
+    console.log('🔐 Попытка входа с логином:', login);
+    
     // Валидация на клиенте
     if (!login) {
+      console.log('❌ Логин пустой');
       return { success: false, error: 'Введите логин' };
     }
 
     // Проверяем формат логина (4 цифры)
     if (!/^\d{4}$/.test(login)) {
+      console.log('❌ Неверный формат логина:', login);
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
     }
 
     // Вычисляем MD5 хеш логина для защиты при передаче
     const loginHash = await hashMD5(login);
+    console.log('🔑 Хеш логина:', loginHash);
 
     // Вызываем edge function только с логином (в хешированном виде)
+    console.log('📡 Вызов edge function...');
     const { data, error } = await supabase.functions.invoke('login-by-username', {
       body: { loginHash }
     });
 
+    console.log('📥 Ответ от edge function:', { data, error });
+
     if (error || !data || !data.success) {
+      console.log('❌ Ошибка входа:', data?.error || error?.message);
       return { success: false, error: data?.error || 'Неверный логин' };
     }
+    
+    console.log('✅ Вход успешен, user_id:', data.userId);
 
     // Очищаем старые сессии этого пользователя
     await supabase

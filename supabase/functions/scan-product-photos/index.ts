@@ -32,93 +32,117 @@ serve(async (req) => {
     let barcode = '';
     let productName = '';
 
-    // Распознаем штрихкод из фотографии штрихкода
-    if (barcodePhoto) {
-      console.log('📷 Распознавание штрихкода...');
-      const barcodeResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-lite',
-          messages: [
-            { 
-              role: 'system', 
-              content: `Ты эксперт по распознаванию штрихкодов.
+    // Объединенное распознавание штрихкода и названия за один запрос
+    console.log('📷 Распознавание товара...');
+    
+    const messages: any[] = [
+      { 
+        role: 'system', 
+        content: `Ты эксперт по распознаванию товаров и штрихкодов.
 
-ИНСТРУКЦИИ:
-1. Найди и прочитай штрихкод на изображении (EAN-13, EAN-8, UPC-A и другие форматы)
-2. Штрихкод - это последовательность цифр (обычно 8 или 13 цифр)
-3. Верни ТОЛЬКО цифры штрихкода, без пробелов и других символов
+ЗАДАЧА: Извлечь штрихкод и полное название товара с упаковки.
 
-ВАЖНО:
+ШТРИХКОД:
+- Найди и прочитай штрихкод (EAN-13, EAN-8, UPC-A, Code-128)
+- Верни только цифры, без пробелов
 - Если штрихкод нечитаем - верни пустую строку
-- Не добавляй никаких пояснений, только цифры` 
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Какой штрихкод на изображении? Верни только цифры.' },
-                { type: 'image_url', image_url: { url: barcodePhoto } }
-              ]
-            }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "extract_barcode",
-              description: "Извлекает штрихкод из изображения",
-              parameters: {
-                type: "object",
-                properties: {
-                  barcode: { 
-                    type: "string", 
-                    description: "Штрихкод (только цифры) или пустая строка" 
-                  }
-                },
-                required: ["barcode"],
-                additionalProperties: false
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "extract_barcode" } }
-        }),
-      });
 
-      if (barcodeResponse.ok) {
-        const barcodeData = await barcodeResponse.json();
-        try {
-          const toolCall = barcodeData.choices?.[0]?.message?.tool_calls?.[0];
-          if (toolCall?.function?.arguments) {
-            console.log('🔍 Raw arguments:', toolCall.function.arguments);
-            
-            // Пробуем парсить как JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(toolCall.function.arguments);
-            } catch (jsonError) {
-              // Если JSON невалидный, пробуем извлечь данные из строки
-              console.log('⚠️ Invalid JSON, trying string extraction');
-              const argStr = String(toolCall.function.arguments);
-              const barcodeMatch = argStr.match(/barcode["']?\s*:\s*["']?(\d+)/);
-              if (barcodeMatch) {
-                parsed = { barcode: barcodeMatch[1] };
-              }
-            }
-            
-            if (parsed) {
-              barcode = (parsed.barcode || '').trim();
-              console.log('✅ Штрихкод распознан:', barcode);
+НАЗВАНИЕ:
+- Прочитай ВСЕ надписи на упаковке
+- Включи: бренд, название продукта, вариант/вкус, объем/вес
+- Название должно быть максимально подробным
+- Если текст нечитаем - верни пустую строку
+
+ВАЖНО: Будь точным, не выдумывай данные.` 
+      }
+    ];
+
+    const userContent: any[] = [
+      { type: 'text', text: 'Распознай штрихкод и название товара. Верни точные данные.' }
+    ];
+
+    if (frontPhoto) {
+      userContent.push({ type: 'image_url', image_url: { url: frontPhoto } });
+    }
+    if (barcodePhoto) {
+      userContent.push({ type: 'image_url', image_url: { url: barcodePhoto } });
+    }
+
+    messages.push({ role: 'user', content: userContent });
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-pro', // Более мощная модель для точности
+        messages,
+        tools: [{
+          type: "function",
+          function: {
+            name: "extract_product_data",
+            description: "Извлекает штрихкод и название товара",
+            parameters: {
+              type: "object",
+              properties: {
+                barcode: { 
+                  type: "string", 
+                  description: "Штрихкод (только цифры) или пустая строка" 
+                },
+                name: { 
+                  type: "string", 
+                  description: "Полное название товара или пустая строка" 
+                }
+              },
+              required: ["barcode", "name"],
+              additionalProperties: false
             }
           }
+        }],
+        tool_choice: { type: "function", function: { name: "extract_product_data" } }
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      try {
+        const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+        if (toolCall?.function?.arguments) {
+          console.log('🔍 Raw arguments:', toolCall.function.arguments);
           
-          // Fallback: пробуем получить из текста ответа
-          if (!barcode) {
-            const content = barcodeData.choices?.[0]?.message?.content;
-            if (content) {
-              console.log('🔄 Fallback: извлекаем из текста');
+          let parsed;
+          try {
+            parsed = JSON.parse(toolCall.function.arguments);
+          } catch (jsonError) {
+            console.log('⚠️ Invalid JSON, trying string extraction');
+            const argStr = String(toolCall.function.arguments);
+            
+            // Извлекаем штрихкод
+            const barcodeMatch = argStr.match(/barcode["']?\s*:\s*["']?(\d+)/);
+            // Извлекаем название
+            const nameMatch = argStr.match(/name["']?\s*:\s*["']([^"']+)["']/);
+            
+            parsed = {
+              barcode: barcodeMatch ? barcodeMatch[1] : '',
+              name: nameMatch ? nameMatch[1] : ''
+            };
+          }
+          
+          if (parsed) {
+            barcode = (parsed.barcode || '').trim();
+            productName = (parsed.name || '').trim();
+            console.log('✅ Распознано:', { barcode, productName });
+          }
+        }
+        
+        // Fallback: пробуем получить из текста ответа
+        if (!barcode || !productName) {
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            console.log('🔄 Fallback: извлекаем из текста');
+            if (!barcode) {
               const digits = content.match(/\d{8,13}/);
               if (digits) {
                 barcode = digits[0];
@@ -126,117 +150,12 @@ serve(async (req) => {
               }
             }
           }
-        } catch (e) {
-          console.error('Ошибка парсинга штрихкода:', e);
         }
-      } else {
-        console.error('Ошибка API при распознавании штрихкода:', barcodeResponse.status);
+      } catch (e) {
+        console.error('Ошибка парсинга:', e);
       }
-    }
-
-    // Распознаем название товара из лицевой фотографии
-    if (frontPhoto) {
-      console.log('📷 Распознавание названия товара...');
-      const nameResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-lite',
-          messages: [
-            { 
-              role: 'system', 
-              content: `Ты эксперт по распознаванию товаров.
-
-ИНСТРУКЦИИ:
-1. Прочитай ВЕСЬ текст на упаковке товара
-2. Определи ПОЛНОЕ название товара включая:
-   - Бренд/производитель
-   - Название продукта
-   - Вариант/вкус (если есть)
-   - Объем/вес (если виден)
-3. Название должно быть максимально подробным и точным
-
-ВАЖНО:
-- Если упаковка нечитаема или текста нет - верни пустую строку
-- Не сокращай название, пиши полностью
-- Включай все важные детали с упаковки` 
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Какое название товара на упаковке? Верни полное название.' },
-                { type: 'image_url', image_url: { url: frontPhoto } }
-              ]
-            }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "extract_product_name",
-              description: "Извлекает название товара из упаковки",
-              parameters: {
-                type: "object",
-                properties: {
-                  name: { 
-                    type: "string", 
-                    description: "Полное название товара или пустая строка" 
-                  }
-                },
-                required: ["name"],
-                additionalProperties: false
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "extract_product_name" } }
-        }),
-      });
-
-      if (nameResponse.ok) {
-        const nameData = await nameResponse.json();
-        try {
-          const toolCall = nameData.choices?.[0]?.message?.tool_calls?.[0];
-          if (toolCall?.function?.arguments) {
-            console.log('🔍 Raw arguments:', toolCall.function.arguments);
-            
-            // Пробуем парсить как JSON
-            let parsed;
-            try {
-              parsed = JSON.parse(toolCall.function.arguments);
-            } catch (jsonError) {
-              // Если JSON невалидный, пробуем извлечь данные из строки
-              console.log('⚠️ Invalid JSON, trying string extraction');
-              const argStr = String(toolCall.function.arguments);
-              // Ищем значение после "name"
-              const nameMatch = argStr.match(/name["']?\s*:\s*["']([^"']+)["']/);
-              if (nameMatch) {
-                parsed = { name: nameMatch[1] };
-              }
-            }
-            
-            if (parsed) {
-              productName = (parsed.name || '').trim();
-              console.log('✅ Название распознано:', productName);
-            }
-          }
-          
-          // Fallback: пробуем получить из текста ответа
-          if (!productName) {
-            const content = nameData.choices?.[0]?.message?.content;
-            if (content && content.length > 0 && content.length < 500) {
-              console.log('🔄 Fallback: используем текст ответа');
-              productName = content.trim();
-              console.log('✅ Название из текста:', productName);
-            }
-          }
-        } catch (e) {
-          console.error('Ошибка парсинга названия:', e);
-        }
-      } else {
-        console.error('Ошибка API при распознавании названия:', nameResponse.status);
-      }
+    } else {
+      console.error('Ошибка API:', response.status);
     }
 
     console.log('=== РЕЗУЛЬТАТ СКАНИРОВАНИЯ ===');

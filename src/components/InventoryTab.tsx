@@ -37,10 +37,13 @@ export const InventoryTab = () => {
   useEffect(() => {
     const loadUserRole = async () => {
       const user = await getCurrentLoginUser();
+      console.log('👤 InventoryTab: User loaded', user);
       if (user) {
         setUserRole(user.role);
         setCurrentUserId(user.id);
         setCurrentUserLogin(user.login);
+        console.log('✅ InventoryTab: Role set to', user.role);
+        console.log('🔐 canUseAI will be:', user.role === 'admin' || user.role === 'inventory');
       }
     };
     loadUserRole();
@@ -1061,7 +1064,7 @@ export const InventoryTab = () => {
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
-          {canUseAI && (
+          {canUseAI ? (
             <div className="flex gap-1.5 md:gap-2 flex-wrap">
               <Button 
                 onClick={() => {
@@ -1116,6 +1119,15 @@ export const InventoryTab = () => {
                 <BulkImportButton />
                 <BulkCSVImport />
               </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-muted/50 rounded-lg border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                🔐 Роль: {userRole || 'загрузка...'} | canUseAI: {canUseAI ? 'да' : 'нет'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                AI функции доступны только для ролей: admin, inventory
+              </p>
             </div>
           )}
           

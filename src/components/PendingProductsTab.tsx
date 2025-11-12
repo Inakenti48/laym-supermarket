@@ -56,33 +56,41 @@ export const PendingProductsTab = () => {
   // Загрузка временных товаров
   useEffect(() => {
     const fetchPendingProducts = async () => {
-      const { data, error } = await supabase
-        .from('vremenno_product_foto')
-        .select('*')
-        .order('created_at', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('vremenno_product_foto')
+          .select('*')
+          .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching pending products:', error);
-        return;
-      }
+        if (error) {
+          console.error('Error fetching pending products:', error);
+          toast.error('Ошибка загрузки очереди товаров');
+          return;
+        }
 
-      if (data) {
-        const products = data.map((item: any) => ({
-          id: item.id,
-          barcode: item.barcode || '',
-          name: item.product_name || '',
-          category: item.category || '',
-          purchasePrice: item.purchase_price?.toString() || '',
-          retailPrice: item.retail_price?.toString() || '',
-          quantity: item.quantity?.toString() || '',
-          unit: (item.unit || 'шт') as 'шт' | 'кг',
-          expiryDate: item.expiry_date || '',
-          supplier: item.supplier || '',
-          frontPhoto: item.front_photo || undefined,
-          barcodePhoto: item.barcode_photo || undefined,
-          photos: item.image_url ? [item.image_url] : [],
-        }));
-        setPendingProducts(products);
+        if (data) {
+          const products = data.map((item: any) => ({
+            id: item.id,
+            barcode: item.barcode || '',
+            name: item.product_name || '',
+            category: item.category || '',
+            purchasePrice: item.purchase_price?.toString() || '',
+            retailPrice: item.retail_price?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            unit: (item.unit || 'шт') as 'шт' | 'кг',
+            expiryDate: item.expiry_date || '',
+            supplier: item.supplier || '',
+            frontPhoto: item.front_photo || undefined,
+            barcodePhoto: item.barcode_photo || undefined,
+            photos: item.image_url ? [item.image_url] : [],
+          }));
+          setPendingProducts(products);
+        }
+      } catch (error: any) {
+        console.error('Network error loading pending products:', error);
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+          toast.error('Ошибка сети при загрузке очереди. Проверьте подключение');
+        }
       }
     };
 
@@ -116,46 +124,80 @@ export const PendingProductsTab = () => {
 
     const updatedProduct = { ...product, ...updates };
 
-    const { error } = await supabase
-      .from('vremenno_product_foto')
-      .update({
-        barcode: updatedProduct.barcode,
-        product_name: updatedProduct.name,
-        category: updatedProduct.category,
-        supplier: updatedProduct.supplier || null,
-        unit: updatedProduct.unit,
-        purchase_price: updatedProduct.purchasePrice ? parseFloat(updatedProduct.purchasePrice) : null,
-        retail_price: updatedProduct.retailPrice ? parseFloat(updatedProduct.retailPrice) : null,
-        quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : null,
-        expiry_date: updatedProduct.expiryDate || null,
-      })
-      .eq('id', id);
+    try {
+      // Проверяем сессию
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        toast.error('Сессия истекла. Пожалуйста, войдите снова');
+        window.location.reload();
+        return;
+      }
 
-    if (error) {
-      console.error('Error updating pending product:', error);
-      toast.error('Ошибка обновления товара');
-      return;
+      const { error } = await supabase
+        .from('vremenno_product_foto')
+        .update({
+          barcode: updatedProduct.barcode,
+          product_name: updatedProduct.name,
+          category: updatedProduct.category,
+          supplier: updatedProduct.supplier || null,
+          unit: updatedProduct.unit,
+          purchase_price: updatedProduct.purchasePrice ? parseFloat(updatedProduct.purchasePrice) : null,
+          retail_price: updatedProduct.retailPrice ? parseFloat(updatedProduct.retailPrice) : null,
+          quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : null,
+          expiry_date: updatedProduct.expiryDate || null,
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating pending product:', error);
+        toast.error('Ошибка обновления товара');
+        return;
+      }
+
+      setPendingProducts(prev =>
+        prev.map(p => p.id === id ? updatedProduct : p)
+      );
+    } catch (error: any) {
+      console.error('Network error:', error);
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        toast.error('Ошибка сети. Проверьте подключение к интернету');
+      } else {
+        toast.error('Ошибка обновления товара');
+      }
     }
-
-    setPendingProducts(prev =>
-      prev.map(p => p.id === id ? updatedProduct : p)
-    );
   };
 
   const handleRemovePendingProduct = async (id: string) => {
-    const { error } = await supabase
-      .from('vremenno_product_foto')
-      .delete()
-      .eq('id', id);
+    try {
+      // Проверяем сессию
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        toast.error('Сессия истекла. Пожалуйста, войдите снова');
+        window.location.reload();
+        return;
+      }
 
-    if (error) {
-      console.error('Error removing pending product:', error);
-      toast.error('Ошибка удаления товара');
-      return;
+      const { error } = await supabase
+        .from('vremenno_product_foto')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error removing pending product:', error);
+        toast.error('Ошибка удаления товара');
+        return;
+      }
+
+      setPendingProducts(prev => prev.filter(p => p.id !== id));
+      toast.success('Товар удален из очереди');
+    } catch (error: any) {
+      console.error('Network error:', error);
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        toast.error('Ошибка сети. Проверьте подключение к интернету');
+      } else {
+        toast.error('Ошибка удаления товара');
+      }
     }
-
-    setPendingProducts(prev => prev.filter(p => p.id !== id));
-    toast.success('Товар удален из очереди');
   };
 
   const handleSaveSingleProduct = async (id: string) => {
@@ -173,14 +215,21 @@ export const PendingProductsTab = () => {
       return;
     }
 
-    // Получаем текущего пользователя
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error('Необходима авторизация');
-      return;
-    }
-
     try {
+      // Проверяем сессию
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        toast.error('Сессия истекла. Пожалуйста, войдите снова');
+        window.location.reload();
+        return;
+      }
+
+      // Получаем текущего пользователя
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Необходима авторизация');
+        return;
+      }
       const supplier = suppliers.find(s => s.name === product.supplier);
 
       const productData = {
@@ -223,9 +272,13 @@ export const PendingProductsTab = () => {
 
       setPendingProducts(prev => prev.filter(p => p.id !== id));
       toast.success(`Товар "${product.name}" успешно добавлен`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving product:', error);
-      toast.error('Ошибка при добавлении товара');
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        toast.error('Ошибка сети. Проверьте подключение к интернету');
+      } else {
+        toast.error('Ошибка при добавлении товара');
+      }
     }
   };
 
@@ -246,95 +299,129 @@ export const PendingProductsTab = () => {
       return;
     }
 
-    // Получаем текущего пользователя
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error('Необходима авторизация');
-      return;
-    }
-
-    let successCount = 0;
-    let errorCount = 0;
-    const skippedCount = pendingProducts.length - completeProducts.length;
-
-    for (const product of completeProducts) {
-      try {
-        const supplier = suppliers.find(s => s.name === product.supplier);
-
-        const productData = {
-          barcode: product.barcode,
-          name: product.name,
-          category: product.category,
-          purchasePrice: parseFloat(product.purchasePrice),
-          retailPrice: parseFloat(product.retailPrice),
-          quantity: parseFloat(product.quantity),
-          unit: product.unit,
-          expiryDate: product.expiryDate || undefined,
-          supplier: product.supplier,
-          supplierPhone: supplier?.phone,
-          paymentType: 'full' as const,
-          paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
-          debtAmount: 0,
-          addedBy: user.id,
-          photos: [],
-        };
-
-        await saveProduct(productData, user.id);
-
-        // Сохраняем все фотографии включая лицевую и штрихкод
-        const allPhotos = [
-          ...(product.frontPhoto ? [product.frontPhoto] : []),
-          ...(product.barcodePhoto ? [product.barcodePhoto] : []),
-          ...product.photos
-        ];
-
-        for (const photo of allPhotos) {
-          await saveProductImage(product.barcode, product.name, photo);
-        }
-
-        await supabase
-          .from('vremenno_product_foto')
-          .delete()
-          .eq('id', product.id);
-
-        addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
-
-        successCount++;
-      } catch (error) {
-        console.error('Error saving product:', error);
-        errorCount++;
+    try {
+      // Проверяем сессию
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        toast.error('Сессия истекла. Пожалуйста, войдите снова');
+        window.location.reload();
+        return;
       }
-    }
 
-    // Обновляем список, убирая только сохраненные товары
-    setPendingProducts(prev => prev.filter(p => 
-      !completeProducts.find(cp => cp.id === p.id)
-    ));
+      // Получаем текущего пользователя
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Необходима авторизация');
+        return;
+      }
 
-    if (successCount > 0) {
-      toast.success(`Успешно добавлено товаров: ${successCount}${skippedCount > 0 ? `. Пропущено: ${skippedCount}` : ''}`);
-    }
-    if (errorCount > 0) {
-      toast.error(`Ошибок при добавлении: ${errorCount}`);
+      let successCount = 0;
+      let errorCount = 0;
+      const skippedCount = pendingProducts.length - completeProducts.length;
+
+      for (const product of completeProducts) {
+        try {
+          const supplier = suppliers.find(s => s.name === product.supplier);
+
+          const productData = {
+            barcode: product.barcode,
+            name: product.name,
+            category: product.category,
+            purchasePrice: parseFloat(product.purchasePrice),
+            retailPrice: parseFloat(product.retailPrice),
+            quantity: parseFloat(product.quantity),
+            unit: product.unit,
+            expiryDate: product.expiryDate || undefined,
+            supplier: product.supplier,
+            supplierPhone: supplier?.phone,
+            paymentType: 'full' as const,
+            paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
+            debtAmount: 0,
+            addedBy: user.id,
+            photos: [],
+          };
+
+          await saveProduct(productData, user.id);
+
+          // Сохраняем все фотографии включая лицевую и штрихкод
+          const allPhotos = [
+            ...(product.frontPhoto ? [product.frontPhoto] : []),
+            ...(product.barcodePhoto ? [product.barcodePhoto] : []),
+            ...product.photos
+          ];
+
+          for (const photo of allPhotos) {
+            await saveProductImage(product.barcode, product.name, photo);
+          }
+
+          await supabase
+            .from('vremenno_product_foto')
+            .delete()
+            .eq('id', product.id);
+
+          addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
+
+          successCount++;
+        } catch (error) {
+          console.error('Error saving product:', error);
+          errorCount++;
+        }
+      }
+
+      // Обновляем список, убирая только сохраненные товары
+      setPendingProducts(prev => prev.filter(p => 
+        !completeProducts.find(cp => cp.id === p.id)
+      ));
+
+      if (successCount > 0) {
+        toast.success(`Успешно добавлено товаров: ${successCount}${skippedCount > 0 ? `. Пропущено: ${skippedCount}` : ''}`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Ошибок при добавлении: ${errorCount}`);
+      }
+    } catch (error: any) {
+      console.error('Network error:', error);
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        toast.error('Ошибка сети. Проверьте подключение к интернету');
+      } else {
+        toast.error('Ошибка при сохранении товаров');
+      }
     }
   };
 
   const handleClearAllProducts = async () => {
     if (pendingProducts.length === 0) return;
 
-    const { error } = await supabase
-      .from('vremenno_product_foto')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+    try {
+      // Проверяем сессию
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        toast.error('Сессия истекла. Пожалуйста, войдите снова');
+        window.location.reload();
+        return;
+      }
 
-    if (error) {
-      console.error('Error clearing pending products:', error);
-      toast.error('Ошибка очистки очереди');
-      return;
+      const { error } = await supabase
+        .from('vremenno_product_foto')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (error) {
+        console.error('Error clearing pending products:', error);
+        toast.error('Ошибка очистки очереди');
+        return;
+      }
+
+      setPendingProducts([]);
+      toast.success('Очередь очищена');
+    } catch (error: any) {
+      console.error('Network error:', error);
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        toast.error('Ошибка сети. Проверьте подключение к интернету');
+      } else {
+        toast.error('Ошибка очистки очереди');
+      }
     }
-
-    setPendingProducts([]);
-    toast.success('Очередь очищена');
   };
 
   const hasCompleteProducts = pendingProducts.length > 0 && pendingProducts.some(p =>

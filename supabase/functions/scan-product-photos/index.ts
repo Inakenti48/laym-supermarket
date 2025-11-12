@@ -92,9 +92,39 @@ serve(async (req) => {
         try {
           const toolCall = barcodeData.choices?.[0]?.message?.tool_calls?.[0];
           if (toolCall?.function?.arguments) {
-            const parsed = JSON.parse(toolCall.function.arguments);
-            barcode = (parsed.barcode || '').trim();
-            console.log('✅ Штрихкод распознан:', barcode);
+            console.log('🔍 Raw arguments:', toolCall.function.arguments);
+            
+            // Пробуем парсить как JSON
+            let parsed;
+            try {
+              parsed = JSON.parse(toolCall.function.arguments);
+            } catch (jsonError) {
+              // Если JSON невалидный, пробуем извлечь данные из строки
+              console.log('⚠️ Invalid JSON, trying string extraction');
+              const argStr = String(toolCall.function.arguments);
+              const barcodeMatch = argStr.match(/barcode["']?\s*:\s*["']?(\d+)/);
+              if (barcodeMatch) {
+                parsed = { barcode: barcodeMatch[1] };
+              }
+            }
+            
+            if (parsed) {
+              barcode = (parsed.barcode || '').trim();
+              console.log('✅ Штрихкод распознан:', barcode);
+            }
+          }
+          
+          // Fallback: пробуем получить из текста ответа
+          if (!barcode) {
+            const content = barcodeData.choices?.[0]?.message?.content;
+            if (content) {
+              console.log('🔄 Fallback: извлекаем из текста');
+              const digits = content.match(/\d{8,13}/);
+              if (digits) {
+                barcode = digits[0];
+                console.log('✅ Штрихкод из текста:', barcode);
+              }
+            }
           }
         } catch (e) {
           console.error('Ошибка парсинга штрихкода:', e);
@@ -169,9 +199,37 @@ serve(async (req) => {
         try {
           const toolCall = nameData.choices?.[0]?.message?.tool_calls?.[0];
           if (toolCall?.function?.arguments) {
-            const parsed = JSON.parse(toolCall.function.arguments);
-            productName = (parsed.name || '').trim();
-            console.log('✅ Название распознано:', productName);
+            console.log('🔍 Raw arguments:', toolCall.function.arguments);
+            
+            // Пробуем парсить как JSON
+            let parsed;
+            try {
+              parsed = JSON.parse(toolCall.function.arguments);
+            } catch (jsonError) {
+              // Если JSON невалидный, пробуем извлечь данные из строки
+              console.log('⚠️ Invalid JSON, trying string extraction');
+              const argStr = String(toolCall.function.arguments);
+              // Ищем значение после "name"
+              const nameMatch = argStr.match(/name["']?\s*:\s*["']([^"']+)["']/);
+              if (nameMatch) {
+                parsed = { name: nameMatch[1] };
+              }
+            }
+            
+            if (parsed) {
+              productName = (parsed.name || '').trim();
+              console.log('✅ Название распознано:', productName);
+            }
+          }
+          
+          // Fallback: пробуем получить из текста ответа
+          if (!productName) {
+            const content = nameData.choices?.[0]?.message?.content;
+            if (content && content.length > 0 && content.length < 500) {
+              console.log('🔄 Fallback: используем текст ответа');
+              productName = content.trim();
+              console.log('✅ Название из текста:', productName);
+            }
           }
         } catch (e) {
           console.error('Ошибка парсинга названия:', e);

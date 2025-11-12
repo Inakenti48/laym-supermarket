@@ -135,12 +135,8 @@ export const InventoryTab = () => {
         async (payload) => {
           console.log('📡 Form state change detected:', payload);
           
-          // Получаем текущего пользователя
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
-
           // Игнорируем свои собственные изменения
-          if (payload.new && 'user_id' in payload.new && payload.new.user_id === user.id) {
+          if (payload.new && 'user_id' in payload.new && payload.new.user_id === currentUserId) {
             return;
           }
 
@@ -701,9 +697,8 @@ export const InventoryTab = () => {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Необходимо войти в систему');
+      if (!currentUserId) {
+        toast.error('Ошибка загрузки пользователя');
         return;
       }
 
@@ -854,16 +849,13 @@ export const InventoryTab = () => {
     try {
       console.log('🔄 Добавление товара в очередь...');
       
-      console.log('🔐 Проверка авторизации...');
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('❌ Ошибка авторизации');
-        toast.error('⚠️ Вы не авторизованы. Пожалуйста, войдите в систему.');
+      if (!currentUserId) {
+        console.error('❌ Пользователь не загружен');
+        toast.error('⚠️ Ошибка загрузки пользователя. Попробуйте перезагрузить страницу.');
         return;
       }
       
-      console.log('✅ Пользователь авторизован:', user.id);
+      console.log('✅ Пользователь:', currentUserId);
       
       // Проверка только обязательных полей: штрихкод, название, категория
       console.log('📋 Проверка обязательных полей...');
@@ -925,7 +917,7 @@ export const InventoryTab = () => {
           barcode_photo: barcodePhoto || null,
           front_photo_storage_path: frontPhoto ? `product-photos/${currentProduct.barcode}-front-${Date.now()}` : null,
           barcode_photo_storage_path: barcodePhoto ? `product-photos/${currentProduct.barcode}-barcode-${Date.now()}` : null,
-          created_by: user.id,
+          created_by: currentUserId,
         });
 
       if (insertError) {

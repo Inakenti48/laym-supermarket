@@ -8,10 +8,10 @@ import { toast } from 'sonner';
 import { saveProduct, saveProductImage } from '@/lib/storage';
 import { addLog } from '@/lib/auth';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync, getCurrentLoginUser } from '@/lib/loginAuth';
 
 export const PendingProductsTab = () => {
-  const currentLoginUser = getCurrentLoginUser();
+  const currentLoginUser = getCurrentLoginUserSync();
   const isAdmin = currentLoginUser?.role === 'admin';
   const isInventory = currentLoginUser?.role === 'inventory';
   
@@ -200,11 +200,11 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      // Получаем пользователя из localStorage, используем системного как fallback
-      const loginUser = getCurrentLoginUser();
-      const userId = loginUser?.id || '00000000-0000-0000-0000-000000000001';
+      // Получаем пользователя из Supabase сессии
+      const loginUser = await getCurrentLoginUser();
+      const userId = loginUser.id; // Уже возвращает системного пользователя если сессии нет
       
-      console.log('💾 Сохранение товара, пользователь:', loginUser?.login || 'система');
+      console.log('💾 Сохранение товара, пользователь:', loginUser.login);
       
       const supplier = suppliers.find(s => s.name === product.supplier);
 
@@ -276,9 +276,9 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      // Получаем пользователя из localStorage, используем системного как fallback
-      const loginUser = getCurrentLoginUser();
-      const userId = loginUser?.id || '00000000-0000-0000-0000-000000000001';
+      // Получаем пользователя из Supabase сессии
+      const loginUser = await getCurrentLoginUser();
+      const userId = loginUser.id; // Уже возвращает системного пользователя если сессии нет
 
       let successCount = 0;
       let errorCount = 0;

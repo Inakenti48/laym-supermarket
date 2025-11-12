@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Plus, Users, Edit2, Loader2, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 
 interface Employee {
   id: string;
@@ -23,7 +23,7 @@ interface Employee {
 }
 
 export const EmployeesTab = () => {
-  const currentUser = getCurrentLoginUser();
+  const currentUser = getCurrentLoginUserSync();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

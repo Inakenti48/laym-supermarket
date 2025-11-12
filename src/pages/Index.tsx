@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { AppRole, getUserRole } from '@/lib/supabaseAuth';
-import { loginByUsername, getCurrentSession, getCurrentLoginUser, logoutUser } from '@/lib/loginAuth';
+import { loginByUsername, getCurrentSession, getCurrentLoginUserSync, logoutUser } from '@/lib/loginAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
@@ -38,21 +38,25 @@ const Index = () => {
 
   useEffect(() => {
     // Проверка кастомной сессии (по логину)
-    const session = getCurrentSession();
-    const loginUser = getCurrentLoginUser();
-    
-    if (session && loginUser) {
-      // Создаем фейковый User объект для совместимости
-      const fakeUser = {
-        id: loginUser.id,
-        role: loginUser.role
-      } as any;
+    const checkSession = async () => {
+      const session = await getCurrentSession();
+      const loginUser = getCurrentLoginUserSync();
       
-      setUser(fakeUser);
-      setUserRole(loginUser.role);
-    }
+      if (session && loginUser) {
+        // Создаем фейковый User объект для совместимости
+        const fakeUser = {
+          id: loginUser.id,
+          role: loginUser.role
+        } as any;
+        
+        setUser(fakeUser);
+        setUserRole(loginUser.role as AppRole);
+      }
+      
+      setLoading(false);
+    };
     
-    setLoading(false);
+    checkSession();
   }, []);
 
   // Больше не проверяем истечение сессии - сессия бессрочная до выхода
@@ -69,8 +73,8 @@ const Index = () => {
       }
 
       // Получаем сохраненную сессию
-      const session = getCurrentSession();
-      const loginUser = getCurrentLoginUser();
+      const session = await getCurrentSession();
+      const loginUser = getCurrentLoginUserSync();
       
       if (session && loginUser) {
         // Создаем фейковый User объект
@@ -80,7 +84,7 @@ const Index = () => {
         } as any;
         
         setUser(fakeUser);
-        setUserRole(loginUser.role);
+        setUserRole(loginUser.role as AppRole);
         toast.success('Вход выполнен успешно');
       }
     } catch (error: any) {

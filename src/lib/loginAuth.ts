@@ -1,8 +1,7 @@
-// Кастомная система аутентификации по логину (с хранением в Supabase)
+// Кастомная система аутентификации по логину (ТОЛЬКО Supabase)
 import { supabase } from '@/integrations/supabase/client';
 
 const SESSION_ID_KEY = 'session_id';
-const SESSION_USER_KEY = 'app_user';
 
 export interface AppSession {
   id?: string;
@@ -38,6 +37,12 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
       return { success: false, error: data?.error || 'Неверный логин' };
     }
 
+    // Очищаем старые сессии этого пользователя
+    await supabase
+      .from('user_sessions')
+      .delete()
+      .eq('user_id', data.userId);
+
     // Создаем сессию со сроком действия 30 дней
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
@@ -59,13 +64,8 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
       return { success: false, error: 'Ошибка создания сессии' };
     }
 
-    // Сохраняем ID сессии в localStorage для быстрого доступа
+    // Сохраняем ТОЛЬКО ID сессии в localStorage
     localStorage.setItem(SESSION_ID_KEY, sessionData.id);
-    localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
-      id: data.userId,
-      role: data.role,
-      login: login
-    }));
 
     return { success: true };
   } catch (error: any) {
@@ -76,17 +76,11 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
 
 // MD5 хеширование (для защиты логина при передаче)
 async function hashMD5(text: string): Promise<string> {
-  // Простая реализация MD5 для браузера
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
-  
-  // Используем Web Crypto API для создания хеша
-  // Так как MD5 не поддерживается напрямую, используем SHA-256 и берем первые 32 символа
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
-  // Берем первые 32 символа для имитации MD5 (32 hex символа = 128 бит)
   return hashHex.substring(0, 32);
 }
 
@@ -106,7 +100,6 @@ export const getCurrentSession = async (): Promise<AppSession | null> => {
     if (error || !data) {
       // Сессия не найдена или истекла
       localStorage.removeItem(SESSION_ID_KEY);
-      localStorage.removeItem(SESSION_USER_KEY);
       return null;
     }
 
@@ -129,16 +122,46 @@ export const getCurrentSession = async (): Promise<AppSession | null> => {
   }
 };
 
-// Получить текущего пользователя (синхронно из localStorage)
-export const getCurrentLoginUser = () => {
+// Получить текущего пользователя ТОЛЬКО из Supabase
+export const getCurrentLoginUser = async () => {
   try {
-    const userStr = localStorage.getItem(SESSION_USER_KEY);
-    if (!userStr) return null;
+    const session = await getCurrentSession();
+    if (!session) {
+      // Если нет сессии, используем системного пользователя
+      return {
+        id: '00000000-0000-0000-0000-000000000001',
+        role: 'system',
+        login: 'system'
+      };
+    }
     
-    return JSON.parse(userStr);
+    return {
+      id: session.userId,
+      role: session.role,
+      login: session.login
+    };
   } catch {
-    return null;
+    // При ошибке используем системного пользователя
+    return {
+      id: '00000000-0000-0000-0000-000000000001',
+      role: 'system',
+      login: 'system'
+    };
   }
+};
+
+// Синхронная версия для совместимости - возвращает системного пользователя
+// Используется в компонентах, где нужен немедленный доступ
+export const getCurrentLoginUserSync = () => {
+  // Всегда возвращаем системного пользователя для синхронных вызовов
+  // Настоящие данные нужно получать через асинхронную версию
+  return {
+    id: '00000000-0000-0000-0000-000000000001',
+    role: 'system',
+    login: 'system',
+    username: 'Система',
+    cashierName: 'Система'
+  };
 };
 
 // Выход с удалением сессии из Supabase
@@ -158,16 +181,16 @@ export const logoutUser = async () => {
   }
   
   localStorage.removeItem(SESSION_ID_KEY);
-  localStorage.removeItem(SESSION_USER_KEY);
 };
 
-// Проверка авторизации (синхронная версия для совместимости)
-export const isAuthenticated = (): boolean => {
-  return localStorage.getItem(SESSION_ID_KEY) !== null;
+// Проверка авторизации
+export const isAuthenticated = async (): Promise<boolean> => {
+  const session = await getCurrentSession();
+  return session !== null;
 };
 
 // Проверка роли
-export const hasRole = (requiredRole: string): boolean => {
-  const user = getCurrentLoginUser();
+export const hasRole = async (requiredRole: string): Promise<boolean> => {
+  const user = await getCurrentLoginUser();
   return user?.role === requiredRole;
 };

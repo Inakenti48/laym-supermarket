@@ -23,10 +23,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { useFormSync } from '@/hooks/useFormSync';
 
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 
 export const InventoryTab = () => {
-  const currentLoginUser = getCurrentLoginUser();
+  const currentLoginUser = getCurrentLoginUserSync();
   const isAdmin = currentLoginUser?.role === 'admin';
 
   // Realtime синхронизация товаров

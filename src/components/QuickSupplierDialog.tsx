@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { saveSupplier, Supplier } from '@/lib/suppliersDb';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync, getCurrentLoginUser } from '@/lib/loginAuth';
 
 interface QuickSupplierDialogProps {
   open: boolean;
@@ -14,7 +14,7 @@ interface QuickSupplierDialogProps {
 }
 
 export const QuickSupplierDialog = ({ open, onClose, onSupplierAdded }: QuickSupplierDialogProps) => {
-  const currentUser = getCurrentLoginUser();
+  const currentUser = getCurrentLoginUserSync();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 

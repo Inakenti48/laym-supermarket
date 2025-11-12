@@ -3,7 +3,7 @@ import { Upload, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { importCSVProducts } from '@/lib/csvImport';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 import { toast } from 'sonner';
 
 interface CSVImportDialogProps {
@@ -14,7 +14,7 @@ interface CSVImportDialogProps {
 export const CSVImportDialog = ({ onClose, onImportComplete }: CSVImportDialogProps) => {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null);
-  const user = getCurrentLoginUser();
+  const user = getCurrentLoginUserSync();
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

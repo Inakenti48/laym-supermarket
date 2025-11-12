@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Database, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { bulkImportAllProducts } from '@/lib/bulkImport';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 import { toast } from 'sonner';
 
 export const BulkImportButton = () => {
   const [importing, setImporting] = useState(false);
-  const user = getCurrentLoginUser();
+  const user = getCurrentLoginUserSync();
 
   const handleBulkImport = async () => {
     if (!user) return;

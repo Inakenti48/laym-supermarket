@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { AppRole, getUserRole } from '@/lib/supabaseAuth';
-import { loginByUsername, getCurrentSession, getCurrentLoginUserSync, logoutUser } from '@/lib/loginAuth';
+import { loginByUsername, getCurrentSession, getCurrentLoginUser, getCurrentLoginUserSync, logoutUser } from '@/lib/loginAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
 
@@ -40,7 +40,7 @@ const Index = () => {
     // Проверка кастомной сессии (по логину)
     const checkSession = async () => {
       const session = await getCurrentSession();
-      const loginUser = getCurrentLoginUserSync();
+      const loginUser = await getCurrentLoginUser();
       
       if (session && loginUser) {
         // Создаем фейковый User объект для совместимости
@@ -74,7 +74,7 @@ const Index = () => {
 
       // Получаем сохраненную сессию
       const session = await getCurrentSession();
-      const loginUser = getCurrentLoginUserSync();
+      const loginUser = await getCurrentLoginUser();
       
       if (session && loginUser) {
         // Создаем фейковый User объект

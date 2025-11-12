@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles, Users, ArrowLeft } from 'lucide-react';
+import { Scan, Plus, Package, X, Camera, Upload, CalendarClock, Sparkles, Users, ArrowLeft, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarcodeScanner } from './BarcodeScanner';
 import { AIProductRecognition } from './AIProductRecognition';
+import { PhotoGalleryRecognition } from './PhotoGalleryRecognition';
 import { CSVImportDialog } from './CSVImportDialog';
 import { BulkImportButton } from './BulkImportButton';
 import { BulkCSVImport } from './BulkCSVImport';
@@ -37,6 +38,7 @@ export const InventoryTab = () => {
   const [photos, setPhotos] = useState<string[]>([]);
   const [capturedImage, setCapturedImage] = useState<string>('');
   const [showAIScanner, setShowAIScanner] = useState(false);
+  const [showPhotoGallery, setShowPhotoGallery] = useState(false);
   const [aiScanMode, setAiScanMode] = useState<'product' | 'barcode' | 'expiry' | 'dual'>('product');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -971,6 +973,14 @@ export const InventoryTab = () => {
         </div>
       )}
 
+      {/* Photo Gallery Recognition - только для админов */}
+      {isAdmin && showPhotoGallery && (
+        <PhotoGalleryRecognition
+          onProductFound={handleScan}
+          onClose={() => setShowPhotoGallery(false)}
+        />
+      )}
+
       {/* CSV Import Dialog */}
       {showImportDialog && (
         <CSVImportDialog
@@ -1049,6 +1059,18 @@ export const InventoryTab = () => {
               >
                 <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 flex-shrink-0" />
                 <span className="truncate">AI Скан</span>
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowPhotoGallery(true);
+                  toast.info('📸 Загрузите 2 фото товара для распознавания');
+                }}
+                variant="outline"
+                size="sm"
+                className="flex-1 min-w-[120px] md:min-w-[140px] whitespace-nowrap h-9 text-xs md:text-sm"
+              >
+                <Image className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2 flex-shrink-0" />
+                <span className="truncate">Из фото</span>
               </Button>
               <Button 
                 onClick={() => {

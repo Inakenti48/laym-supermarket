@@ -24,12 +24,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { useFormSync } from '@/hooks/useFormSync';
 
-import { getCurrentLoginUserSync } from '@/lib/loginAuth';
+import { getCurrentLoginUser } from '@/lib/loginAuth';
 
 export const InventoryTab = () => {
-  const currentLoginUser = getCurrentLoginUserSync();
-  const isAdmin = currentLoginUser?.role === 'admin';
-  const canUseAI = currentLoginUser?.role === 'admin' || currentLoginUser?.role === 'inventory';
+  const [userRole, setUserRole] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserLogin, setCurrentUserLogin] = useState<string>('');
+  const isAdmin = userRole === 'admin';
+  const canUseAI = userRole === 'admin' || userRole === 'inventory';
+
+  // Получаем роль пользователя при загрузке
+  useEffect(() => {
+    const loadUserRole = async () => {
+      const user = await getCurrentLoginUser();
+      if (user) {
+        setUserRole(user.role);
+        setCurrentUserId(user.id);
+        setCurrentUserLogin(user.login);
+      }
+    };
+    loadUserRole();
+  }, []);
 
   // Realtime синхронизация товаров
   useProductsSync();
@@ -307,7 +322,7 @@ export const InventoryTab = () => {
         if (allPhotos.length > 0 && barcodeData.barcode && barcodeData.name) {
           console.log('📸 Сохранение фото в product_images...');
           for (const photoUrl of allPhotos) {
-            await saveProductImage(barcodeData.barcode, barcodeData.name, photoUrl, currentLoginUser?.id);
+            await saveProductImage(barcodeData.barcode, barcodeData.name, photoUrl, currentUserId);
           }
         }
         
@@ -395,7 +410,7 @@ export const InventoryTab = () => {
         // 5. Сохраняем фотографии в product_images для истории
         console.log(`💾 Сохраняем ${allPhotos.length} фото в базу...`);
         for (const photoUrl of allPhotos) {
-          await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentLoginUser?.id);
+          await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentUserId);
         }
         
         // 6. Уведомления
@@ -499,7 +514,7 @@ export const InventoryTab = () => {
           sanitizedBarcode || `no-barcode-${Date.now()}`,
           barcodeData.name,
           photoUrl,
-          currentLoginUser?.id
+          currentUserId
         );
         if (saved) {
           console.log('✅ Photo saved successfully');
@@ -730,7 +745,7 @@ export const InventoryTab = () => {
                 product.barcode || `product-${Date.now()}`,
                 product.name,
                 photoUrl,
-                currentLoginUser?.id
+                currentUserId
               );
             } catch (err) {
               console.error('Ошибка сохранения фото:', err);
@@ -751,11 +766,11 @@ export const InventoryTab = () => {
             paymentType: 'full',
             paidAmount: parseFloat(product.purchasePrice) * parseFloat(product.quantity),
             debtAmount: 0,
-            addedBy: currentLoginUser?.role || 'unknown',
+            addedBy: userRole || 'unknown',
             supplier: product.supplier || undefined,
           };
 
-          const saved = await saveProduct(productData, currentLoginUser?.login || 'unknown');
+          const saved = await saveProduct(productData, currentUserLogin || 'unknown');
           
           if (saved) {
             successCount++;

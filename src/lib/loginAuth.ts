@@ -1,14 +1,16 @@
-// Кастомная система аутентификации по логину (без Supabase Auth)
+// Кастомная система аутентификации по логину (с хранением в Supabase)
 import { supabase } from '@/integrations/supabase/client';
 
-const SESSION_KEY = 'app_session';
+const SESSION_ID_KEY = 'session_id';
 const SESSION_USER_KEY = 'app_user';
 
 export interface AppSession {
+  id?: string;
   userId: string;
   role: string;
   login: string;
   loginTime: number;
+  expiresAt: string;
 }
 
 // Вход только по логину (MD5 шифрование на клиенте)
@@ -36,15 +38,29 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
       return { success: false, error: data?.error || 'Неверный логин' };
     }
 
-    // Сохраняем сессию в localStorage
-    const session: AppSession = {
-      userId: data.userId,
-      role: data.role,
-      login: login,
-      loginTime: Date.now()
-    };
+    // Создаем сессию со сроком действия 30 дней
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
 
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    // Сохраняем сессию в Supabase
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('user_sessions')
+      .insert({
+        user_id: data.userId,
+        login: login,
+        role: data.role,
+        expires_at: expiresAt.toISOString()
+      })
+      .select()
+      .single();
+
+    if (sessionError) {
+      console.error('Session creation error:', sessionError);
+      return { success: false, error: 'Ошибка создания сессии' };
+    }
+
+    // Сохраняем ID сессии в localStorage для быстрого доступа
+    localStorage.setItem(SESSION_ID_KEY, sessionData.id);
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify({
       id: data.userId,
       role: data.role,
@@ -74,20 +90,46 @@ async function hashMD5(text: string): Promise<string> {
   return hashHex.substring(0, 32);
 }
 
-// Получить текущую сессию
-export const getCurrentSession = (): AppSession | null => {
+// Получить текущую сессию из Supabase
+export const getCurrentSession = async (): Promise<AppSession | null> => {
+  const sessionId = localStorage.getItem(SESSION_ID_KEY);
+  if (!sessionId) return null;
+  
   try {
-    const sessionStr = localStorage.getItem(SESSION_KEY);
-    if (!sessionStr) return null;
-    
-    const session = JSON.parse(sessionStr);
-    return session;
+    const { data, error } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (error || !data) {
+      // Сессия не найдена или истекла
+      localStorage.removeItem(SESSION_ID_KEY);
+      localStorage.removeItem(SESSION_USER_KEY);
+      return null;
+    }
+
+    // Обновляем время последней активности
+    await supabase
+      .from('user_sessions')
+      .update({ last_activity: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      role: data.role,
+      login: data.login,
+      loginTime: new Date(data.created_at).getTime(),
+      expiresAt: data.expires_at
+    };
   } catch {
     return null;
   }
 };
 
-// Получить текущего пользователя
+// Получить текущего пользователя (синхронно из localStorage)
 export const getCurrentLoginUser = () => {
   try {
     const userStr = localStorage.getItem(SESSION_USER_KEY);
@@ -99,19 +141,33 @@ export const getCurrentLoginUser = () => {
   }
 };
 
-// Выход
-export const logoutUser = () => {
-  localStorage.removeItem(SESSION_KEY);
+// Выход с удалением сессии из Supabase
+export const logoutUser = async () => {
+  const sessionId = localStorage.getItem(SESSION_ID_KEY);
+  
+  if (sessionId) {
+    // Удаляем сессию из Supabase
+    try {
+      await supabase
+        .from('user_sessions')
+        .delete()
+        .eq('id', sessionId);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+    }
+  }
+  
+  localStorage.removeItem(SESSION_ID_KEY);
   localStorage.removeItem(SESSION_USER_KEY);
 };
 
-// Проверка авторизации
+// Проверка авторизации (синхронная версия для совместимости)
 export const isAuthenticated = (): boolean => {
-  return getCurrentSession() !== null;
+  return localStorage.getItem(SESSION_ID_KEY) !== null;
 };
 
 // Проверка роли
 export const hasRole = (requiredRole: string): boolean => {
-  const session = getCurrentSession();
-  return session?.role === requiredRole;
+  const user = getCurrentLoginUser();
+  return user?.role === requiredRole;
 };

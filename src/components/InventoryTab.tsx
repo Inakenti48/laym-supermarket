@@ -29,6 +29,7 @@ import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 export const InventoryTab = () => {
   const currentLoginUser = getCurrentLoginUserSync();
   const isAdmin = currentLoginUser?.role === 'admin';
+  const canUseAI = currentLoginUser?.role === 'admin' || currentLoginUser?.role === 'inventory';
 
   // Realtime синхронизация товаров
   useProductsSync();
@@ -948,8 +949,8 @@ export const InventoryTab = () => {
 
   return (
     <div className="space-y-4">
-      {/* AI Product Recognition - только для админов */}
-      {isAdmin && showAIScanner && (
+      {/* AI Product Recognition - для админов и кладовщиков */}
+      {canUseAI && showAIScanner && (
         <div className="fixed inset-0 bg-background z-50">
           <AIProductRecognition 
             onProductFound={handleScan}
@@ -973,8 +974,8 @@ export const InventoryTab = () => {
         </div>
       )}
 
-      {/* Photo Gallery Recognition - только для админов */}
-      {isAdmin && showPhotoGallery && (
+      {/* Photo Gallery Recognition - для админов и кладовщиков */}
+      {canUseAI && showPhotoGallery && (
         <PhotoGalleryRecognition
           onProductFound={handleScan}
           onClose={() => setShowPhotoGallery(false)}
@@ -1045,7 +1046,7 @@ export const InventoryTab = () => {
         {/* Scanner and Import - Оптимизировано для мобильных */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 md:gap-3">
           {/* Левая часть - AI кнопки */}
-          {isAdmin && (
+          {canUseAI && (
             <div className="flex gap-1.5 md:gap-2 flex-wrap">
               <Button 
                 onClick={() => {

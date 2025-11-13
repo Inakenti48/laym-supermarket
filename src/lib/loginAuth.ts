@@ -13,7 +13,13 @@ export interface AppSession {
 }
 
 // Вход только по логину (MD5 шифрование на клиенте)
-export const loginByUsername = async (login: string): Promise<{ success: boolean; error?: string }> => {
+export const loginByUsername = async (login: string): Promise<{ 
+  success: boolean; 
+  error?: string;
+  userId?: string;
+  role?: string;
+  login?: string;
+}> => {
   try {
     console.log('🔐 Попытка входа с логином:', login);
     
@@ -78,7 +84,12 @@ export const loginByUsername = async (login: string): Promise<{ success: boolean
     // Сохраняем ТОЛЬКО ID сессии в localStorage
     localStorage.setItem(SESSION_ID_KEY, sessionData.id);
 
-    return { success: true };
+    return { 
+      success: true, 
+      userId: data.userId, 
+      role: data.role,
+      login: login
+    };
   } catch (error: any) {
     console.error('Login error:', error);
     return { success: false, error: error.message || 'Ошибка входа' };

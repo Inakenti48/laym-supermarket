@@ -112,19 +112,15 @@ const Index = () => {
         return;
       }
 
-      // Получаем сохраненную сессию
-      const session = await getCurrentSession();
-      const loginUser = await getCurrentLoginUser();
-      
-      if (session && loginUser) {
-        // Создаем фейковый User объект
+      // Используем данные напрямую из результата входа (без дополнительных запросов)
+      if (result.userId && result.role) {
         const fakeUser = {
-          id: loginUser.id,
-          role: loginUser.role
+          id: result.userId,
+          role: result.role
         } as any;
         
         setUser(fakeUser);
-        setUserRole(loginUser.role as AppRole);
+        setUserRole(result.role as AppRole);
         toast.success('Вход выполнен успешно');
       }
     } catch (error: any) {

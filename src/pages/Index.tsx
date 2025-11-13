@@ -103,17 +103,25 @@ const Index = () => {
 
   const handleLogin = async (login: string) => {
     try {
+      console.log('🔐 Начинаем вход с логином:', login);
       setLoading(true);
       
       const result = await loginByUsername(login);
+      console.log('📊 Результат входа:', result);
       
       if (!result.success) {
+        console.error('❌ Вход неуспешен:', result.error);
         toast.error(result.error || 'Ошибка входа');
         return;
       }
 
       // Используем данные напрямую из результата входа (без дополнительных запросов)
       if (result.userId && result.role) {
+        console.log('✅ Вход успешен, устанавливаем пользователя:', {
+          userId: result.userId,
+          role: result.role
+        });
+        
         const fakeUser = {
           id: result.userId,
           role: result.role
@@ -122,10 +130,14 @@ const Index = () => {
         setUser(fakeUser);
         setUserRole(result.role as AppRole);
         toast.success('Вход выполнен успешно');
+        console.log('🎉 Вход завершен, пользователь установлен');
+      } else {
+        console.error('❌ Отсутствуют userId или role в результате:', result);
+        toast.error('Ошибка: данные пользователя не получены');
       }
     } catch (error: any) {
-      console.error('Login failed:', error);
-      toast.error('Ошибка входа');
+      console.error('💥 Login failed:', error);
+      toast.error('Ошибка входа: ' + (error.message || 'неизвестная ошибка'));
     } finally {
       setLoading(false);
     }

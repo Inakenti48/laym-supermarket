@@ -63,15 +63,41 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Вход успешен:', { userId: foundUser.user_id, role: foundUser.role });
+    console.log('✅ Логин верный, создаем сессию');
 
-    // Возвращаем успешный результат
+    // Создаем сессию сразу в Supabase (одна операция!)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('user_sessions')
+      .insert({
+        user_id: foundUser.user_id,
+        login: foundUser.login,
+        role: foundUser.role,
+        expires_at: expiresAt.toISOString()
+      })
+      .select('id')
+      .single();
+
+    if (sessionError) {
+      console.error('❌ Ошибка создания сессии:', sessionError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Ошибка создания сессии' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('✅ Сессия создана');
+
+    // Возвращаем готовую сессию
     return new Response(
       JSON.stringify({ 
         success: true, 
         userId: foundUser.user_id,
         role: foundUser.role,
-        login: foundUser.login
+        login: foundUser.login,
+        sessionId: sessionData.id
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

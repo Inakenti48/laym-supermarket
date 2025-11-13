@@ -12,7 +12,7 @@ export interface AppSession {
   expiresAt: string;
 }
 
-// Вход только по логину (MD5 шифрование на клиенте)
+// Вход только по логину (проверка и сессия создаются сразу в Supabase)
 export const loginByUsername = async (login: string): Promise<{ 
   success: boolean; 
   error?: string;
@@ -29,7 +29,7 @@ export const loginByUsername = async (login: string): Promise<{
     // Хешируем логин
     const loginHash = await hashMD5(login);
 
-    // Вызываем edge function
+    // Вызываем edge function - она сразу создает сессию!
     const { data, error } = await supabase.functions.invoke('login-by-username', {
       body: { loginHash }
     });
@@ -38,30 +38,16 @@ export const loginByUsername = async (login: string): Promise<{
       return { success: false, error: data?.error || 'Неверный логин' };
     }
     
-    // Создаем сессию (одна быстрая операция)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    const { data: sessionData } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: data.userId,
-        login: login,
-        role: data.role,
-        expires_at: expiresAt.toISOString()
-      })
-      .select('id')
-      .single();
-
-    if (sessionData?.id) {
-      localStorage.setItem(SESSION_ID_KEY, sessionData.id);
+    // Сохраняем ID сессии (он уже создан в Supabase)
+    if (data.sessionId) {
+      localStorage.setItem(SESSION_ID_KEY, data.sessionId);
     }
 
     return { 
       success: true, 
       userId: data.userId, 
       role: data.role,
-      login: login
+      login: data.login
     };
   } catch (error: any) {
     return { success: false, error: 'Ошибка входа' };

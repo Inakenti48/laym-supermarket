@@ -417,8 +417,15 @@ export const InventoryTab = () => {
         // 3. Ищем товар в базе для автозаполнения цен
         const existing = await findProductByBarcode(sanitizedBarcode);
         
+        // Если не нашли в основной базе, ищем в загруженной базе данных
+        let databaseProduct = null;
+        if (!existing) {
+          databaseProduct = await findProductInDatabase(sanitizedBarcode);
+          console.log('💡 Поиск в базе данных товаров:', databaseProduct);
+        }
+        
         if (existing) {
-          // Автозаполняем цены из базы
+          // Автозаполняем цены из основной базы
           setCurrentProduct(prev => ({
             ...prev,
             category: existing.category,
@@ -427,6 +434,15 @@ export const InventoryTab = () => {
             unit: existing.unit,
             supplier: existing.supplier || prev.supplier
           }));
+        } else if (databaseProduct) {
+          // Автозаполняем ТОЛЬКО цены из загруженной базы данных
+          console.log('✅ Заполняем цены из базы данных:', databaseProduct);
+          setCurrentProduct(prev => ({
+            ...prev,
+            purchasePrice: databaseProduct.purchasePrice.toString(),
+            retailPrice: databaseProduct.retailPrice.toString()
+          }));
+          toast.success(`💡 Цены найдены в базе: закуп ${databaseProduct.purchasePrice} ₽, розница ${databaseProduct.retailPrice} ₽`);
         }
         
         // 4. ТАКЖЕ добавляем товар в очередь
@@ -435,8 +451,8 @@ export const InventoryTab = () => {
           barcode: sanitizedBarcode,
           name: barcodeData.name,
           category: barcodeData.category || (existing?.category || ''),
-          purchasePrice: existing?.purchasePrice.toString() || '',
-          retailPrice: existing?.retailPrice.toString() || '',
+          purchasePrice: existing?.purchasePrice.toString() || databaseProduct?.purchasePrice.toString() || '',
+          retailPrice: existing?.retailPrice.toString() || databaseProduct?.retailPrice.toString() || '',
           quantity: '1',
           unit: existing?.unit || 'шт',
           expiryDate: '',
@@ -457,6 +473,8 @@ export const InventoryTab = () => {
         // 6. Уведомления
         if (existing) {
           toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Цены из базы`);
+        } else if (databaseProduct) {
+          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Цены найдены`);
         } else {
           toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Введите цены`);
         }

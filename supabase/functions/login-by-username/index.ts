@@ -44,6 +44,11 @@ serve(async (req) => {
     // Ищем пользователя с совпадающим хешем
     let foundUser = null;
     for (const user of allUsers) {
+      // Пропускаем пользователей без логина
+      if (!user.login) {
+        continue;
+      }
+      
       const userHash = await hashMD5(user.login);
       if (userHash === loginHash) {
         foundUser = user;

@@ -25,6 +25,7 @@ import { useProductsSync } from '@/hooks/useProductsSync';
 import { useFormSync } from '@/hooks/useFormSync';
 
 import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { findProductInDatabase } from '@/lib/productsDatabase';
 
 export const InventoryTab = () => {
   const [userRole, setUserRole] = useState<string>('');
@@ -109,6 +110,43 @@ export const InventoryTab = () => {
   useEffect(() => {
     localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
   }, [currentProduct]);
+
+  // Автоматический поиск товара в базе данных по штрихкоду
+  useEffect(() => {
+    const searchInDatabase = async () => {
+      // Ищем только если штрихкод не пустой и цены еще не заполнены
+      if (!currentProduct.barcode || currentProduct.barcode.trim().length < 3) {
+        return;
+      }
+
+      // Не перезаписываем цены если они уже заполнены
+      if (currentProduct.purchasePrice && currentProduct.retailPrice) {
+        return;
+      }
+
+      const found = await findProductInDatabase(currentProduct.barcode);
+      if (found) {
+        console.log('💡 Автозаполнение из базы данных:', found);
+        
+        setCurrentProduct(prev => ({
+          ...prev,
+          // Заполняем название только если оно пустое
+          name: prev.name || found.name,
+          // Заполняем цены только если они пустые
+          purchasePrice: prev.purchasePrice || found.purchasePrice.toString(),
+          retailPrice: prev.retailPrice || found.retailPrice.toString(),
+        }));
+
+        toast.success(`Товар найден в базе: ${found.name}`, {
+          description: `Закуп: ${found.purchasePrice} ₽, Розница: ${found.retailPrice} ₽`
+        });
+      }
+    };
+
+    // Добавляем небольшую задержку для избежания частых запросов при вводе
+    const timeoutId = setTimeout(searchInDatabase, 500);
+    return () => clearTimeout(timeoutId);
+  }, [currentProduct.barcode]);
 
   // Realtime синхронизация формы между админами
   const { otherUsersStates } = useFormSync({

@@ -65,7 +65,13 @@ serve(async (req) => {
 
     console.log('✅ Логин верный, создаем сессию');
 
-    // Создаем сессию сразу в Supabase (одна операция!)
+    // Удаляем старые сессии пользователя
+    await supabase
+      .from('user_sessions')
+      .delete()
+      .eq('user_id', foundUser.user_id);
+
+    // Создаем новую сессию
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
@@ -88,7 +94,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Сессия создана');
+    console.log('✅ Сессия создана:', sessionData.id);
 
     // Возвращаем готовую сессию
     return new Response(

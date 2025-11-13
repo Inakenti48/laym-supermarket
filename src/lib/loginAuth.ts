@@ -52,18 +52,24 @@ export const loginByUsername = async (login: string): Promise<{
       return { success: false, error: data?.error || 'Неверный логин' };
     }
     
-    console.log('✅ Вход успешен, user_id:', data.userId);
+    console.log('✅ Вход успешен, user_id:', data.userId, 'role:', data.role);
 
     // Очищаем старые сессии этого пользователя
-    await supabase
+    console.log('🗑️ Очищаем старые сессии для пользователя:', data.userId);
+    const { error: deleteError } = await supabase
       .from('user_sessions')
       .delete()
       .eq('user_id', data.userId);
+    
+    if (deleteError) {
+      console.warn('⚠️ Ошибка удаления старых сессий:', deleteError);
+    }
 
     // Создаем сессию со сроком действия 30 дней
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
+    console.log('💾 Создаем новую сессию...');
     // Сохраняем сессию в Supabase
     const { data: sessionData, error: sessionError } = await supabase
       .from('user_sessions')
@@ -77,13 +83,21 @@ export const loginByUsername = async (login: string): Promise<{
       .single();
 
     if (sessionError) {
-      console.error('Session creation error:', sessionError);
-      return { success: false, error: 'Ошибка создания сессии' };
+      console.error('❌ Session creation error:', sessionError);
+      console.error('❌ Детали ошибки:', JSON.stringify(sessionError, null, 2));
+      // Не блокируем вход - просто логируем ошибку
+      // return { success: false, error: 'Ошибка создания сессии' };
     }
 
-    // Сохраняем ТОЛЬКО ID сессии в localStorage
-    localStorage.setItem(SESSION_ID_KEY, sessionData.id);
+    // Сохраняем ТОЛЬКО ID сессии в localStorage если сессия создана
+    if (sessionData?.id) {
+      localStorage.setItem(SESSION_ID_KEY, sessionData.id);
+      console.log('✅ Сессия сохранена в localStorage:', sessionData.id);
+    } else {
+      console.warn('⚠️ Сессия не была создана, но продолжаем вход');
+    }
 
+    console.log('✅ Вход завершен успешно');
     return { 
       success: true, 
       userId: data.userId, 

@@ -36,37 +36,32 @@ const Index = () => {
   const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
 
+  // Все доступные табы
+  const allTabsData = [
+    { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
+    { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
+    { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+    { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
+    { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
+    { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
+    { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
+    { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
+    { id: 'diagnostics' as Tab, label: 'Диагностика', icon: Settings, roles: ['admin'] },
+    { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+    { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
+    { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
+  ];
+
   // Фильтруем табы в зависимости от роли
   const getTabsByRole = (): Array<{ id: Tab; label: string; icon: any; roles: string[] }> => {
-    const allTabs = [
-      { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
-      { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
-      { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
-      { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
-      { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
-      { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
-      { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
-      { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
-      { id: 'diagnostics' as Tab, label: 'Диагностика', icon: Settings, roles: ['admin'] },
-      { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
-      { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
-      { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
-    ];
-
     if (!userRole) return [];
-    return allTabs.filter(tab => tab.roles.includes(userRole));
+    return allTabsData.filter(tab => tab.roles.includes(userRole));
   };
 
   const tabs = getTabsByRole();
   
-  // Устанавливаем начальный таб - первый доступный для роли
-  const getInitialTab = (): Tab => {
-    if (!userRole) return 'dashboard';
-    const availableTabs = getTabsByRole();
-    return availableTabs.length > 0 ? availableTabs[0].id : 'dashboard';
-  };
-
-  const [activeTab, setActiveTab] = useState<Tab>(getInitialTab());
+  // Начальный таб будет установлен в useEffect
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
     // Проверка кастомной сессии (по логину)
@@ -83,6 +78,12 @@ const Index = () => {
         
         setUser(fakeUser);
         setUserRole(loginUser.role as AppRole);
+        
+        // Устанавливаем начальный таб для этой роли
+        const availableTabs = allTabsData.filter(tab => tab.roles.includes(loginUser.role));
+        if (availableTabs.length > 0) {
+          setActiveTab(availableTabs[0].id);
+        }
       }
       
       setLoading(false);
@@ -91,16 +92,7 @@ const Index = () => {
     checkSession();
   }, []);
 
-  // Обновляем activeTab при изменении роли
-  useEffect(() => {
-    if (userRole) {
-      const initialTab = getInitialTab();
-      setActiveTab(initialTab);
-    }
-  }, [userRole]);
-
-  // Больше не проверяем истечение сессии - сессия бессрочная до выхода
-
+  // Обновляем activeTab только при первом входе через handleLogin
   const handleLogin = async (login: string) => {
     try {
       setLoading(true);
@@ -109,10 +101,11 @@ const Index = () => {
       
       if (!result.success) {
         toast.error(result.error || 'Ошибка входа');
+        setLoading(false);
         return;
       }
 
-      // Устанавливаем пользователя сразу без дополнительных проверок
+      // Устанавливаем пользователя
       if (result.userId && result.role) {
         const fakeUser = {
           id: result.userId,
@@ -121,6 +114,13 @@ const Index = () => {
         
         setUser(fakeUser);
         setUserRole(result.role as AppRole);
+        
+        // Устанавливаем первый доступный таб для роли
+        const availableTabs = allTabsData.filter(tab => tab.roles.includes(result.role));
+        if (availableTabs.length > 0) {
+          setActiveTab(availableTabs[0].id);
+        }
+        
         toast.success('Вход выполнен');
       }
     } catch (error: any) {

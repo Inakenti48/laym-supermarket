@@ -21,57 +21,28 @@ export const loginByUsername = async (login: string): Promise<{
   login?: string;
 }> => {
   try {
-    console.log('🔐 Попытка входа с логином:', login);
-    
-    // Валидация на клиенте
-    if (!login) {
-      console.log('❌ Логин пустой');
-      return { success: false, error: 'Введите логин' };
-    }
-
-    // Проверяем формат логина (4 цифры)
-    if (!/^\d{4}$/.test(login)) {
-      console.log('❌ Неверный формат логина:', login);
+    // Валидация
+    if (!login || !/^\d{4}$/.test(login)) {
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
     }
 
-    // Вычисляем MD5 хеш логина для защиты при передаче
+    // Хешируем логин
     const loginHash = await hashMD5(login);
-    console.log('🔑 Хеш логина:', loginHash);
 
-    // Вызываем edge function только с логином (в хешированном виде)
-    console.log('📡 Вызов edge function...');
+    // Вызываем edge function
     const { data, error } = await supabase.functions.invoke('login-by-username', {
       body: { loginHash }
     });
 
-    console.log('📥 Ответ от edge function:', { data, error });
-
     if (error || !data || !data.success) {
-      console.log('❌ Ошибка входа:', data?.error || error?.message);
       return { success: false, error: data?.error || 'Неверный логин' };
     }
     
-    console.log('✅ Вход успешен, user_id:', data.userId, 'role:', data.role);
-
-    // Очищаем старые сессии этого пользователя
-    console.log('🗑️ Очищаем старые сессии для пользователя:', data.userId);
-    const { error: deleteError } = await supabase
-      .from('user_sessions')
-      .delete()
-      .eq('user_id', data.userId);
-    
-    if (deleteError) {
-      console.warn('⚠️ Ошибка удаления старых сессий:', deleteError);
-    }
-
-    // Создаем сессию со сроком действия 30 дней
+    // Создаем сессию (одна быстрая операция)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    console.log('💾 Создаем новую сессию...');
-    // Сохраняем сессию в Supabase
-    const { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData } = await supabase
       .from('user_sessions')
       .insert({
         user_id: data.userId,
@@ -79,25 +50,13 @@ export const loginByUsername = async (login: string): Promise<{
         role: data.role,
         expires_at: expiresAt.toISOString()
       })
-      .select()
+      .select('id')
       .single();
 
-    if (sessionError) {
-      console.error('❌ Session creation error:', sessionError);
-      console.error('❌ Детали ошибки:', JSON.stringify(sessionError, null, 2));
-      // Не блокируем вход - просто логируем ошибку
-      // return { success: false, error: 'Ошибка создания сессии' };
-    }
-
-    // Сохраняем ТОЛЬКО ID сессии в localStorage если сессия создана
     if (sessionData?.id) {
       localStorage.setItem(SESSION_ID_KEY, sessionData.id);
-      console.log('✅ Сессия сохранена в localStorage:', sessionData.id);
-    } else {
-      console.warn('⚠️ Сессия не была создана, но продолжаем вход');
     }
 
-    console.log('✅ Вход завершен успешно');
     return { 
       success: true, 
       userId: data.userId, 
@@ -105,8 +64,7 @@ export const loginByUsername = async (login: string): Promise<{
       login: login
     };
   } catch (error: any) {
-    console.error('Login error:', error);
-    return { success: false, error: error.message || 'Ошибка входа' };
+    return { success: false, error: 'Ошибка входа' };
   }
 };
 

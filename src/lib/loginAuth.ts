@@ -21,6 +21,8 @@ export const loginByUsername = async (login: string): Promise<{
   login?: string;
 }> => {
   try {
+    console.log('🔐 Начало входа:', login);
+    
     // Валидация
     if (!login || !/^\d{4}$/.test(login)) {
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
@@ -28,21 +30,28 @@ export const loginByUsername = async (login: string): Promise<{
 
     // Хешируем логин
     const loginHash = await hashMD5(login);
+    console.log('🔑 Хеш:', loginHash);
 
     // Вызываем edge function - она сразу создает сессию!
+    console.log('📡 Вызов функции...');
     const { data, error } = await supabase.functions.invoke('login-by-username', {
       body: { loginHash }
     });
 
+    console.log('📥 Ответ:', { data, error });
+
     if (error || !data || !data.success) {
+      console.error('❌ Ошибка:', data?.error || error);
       return { success: false, error: data?.error || 'Неверный логин' };
     }
     
     // Сохраняем ID сессии (он уже создан в Supabase)
+    console.log('💾 Сохраняем сессию:', data.sessionId);
     if (data.sessionId) {
       localStorage.setItem(SESSION_ID_KEY, data.sessionId);
     }
 
+    console.log('✅ Вход успешен');
     return { 
       success: true, 
       userId: data.userId, 
@@ -50,6 +59,7 @@ export const loginByUsername = async (login: string): Promise<{
       login: data.login
     };
   } catch (error: any) {
+    console.error('💥 Критическая ошибка:', error);
     return { success: false, error: 'Ошибка входа' };
   }
 };

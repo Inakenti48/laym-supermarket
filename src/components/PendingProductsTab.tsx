@@ -535,10 +535,16 @@ export const PendingProductsTab = () => {
               <Package className="h-5 w-5 text-primary" />
               <h3 className="font-semibold text-lg">Очередь товаров</h3>
             </div>
-            <span className="text-sm text-muted-foreground font-medium">
-              Всего: {totalCount}
-              {totalPages > 1 && ` (стр. ${currentPage}/${totalPages})`}
-            </span>
+            <div className="flex flex-col items-end">
+              <span className="text-lg font-bold text-primary">
+                {totalCount} товаров
+              </span>
+              {totalPages > 1 && (
+                <span className="text-xs text-muted-foreground">
+                  Показано: {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalCount)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex gap-3">
             <Button
@@ -596,26 +602,35 @@ export const PendingProductsTab = () => {
 
           {/* Пагинация */}
           {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-6 pt-6 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Предыдущая
-              </Button>
-              <span className="text-sm text-muted-foreground px-4">
-                Страница {currentPage} из {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Следующая
-              </Button>
+            <div className="flex flex-col gap-3 mt-6 pt-6 border-t bg-muted/30 p-4 rounded-lg">
+              <div className="text-center">
+                <p className="text-sm font-medium mb-1">
+                  Страница {currentPage} из {totalPages}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Товары {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} из {totalCount}
+                </p>
+              </div>
+              <div className="flex justify-center items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="flex-1 max-w-[140px]"
+                >
+                  ← Назад
+                </Button>
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="flex-1 max-w-[140px]"
+                >
+                  Вперёд →
+                </Button>
+              </div>
             </div>
           )}
         </div>

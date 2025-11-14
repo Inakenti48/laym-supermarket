@@ -512,14 +512,15 @@ export const InventoryTab = () => {
           ...prev,
           barcode: sanitizedBarcode,
           name: barcodeData.name,
-          category: barcodeData.category || prev.category
+          category: barcodeData.category || prev.category,
+          quantity: prev.quantity || '1' // Устанавливаем количество по умолчанию
         }));
         
-        // 2. Собираем все фотографии (до 3 штук) и добавляем в поле "фото"
-        const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto];
+        // 2. Собираем все фотографии (до 2 штук) и добавляем в поле "фото"
+        const allPhotos = [barcodeData.frontPhoto, barcodeData.barcodePhoto].filter(Boolean);
         setPhotos(allPhotos);
-        setTempFrontPhoto(barcodeData.frontPhoto);
-        setTempBarcodePhoto(barcodeData.barcodePhoto);
+        if (barcodeData.frontPhoto) setTempFrontPhoto(barcodeData.frontPhoto);
+        if (barcodeData.barcodePhoto) setTempBarcodePhoto(barcodeData.barcodePhoto);
         
         // 3. Ищем товар в базе для автозаполнения цен
         const existing = await findProductByBarcode(sanitizedBarcode);
@@ -538,6 +539,7 @@ export const InventoryTab = () => {
             category: existing.category,
             purchasePrice: existing.purchasePrice.toString(),
             retailPrice: existing.retailPrice.toString(),
+            quantity: prev.quantity || '1',
             unit: existing.unit,
             supplier: existing.supplier || prev.supplier
           }));
@@ -547,7 +549,8 @@ export const InventoryTab = () => {
           setCurrentProduct(prev => ({
             ...prev,
             purchasePrice: databaseProduct.purchasePrice.toString(),
-            retailPrice: databaseProduct.retailPrice.toString()
+            retailPrice: databaseProduct.retailPrice.toString(),
+            quantity: prev.quantity || '1'
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${databaseProduct.purchasePrice} ₽, розница ${databaseProduct.retailPrice} ₽`);
         }

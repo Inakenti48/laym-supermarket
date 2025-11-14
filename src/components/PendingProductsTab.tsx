@@ -336,6 +336,48 @@ export const PendingProductsTab = () => {
     }
   };
 
+  const handleTransferAllNow = async () => {
+    if (totalCount === 0) {
+      toast.info('Очередь пуста');
+      return;
+    }
+
+    const confirmTransfer = window.confirm(
+      `Перенести ВСЕ ${totalCount} товаров из очереди в базу данных?\n\n` +
+      `Это действие нельзя отменить!`
+    );
+
+    if (!confirmTransfer) return;
+
+    try {
+      toast.loading('Переношу товары из очереди...');
+      
+      const { data, error } = await supabase.functions.invoke('transfer-queue-to-products');
+
+      if (error) {
+        console.error('Ошибка вызова функции:', error);
+        toast.error('Ошибка при переносе товаров');
+        return;
+      }
+
+      if (data.success) {
+        toast.success(
+          `✅ ${data.message}\n` +
+          `Успешно: ${data.transferred}\n` +
+          (data.failed > 0 ? `Ошибок: ${data.failed}` : '')
+        );
+        
+        // Обновляем список
+        setCurrentPage(1);
+      } else {
+        toast.error(`Ошибка: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Ошибка переноса:', error);
+      toast.error('Ошибка при переносе товаров');
+    }
+  };
+
   const handleSaveAllProducts = async () => {
     if (pendingProducts.length === 0) {
       toast.info('Нет товаров для сохранения');
@@ -501,8 +543,18 @@ export const PendingProductsTab = () => {
           </div>
           <div className="flex gap-3">
             <Button
+              onClick={handleTransferAllNow}
+              disabled={totalCount === 0}
+              variant="default"
+              className="flex-1 h-10 bg-primary hover:bg-primary/90"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Перенести ВСЕ ({totalCount})
+            </Button>
+            <Button
               onClick={handleSaveAllProducts}
               disabled={!hasCompleteProducts}
+              variant="outline"
               className="flex-1 h-10"
             >
               <Save className="h-4 w-4 mr-2" />

@@ -567,26 +567,50 @@ export const InventoryTab = () => {
 
     // Загрузка pending products из Supabase
     const loadPendingProducts = async () => {
-      const { data, error } = await supabase
-        .from('vremenno_product_foto')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && data) {
-        const loaded: PendingProduct[] = data.map(item => ({
-          id: item.id,
-          barcode: item.barcode,
-          name: item.product_name,
-          category: '',
-          purchasePrice: '',
-          retailPrice: '',
-          quantity: '1',
-          unit: 'шт',
-          photos: [item.image_url],
-          frontPhoto: item.image_url,
-        }));
-        setPendingProducts(loaded);
-        console.log(`📦 Loaded ${loaded.length} pending products from database`);
+      try {
+        const { data, error } = await supabase
+          .from('vremenno_product_foto')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('❌ Ошибка загрузки очереди:', error);
+          toast.error('Ошибка загрузки очереди товаров');
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          const loaded: PendingProduct[] = data.map(item => {
+            const photos = [];
+            if (item.front_photo) photos.push(item.front_photo);
+            if (item.barcode_photo) photos.push(item.barcode_photo);
+            if (photos.length === 0 && item.image_url) photos.push(item.image_url);
+            
+            return {
+              id: item.id,
+              barcode: item.barcode || '',
+              name: item.product_name || '',
+              category: item.category || '',
+              purchasePrice: item.purchase_price ? String(item.purchase_price) : '',
+              retailPrice: item.retail_price ? String(item.retail_price) : '',
+              quantity: item.quantity ? String(item.quantity) : '1',
+              unit: (item.unit === 'кг' ? 'кг' : 'шт') as 'кг' | 'шт',
+              supplier: item.supplier || '',
+              expiryDate: item.expiry_date || '',
+              photos: photos,
+              frontPhoto: item.front_photo || item.image_url || '',
+              barcodePhoto: item.barcode_photo || '',
+            };
+          });
+          setPendingProducts(loaded);
+          console.log(`✅ Загружено ${loaded.length} товаров из очереди`);
+        } else {
+          setPendingProducts([]);
+          console.log('📦 Очередь пуста');
+        }
+      } catch (err) {
+        console.error('❌ КРИТИЧЕСКАЯ ошибка загрузки очереди:', err);
+        toast.error('Критическая ошибка загрузки очереди');
       }
     };
     loadPendingProducts();
@@ -1492,55 +1516,101 @@ export const InventoryTab = () => {
         const retailPrice = parseFloat(currentProduct.retailPrice);
         const quantity = currentProduct.quantity ? parseFloat(currentProduct.quantity) : 1;
         
-        const { error: saveError } = await supabase
+        // Проверяем существует ли товар с таким штрихкодом
+        const { data: existingProduct } = await supabase
           .from('products')
-          .insert({
-            barcode: currentProduct.barcode,
-            name: currentProduct.name,
-            category: currentProduct.category,
-            supplier: currentProduct.supplier || null,
-            unit: currentProduct.unit,
-            purchase_price: purchasePrice,
-            sale_price: retailPrice,
-            quantity: quantity,
-            expiry_date: currentProduct.expiryDate || null,
-            payment_type: 'full',
-            paid_amount: purchasePrice * quantity,
-            debt_amount: 0,
-            created_by: currentUserId,
-          });
+          .select('id, quantity')
+          .eq('barcode', currentProduct.barcode)
+          .maybeSingle();
 
-        if (saveError) {
-          console.error('❌ Ошибка сохранения в products:', saveError);
-          toast.error(`❌ Ошибка: ${saveError.message}`);
-          return;
+        if (existingProduct) {
+          // Обновляем количество существующего товара
+          const newQuantity = existingProduct.quantity + quantity;
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ 
+              quantity: newQuantity,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingProduct.id);
+
+          if (updateError) {
+            console.error('❌ Ошибка обновления товара:', updateError);
+            toast.error(`❌ Ошибка обновления: ${updateError.message}`);
+            return;
+          }
+          
+          console.log(`✅ Количество обновлено: ${newQuantity}`);
+          toast.success(`✅ Количество "${currentProduct.name}" обновлено: ${newQuantity}`);
+        } else {
+          // Создаем новый товар
+          const { error: saveError } = await supabase
+            .from('products')
+            .insert({
+              barcode: currentProduct.barcode,
+              name: currentProduct.name,
+              category: currentProduct.category,
+              supplier: currentProduct.supplier || null,
+              unit: currentProduct.unit,
+              purchase_price: purchasePrice,
+              sale_price: retailPrice,
+              quantity: quantity,
+              expiry_date: currentProduct.expiryDate || null,
+              payment_type: 'full',
+              paid_amount: purchasePrice * quantity,
+              debt_amount: 0,
+              created_by: currentUserId,
+            });
+
+          if (saveError) {
+            console.error('❌ Ошибка сохранения в products:', saveError);
+            toast.error(`❌ Ошибка сохранения: ${saveError.message}`);
+            return;
+          }
+          
+          console.log('✅ Новый товар сохранен');
+          toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
         }
 
         // Сохраняем фото если есть
-        if (frontPhoto || barcodePhoto) {
+        try {
           if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
           if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
+        } catch (photoError) {
+          console.error('⚠️ Ошибка сохранения фото:', photoError);
+          // Не прерываем процесс, товар уже сохранен
         }
 
-        console.log('✅ Товар сохранен в основную базу');
-        toast.success(`✅ Товар "${currentProduct.name}" сохранен в базу!`);
         addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) сохранен в базу`);
         
       } else {
         // ДОБАВЛЯЕМ В ОЧЕРЕДЬ для заполнения цен
         console.log('📋 Цены не заполнены - добавляем в очередь');
         
+        // Проверяем дубликат в очереди
+        const { data: existingInQueue } = await supabase
+          .from('vremenno_product_foto')
+          .select('id')
+          .eq('barcode', currentProduct.barcode)
+          .maybeSingle();
+
+        if (existingInQueue) {
+          toast.info('⚠️ Товар уже есть в очереди');
+          console.log('⚠️ Товар уже в очереди, пропускаем');
+          return;
+        }
+
         const { error: insertError } = await supabase
           .from('vremenno_product_foto')
           .insert({
             barcode: currentProduct.barcode,
             product_name: currentProduct.name,
-            category: currentProduct.category,
+            category: currentProduct.category || null,
             supplier: currentProduct.supplier || null,
-            unit: currentProduct.unit,
+            unit: currentProduct.unit || 'шт',
             purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
             retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
-            quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : null,
+            quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : 1,
             expiry_date: currentProduct.expiryDate || null,
             payment_type: 'full',
             paid_amount: (currentProduct.purchasePrice && currentProduct.quantity) 
@@ -1558,7 +1628,7 @@ export const InventoryTab = () => {
 
         if (insertError) {
           console.error('❌ Ошибка добавления в очередь:', insertError);
-          toast.error(`❌ Ошибка: ${insertError.message}`);
+          toast.error(`❌ Ошибка добавления в очередь: ${insertError.message}`);
           return;
         }
 

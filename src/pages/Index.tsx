@@ -64,23 +64,22 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
-    // Проверка кастомной сессии (по логину)
+    // Быстрая проверка сессии
     const checkSession = async () => {
       const session = await getCurrentSession();
-      const loginUser = await getCurrentLoginUser();
       
-      if (session && loginUser) {
-        // Создаем фейковый User объект для совместимости
+      if (session) {
+        // Создаем фейковый User объект
         const fakeUser = {
-          id: loginUser.id,
-          role: loginUser.role
+          id: session.userId,
+          role: session.role
         } as any;
         
         setUser(fakeUser);
-        setUserRole(loginUser.role as AppRole);
+        setUserRole(session.role as AppRole);
         
         // Устанавливаем начальный таб для этой роли
-        const availableTabs = allTabsData.filter(tab => tab.roles.includes(loginUser.role));
+        const availableTabs = allTabsData.filter(tab => tab.roles.includes(session.role));
         if (availableTabs.length > 0) {
           setActiveTab(availableTabs[0].id);
         }

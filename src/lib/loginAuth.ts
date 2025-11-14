@@ -93,8 +93,8 @@ export const getCurrentSession = async (): Promise<AppSession | null> => {
       return null;
     }
 
-    // Обновляем время последней активности
-    await supabase
+    // Обновляем время последней активности асинхронно (не ждем)
+    supabase
       .from('user_sessions')
       .update({ last_activity: new Date().toISOString() })
       .eq('id', sessionId);

@@ -719,8 +719,79 @@ export const InventoryTab = () => {
     }
   };
 
-  const handleUpdatePendingProduct = (id: string, updates: Partial<PendingProduct>) => {
-    setPendingProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
+    // Находим товар и обновляем его
+    const currentProduct = pendingProducts.find(p => p.id === id);
+    if (!currentProduct) return;
+    
+    const productWithUpdates = { ...currentProduct, ...updates };
+    
+    // Обновляем состояние
+    setPendingProducts(prev => prev.map(p => p.id === id ? productWithUpdates : p));
+    
+    // Проверяем заполнены ли все обязательные поля включая цены
+    const hasAllFields = productWithUpdates.barcode && 
+                        productWithUpdates.name && 
+                        productWithUpdates.category &&
+                        productWithUpdates.purchasePrice && 
+                        productWithUpdates.retailPrice &&
+                        parseFloat(productWithUpdates.purchasePrice) > 0 &&
+                        parseFloat(productWithUpdates.retailPrice) > 0;
+    
+    if (hasAllFields) {
+      // Автоматически сохраняем в основную базу
+      console.log('💾 Товар из очереди заполнен - автосохранение в базу');
+      
+      try {
+        const purchasePrice = parseFloat(productWithUpdates.purchasePrice);
+        const retailPrice = parseFloat(productWithUpdates.retailPrice);
+        const quantity = productWithUpdates.quantity ? parseFloat(productWithUpdates.quantity) : 1;
+        
+        const { error: saveError } = await supabase
+          .from('products')
+          .insert({
+            barcode: productWithUpdates.barcode,
+            name: productWithUpdates.name,
+            category: productWithUpdates.category,
+            supplier: productWithUpdates.supplier || null,
+            unit: productWithUpdates.unit,
+            purchase_price: purchasePrice,
+            sale_price: retailPrice,
+            quantity: quantity,
+            expiry_date: productWithUpdates.expiryDate || null,
+            payment_type: 'full',
+            paid_amount: purchasePrice * quantity,
+            debt_amount: 0,
+            created_by: currentUserId,
+          });
+
+        if (saveError) {
+          console.error('❌ Ошибка автосохранения:', saveError);
+          toast.error(`❌ Ошибка: ${saveError.message}`);
+          return;
+        }
+
+        // Сохраняем фото если есть
+        if (productWithUpdates.frontPhoto || productWithUpdates.barcodePhoto) {
+          if (productWithUpdates.frontPhoto) {
+            await saveProductImage(productWithUpdates.barcode, productWithUpdates.name, productWithUpdates.frontPhoto, currentUserId);
+          }
+          if (productWithUpdates.barcodePhoto) {
+            await saveProductImage(productWithUpdates.barcode, productWithUpdates.name, productWithUpdates.barcodePhoto, currentUserId);
+          }
+        }
+
+        // Удаляем из очереди
+        await handleRemovePendingProduct(id);
+        
+        toast.success(`✅ Товар "${productWithUpdates.name}" автоматически сохранен в базу!`);
+        addLog(`Автосохранение: ${productWithUpdates.name} (${productWithUpdates.barcode})`);
+        
+      } catch (error: any) {
+        console.error('❌ Ошибка автосохранения:', error);
+        toast.error(`❌ Ошибка: ${error.message}`);
+      }
+    }
   };
 
   const handleRemovePendingProduct = async (id: string) => {

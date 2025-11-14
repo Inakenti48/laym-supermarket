@@ -336,21 +336,22 @@ export const PendingProductsTab = () => {
     }
   };
 
-  const handleTransferAllNow = async () => {
+  const handleTransferAllReady = async () => {
     if (totalCount === 0) {
       toast.info('Очередь пуста');
       return;
     }
 
     const confirmTransfer = window.confirm(
-      `Перенести ВСЕ ${totalCount} товаров из очереди в базу данных?\n\n` +
-      `Это действие нельзя отменить!`
+      `Перенести все ГОТОВЫЕ товары из очереди в базу?\n\n` +
+      `Будут перенесены только товары с заполненными полями и фотографиями.\n` +
+      `Незаполненные останутся в очереди.`
     );
 
     if (!confirmTransfer) return;
 
     try {
-      toast.loading('Переношу товары из очереди...');
+      toast.loading('Переношу готовые товары...');
       
       const { data, error } = await supabase.functions.invoke('transfer-queue-to-products');
 
@@ -361,11 +362,9 @@ export const PendingProductsTab = () => {
       }
 
       if (data.success) {
-        toast.success(
-          `✅ ${data.message}\n` +
-          `Успешно: ${data.transferred}\n` +
-          (data.failed > 0 ? `Ошибок: ${data.failed}` : '')
-        );
+        const message = `✅ Перенесено: ${data.transferred}` + 
+          (data.skipped > 0 ? `\nОсталось в очереди: ${data.skipped}` : '');
+        toast.success(message);
         
         // Обновляем список
         setCurrentPage(1);
@@ -543,13 +542,13 @@ export const PendingProductsTab = () => {
           </div>
           <div className="flex gap-3">
             <Button
-              onClick={handleTransferAllNow}
+              onClick={handleTransferAllReady}
               disabled={totalCount === 0}
               variant="default"
               className="flex-1 h-10 bg-primary hover:bg-primary/90"
             >
               <Save className="h-4 w-4 mr-2" />
-              Перенести ВСЕ ({totalCount})
+              Перенести готовые
             </Button>
             <Button
               onClick={handleSaveAllProducts}

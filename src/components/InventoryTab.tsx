@@ -69,6 +69,9 @@ export const InventoryTab = () => {
   const [tempBarcodePhoto, setTempBarcodePhoto] = useState<string>('');
   const [isRecognizingExpiry, setIsRecognizingExpiry] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const ITEMS_PER_PAGE = 50;
   
   // Вычисляем права доступа на основе текущей роли (динамически)
   const canSaveSingle = (userRole === 'admin' || userRole === 'inventory') || (localStorage.getItem('can_save_single') !== 'false');
@@ -566,12 +569,28 @@ export const InventoryTab = () => {
     loadSuppliers();
 
     // Загрузка pending products из Supabase
-    const loadPendingProducts = async () => {
+    const loadPendingProducts = async (page: number = 1) => {
       try {
+        // Сначала получаем общее количество
+        const { count, error: countError } = await supabase
+          .from('vremenno_product_foto')
+          .select('*', { count: 'exact', head: true });
+        
+        if (countError) {
+          console.error('❌ Ошибка подсчета товаров:', countError);
+        } else {
+          setQueueTotal(count || 0);
+        }
+        
+        // Загружаем товары с пагинацией
+        const from = (page - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+        
         const { data, error } = await supabase
           .from('vremenno_product_foto')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(from, to);
         
         if (error) {
           console.error('❌ Ошибка загрузки очереди:', error);
@@ -603,7 +622,7 @@ export const InventoryTab = () => {
             };
           });
           setPendingProducts(loaded);
-          console.log(`✅ Загружено ${loaded.length} товаров из очереди`);
+          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page})`);
         } else {
           setPendingProducts([]);
           console.log('📦 Очередь пуста');
@@ -613,7 +632,7 @@ export const InventoryTab = () => {
         toast.error('Критическая ошибка загрузки очереди');
       }
     };
-    loadPendingProducts();
+    loadPendingProducts(queuePage);
 
     const suppliersChannel = supabase
       .channel('suppliers_changes_inventory')

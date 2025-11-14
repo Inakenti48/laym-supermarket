@@ -13,6 +13,10 @@ import { getCurrentLoginUser } from '@/lib/loginAuth';
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const ITEMS_PER_PAGE = 50;
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   // Обработчик добавления нового поставщика
   const handleSupplierAdded = (newSupplier: Supplier) => {
@@ -49,14 +53,30 @@ export const PendingProductsTab = () => {
     };
   }, []);
 
-  // Загрузка временных товаров
+  // Загрузка временных товаров с пагинацией
   useEffect(() => {
     const fetchPendingProducts = async () => {
       try {
+        // Получаем общее количество
+        const { count, error: countError } = await supabase
+          .from('vremenno_product_foto')
+          .select('*', { count: 'exact', head: true });
+        
+        if (countError) {
+          console.error('Error counting pending products:', countError);
+        } else {
+          setTotalCount(count || 0);
+        }
+
+        // Загружаем товары с пагинацией
+        const from = (currentPage - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+
         const { data, error } = await supabase
           .from('vremenno_product_foto')
           .select('*')
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
+          .range(from, to);
 
         if (error) {
           console.error('Error fetching pending products:', error);
@@ -81,6 +101,7 @@ export const PendingProductsTab = () => {
             photos: item.image_url ? [item.image_url] : [],
           }));
           setPendingProducts(products);
+          console.log(`✅ Загружено ${products.length} из ${count} товаров (стр. ${currentPage})`);
         }
       } catch (error: any) {
         console.error('Network error loading pending products:', error);
@@ -111,7 +132,7 @@ export const PendingProductsTab = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentPage]);
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
     // Обновляем и в базе и в локальном state
@@ -443,7 +464,8 @@ export const PendingProductsTab = () => {
               <h3 className="font-semibold text-lg">Очередь товаров</h3>
             </div>
             <span className="text-sm text-muted-foreground font-medium">
-              Всего: {pendingProducts.length}
+              Всего: {totalCount}
+              {totalPages > 1 && ` (стр. ${currentPage}/${totalPages})`}
             </span>
           </div>
           <div className="flex gap-3">
@@ -487,6 +509,31 @@ export const PendingProductsTab = () => {
                   onSupplierAdded={handleSupplierAdded}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Пагинация */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-6 pt-6 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Предыдущая
+              </Button>
+              <span className="text-sm text-muted-foreground px-4">
+                Страница {currentPage} из {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Следующая
+              </Button>
             </div>
           )}
         </div>

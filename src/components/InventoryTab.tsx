@@ -828,7 +828,7 @@ export const InventoryTab = () => {
             console.error('❌ Ошибка проверки:', selectError);
             toast.error('❌ Ошибка сохранения товара');
           } else if (existing) {
-            // Товар существует - обновляем
+            // Товар существует - обновляем количество
             const { error: updateError } = await supabase
               .from('products')
               .update({
@@ -841,14 +841,43 @@ export const InventoryTab = () => {
               })
               .eq('barcode', sanitizedBarcode);
           
-          if (insertError) {
-            console.error('❌ Ошибка сохранения в products:', insertError);
-            toast.error('❌ Ошибка сохранения товара');
+            if (updateError) {
+              console.error('❌ Ошибка обновления товара:', updateError);
+              toast.error('❌ Ошибка сохранения товара');
+            } else {
+              toast.success(`✅ "${barcodeData.name}" обновлен в базе (количество +1)!`);
+              addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - обновлен`);
+            }
           } else {
-            toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`);
-            addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - сохранен автоматически`);
-            
-            // Очищаем форму
+            // Товар не существует - создаем новый
+            const productData = {
+              barcode: sanitizedBarcode,
+              name: barcodeData.name,
+              category: finalCategory,
+              purchase_price: parseFloat(finalPurchasePrice),
+              sale_price: parseFloat(finalRetailPrice),
+              quantity: 1,
+              unit: finalUnit,
+              supplier: finalSupplier || null,
+              expiry_date: null,
+              created_by: currentUserId
+            };
+
+            const { error: insertError } = await supabase
+              .from('products')
+              .insert(productData);
+
+            if (insertError) {
+              console.error('❌ Ошибка создания товара:', insertError);
+              toast.error('❌ Ошибка сохранения товара');
+            } else {
+              toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`);
+              addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - сохранен автоматически`);
+            }
+          }
+
+          // После успешного сохранения очищаем форму
+          if (!selectError) {
             setCurrentProduct({
               barcode: '',
               name: '',

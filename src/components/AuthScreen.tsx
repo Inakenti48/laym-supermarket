@@ -58,30 +58,30 @@ export const AuthScreen = ({ onSuccess }: AuthScreenProps) => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.rpc('verify_login_credentials', {
-        _login: login,
-        _password: loginPassword
+      // Используем edge функцию login-by-username для быстрого входа
+      const loginHash = await hashLogin(login);
+      
+      const { data, error } = await supabase.functions.invoke('login-by-username', {
+        body: { 
+          login: loginHash,
+          password: loginPassword 
+        }
       });
 
-      if (error || !data || data.length === 0) {
-        toast.error('Неверный логин или пароль');
+      if (error) {
+        console.error('❌ Ошибка вызова функции:', error);
+        toast.error('Ошибка подключения');
         setLoading(false);
         return;
       }
 
-      const userData = data[0];
-      if (userData.success) {
-        // Получаем сессию пользователя
-        const { data: authData, error: authError } = await supabase.auth.admin.getUserById(userData.user_id);
-        
-        if (!authError && authData) {
-          toast.success('Вход выполнен успешно');
-          onSuccess();
-        } else {
-          toast.error('Ошибка входа в систему');
-        }
+      if (data?.success && data?.sessionId) {
+        // Сохраняем сессию
+        localStorage.setItem('app_session_id', data.sessionId);
+        toast.success('Вход выполнен успешно');
+        onSuccess();
       } else {
-        toast.error('Неверный логин или пароль');
+        toast.error(data?.error || 'Неверный логин или пароль');
       }
     } catch (error: any) {
       toast.error('Ошибка подключения');
@@ -89,6 +89,15 @@ export const AuthScreen = ({ onSuccess }: AuthScreenProps) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Функция хеширования логина
+  const hashLogin = async (login: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(login);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
   return (

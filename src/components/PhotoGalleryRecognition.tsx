@@ -81,6 +81,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
           onProductFound({
             barcode: matchData.barcode,
             name: matchData.productName,
+            category: matchData.category,
             frontPhoto,
             barcodePhoto
           });
@@ -141,6 +142,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       
       const barcode = scanData?.barcode || '';
       const name = scanData?.name || '';
+      const category = scanData?.category || '';
       
       if (!barcode && !name) {
         toast.error('❌ Не удалось распознать товар');
@@ -152,6 +154,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       onProductFound({
         barcode,
         name,
+        category,
         frontPhoto,
         barcodePhoto
       });

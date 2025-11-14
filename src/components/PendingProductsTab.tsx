@@ -61,7 +61,10 @@ export const PendingProductsTab = () => {
 
     const fetchPendingProducts = async () => {
       // Защита от параллельных загрузок
-      if (isLoading) return;
+      if (isLoading) {
+        console.log('⏳ Загрузка уже выполняется, пропуск...');
+        return;
+      }
       
       setIsLoading(true);
       try {
@@ -134,7 +137,7 @@ export const PendingProductsTab = () => {
     const debouncedFetch = () => {
       clearTimeout(loadTimeout);
       loadTimeout = setTimeout(() => {
-        if (isMounted) {
+        if (isMounted && !isLoading) {
           fetchPendingProducts();
         }
       }, 500);
@@ -163,7 +166,7 @@ export const PendingProductsTab = () => {
       clearTimeout(loadTimeout);
       supabase.removeChannel(channel);
     };
-  }, [currentPage, isLoading]);
+  }, [currentPage]); // Убрал isLoading из зависимостей!
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
     // Обновляем и в базе и в локальном state

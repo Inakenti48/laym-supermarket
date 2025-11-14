@@ -43,22 +43,28 @@ serve(async (req) => {
     console.log(`📦 Найдено ${queueItems.length} товаров для переноса`);
 
     let transferred = 0;
-    let failed = 0;
-    const errors: any[] = [];
+    let skipped = 0;
+    const skippedItems: any[] = [];
 
     for (const item of queueItems) {
       try {
         // Проверяем обязательные поля
-        if (!item.barcode || !item.product_name || !item.category || 
-            !item.purchase_price || !item.retail_price || !item.quantity) {
-          console.log(`⚠️ Пропуск товара ${item.product_name}: не все обязательные поля заполнены`);
-          failed++;
-          errors.push({ 
+        const hasAllFields = item.barcode && item.product_name && item.category && 
+            item.purchase_price && item.retail_price && item.quantity;
+        
+        // Проверяем наличие хотя бы одной фотографии
+        const hasPhotos = item.front_photo || item.barcode_photo || item.image_url;
+        
+        if (!hasAllFields || !hasPhotos) {
+          const reason = !hasAllFields ? 'Не заполнены обязательные поля' : 'Нет фотографий';
+          console.log(`⚠️ Пропуск товара ${item.product_name}: ${reason}`);
+          skipped++;
+          skippedItems.push({ 
             barcode: item.barcode, 
             name: item.product_name, 
-            reason: 'Не заполнены обязательные поля' 
+            reason 
           });
-          continue;
+          continue; // Оставляем в очереди
         }
 
         // Проверяем, существует ли товар с таким штрихкодом
@@ -84,13 +90,13 @@ serve(async (req) => {
 
           if (updateError) {
             console.error(`❌ Ошибка обновления товара ${item.product_name}:`, updateError);
-            failed++;
-            errors.push({ 
+            skipped++;
+            skippedItems.push({ 
               barcode: item.barcode, 
               name: item.product_name, 
               reason: updateError.message 
             });
-            continue;
+            continue; // Оставляем в очереди при ошибке
           }
 
           console.log(`✅ Товар ${item.product_name} обновлен (количество: ${newQuantity})`);
@@ -116,13 +122,13 @@ serve(async (req) => {
 
           if (insertError) {
             console.error(`❌ Ошибка вставки товара ${item.product_name}:`, insertError);
-            failed++;
-            errors.push({ 
+            skipped++;
+            skippedItems.push({ 
               barcode: item.barcode, 
               name: item.product_name, 
               reason: insertError.message 
             });
-            continue;
+            continue; // Оставляем в очереди при ошибке
           }
 
           console.log(`✅ Товар ${item.product_name} добавлен`);
@@ -173,8 +179,8 @@ serve(async (req) => {
         transferred++;
       } catch (itemError: any) {
         console.error(`❌ Критическая ошибка обработки товара:`, itemError);
-        failed++;
-        errors.push({ 
+        skipped++;
+        skippedItems.push({ 
           barcode: item.barcode, 
           name: item.product_name, 
           reason: itemError.message 
@@ -182,15 +188,15 @@ serve(async (req) => {
       }
     }
 
-    console.log(`🎉 Завершено: ${transferred} успешно, ${failed} ошибок`);
+    console.log(`🎉 Завершено: ${transferred} перенесено, ${skipped} пропущено`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Перенесено: ${transferred}, Ошибки: ${failed}`,
+        message: `Перенесено: ${transferred}, Пропущено (осталось в очереди): ${skipped}`,
         transferred,
-        failed,
-        errors: errors.length > 0 ? errors : undefined,
+        skipped,
+        skippedItems: skippedItems.length > 0 ? skippedItems : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

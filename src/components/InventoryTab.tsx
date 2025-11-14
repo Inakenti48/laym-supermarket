@@ -917,7 +917,7 @@ export const InventoryTab = () => {
 
   const addProduct = async () => {
     try {
-      console.log('🔄 Добавление товара в очередь...');
+      console.log('🔄 Добавление товара...');
       console.log('👤 userRole:', userRole);
       console.log('🔐 canSaveQueue:', canSaveQueue);
       
@@ -971,42 +971,93 @@ export const InventoryTab = () => {
 
       const imageUrl = frontPhoto || barcodePhoto || `https://via.placeholder.com/150?text=${encodeURIComponent(currentProduct.name)}`;
 
-      // Добавляем товар в очередь (vremenno_product_foto)
-      const { error: insertError } = await supabase
-        .from('vremenno_product_foto')
-        .insert({
-          barcode: currentProduct.barcode,
-          product_name: currentProduct.name,
-          category: currentProduct.category,
-          supplier: currentProduct.supplier || null,
-          unit: currentProduct.unit,
-          purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
-          retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
-          quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : null,
-          expiry_date: currentProduct.expiryDate || null,
-          payment_type: 'full',
-          paid_amount: (currentProduct.purchasePrice && currentProduct.quantity) 
-            ? parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity) 
-            : 0,
-          debt_amount: 0,
-          image_url: imageUrl,
-          storage_path: `product-photos/${currentProduct.barcode}-${Date.now()}`,
-          front_photo: frontPhoto || null,
-          barcode_photo: barcodePhoto || null,
-          front_photo_storage_path: frontPhoto ? `product-photos/${currentProduct.barcode}-front-${Date.now()}` : null,
-          barcode_photo_storage_path: barcodePhoto ? `product-photos/${currentProduct.barcode}-barcode-${Date.now()}` : null,
-          created_by: currentUserId,
-        });
+      // НОВАЯ ЛОГИКА: Проверяем заполнены ли цены
+      const hasPrices = currentProduct.purchasePrice && currentProduct.retailPrice && 
+                        parseFloat(currentProduct.purchasePrice) > 0 && 
+                        parseFloat(currentProduct.retailPrice) > 0;
 
-      if (insertError) {
-        console.error('❌ Ошибка добавления в очередь:', insertError);
-        toast.error(`❌ Ошибка: ${insertError.message}`);
-        return;
+      if (hasPrices) {
+        // СОХРАНЯЕМ СРАЗУ В ОСНОВНУЮ БАЗУ
+        console.log('💾 Цены заполнены - сохраняем в основную базу products');
+        
+        const purchasePrice = parseFloat(currentProduct.purchasePrice);
+        const retailPrice = parseFloat(currentProduct.retailPrice);
+        const quantity = currentProduct.quantity ? parseFloat(currentProduct.quantity) : 1;
+        
+        const { error: saveError } = await supabase
+          .from('products')
+          .insert({
+            barcode: currentProduct.barcode,
+            name: currentProduct.name,
+            category: currentProduct.category,
+            supplier: currentProduct.supplier || null,
+            unit: currentProduct.unit,
+            purchase_price: purchasePrice,
+            sale_price: retailPrice,
+            quantity: quantity,
+            expiry_date: currentProduct.expiryDate || null,
+            payment_type: 'full',
+            paid_amount: purchasePrice * quantity,
+            debt_amount: 0,
+            created_by: currentUserId,
+          });
+
+        if (saveError) {
+          console.error('❌ Ошибка сохранения в products:', saveError);
+          toast.error(`❌ Ошибка: ${saveError.message}`);
+          return;
+        }
+
+        // Сохраняем фото если есть
+        if (frontPhoto || barcodePhoto) {
+          if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
+          if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
+        }
+
+        console.log('✅ Товар сохранен в основную базу');
+        toast.success(`✅ Товар "${currentProduct.name}" сохранен в базу!`);
+        addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) сохранен в базу`);
+        
+      } else {
+        // ДОБАВЛЯЕМ В ОЧЕРЕДЬ для заполнения цен
+        console.log('📋 Цены не заполнены - добавляем в очередь');
+        
+        const { error: insertError } = await supabase
+          .from('vremenno_product_foto')
+          .insert({
+            barcode: currentProduct.barcode,
+            product_name: currentProduct.name,
+            category: currentProduct.category,
+            supplier: currentProduct.supplier || null,
+            unit: currentProduct.unit,
+            purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
+            retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
+            quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : null,
+            expiry_date: currentProduct.expiryDate || null,
+            payment_type: 'full',
+            paid_amount: (currentProduct.purchasePrice && currentProduct.quantity) 
+              ? parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity) 
+              : 0,
+            debt_amount: 0,
+            image_url: imageUrl,
+            storage_path: `product-photos/${currentProduct.barcode}-${Date.now()}`,
+            front_photo: frontPhoto || null,
+            barcode_photo: barcodePhoto || null,
+            front_photo_storage_path: frontPhoto ? `product-photos/${currentProduct.barcode}-front-${Date.now()}` : null,
+            barcode_photo_storage_path: barcodePhoto ? `product-photos/${currentProduct.barcode}-barcode-${Date.now()}` : null,
+            created_by: currentUserId,
+          });
+
+        if (insertError) {
+          console.error('❌ Ошибка добавления в очередь:', insertError);
+          toast.error(`❌ Ошибка: ${insertError.message}`);
+          return;
+        }
+
+        console.log('✅ Товар добавлен в очередь');
+        toast.success('✅ Товар добавлен в очередь для заполнения цен!');
+        addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
       }
-
-      console.log('✅ Товар добавлен в очередь');
-      toast.success('✅ Товар добавлен в очередь!');
-      addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
       
       // Очищаем форму и временные фото
       setCurrentProduct({
@@ -1510,7 +1561,7 @@ export const InventoryTab = () => {
 
             <Button onClick={addProduct} className="w-full h-12 md:h-10 text-base md:text-sm font-medium mt-2">
               <Plus className="h-5 w-5 md:h-4 md:w-4 mr-2 md:mr-2" />
-              В очередь
+              Добавить товар
             </Button>
           </div>
         </Card>

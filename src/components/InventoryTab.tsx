@@ -1261,7 +1261,14 @@ export const InventoryTab = () => {
               <Input
                 className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.barcode}
-                onChange={(e) => setCurrentProduct({ ...currentProduct, barcode: e.target.value })}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setCurrentProduct({ 
+                    ...currentProduct, 
+                    barcode: newValue,
+                    quantity: (!currentProduct.quantity || currentProduct.quantity === '' || currentProduct.quantity === '0') ? '1' : currentProduct.quantity
+                  });
+                }}
                 placeholder="Сканируйте"
               />
               {isAdmin && otherUsersStates.some(s => s.barcode) && (
@@ -1278,7 +1285,14 @@ export const InventoryTab = () => {
               <Input
                 className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.name}
-                onChange={(e) => setCurrentProduct({ ...currentProduct, name: e.target.value })}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setCurrentProduct({ 
+                    ...currentProduct, 
+                    name: newValue,
+                    quantity: (!currentProduct.quantity || currentProduct.quantity === '' || currentProduct.quantity === '0') ? '1' : currentProduct.quantity
+                  });
+                }}
                 placeholder="Название"
               />
               {isAdmin && otherUsersStates.some(s => s.name) && (
@@ -1295,7 +1309,14 @@ export const InventoryTab = () => {
               <Input
                 className="text-sm md:text-sm h-11 md:h-9"
                 value={currentProduct.category}
-                onChange={(e) => setCurrentProduct({ ...currentProduct, category: e.target.value })}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setCurrentProduct({ 
+                    ...currentProduct, 
+                    category: newValue,
+                    quantity: (!currentProduct.quantity || currentProduct.quantity === '' || currentProduct.quantity === '0') ? '1' : currentProduct.quantity
+                  });
+                }}
                 placeholder="Категория"
               />
               {isAdmin && otherUsersStates.some(s => s.category) && (

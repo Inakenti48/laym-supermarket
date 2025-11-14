@@ -507,7 +507,7 @@ export const InventoryTab = () => {
         }
         
         // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
-        console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name });
+        console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name, category: barcodeData.category });
         setCurrentProduct(prev => ({
           ...prev,
           barcode: sanitizedBarcode,
@@ -532,64 +532,121 @@ export const InventoryTab = () => {
           console.log('💡 Поиск в базе данных товаров:', databaseProduct);
         }
         
+        let hasPrices = false;
+        let finalPurchasePrice = '';
+        let finalRetailPrice = '';
+        let finalUnit: 'шт' | 'кг' = 'шт';
+        let finalSupplier = '';
+        let finalCategory = barcodeData.category || '';
+        
         if (existing) {
-          // Автозаполняем цены из основной базы
+          // Автозаполняем из основной базы
+          finalPurchasePrice = existing.purchasePrice.toString();
+          finalRetailPrice = existing.retailPrice.toString();
+          finalUnit = existing.unit;
+          finalSupplier = existing.supplier || '';
+          finalCategory = existing.category || barcodeData.category || '';
+          hasPrices = true;
+          
           setCurrentProduct(prev => ({
             ...prev,
-            category: existing.category,
-            purchasePrice: existing.purchasePrice.toString(),
-            retailPrice: existing.retailPrice.toString(),
+            category: finalCategory,
+            purchasePrice: finalPurchasePrice,
+            retailPrice: finalRetailPrice,
             quantity: prev.quantity || '1',
-            unit: existing.unit,
-            supplier: existing.supplier || prev.supplier
+            unit: finalUnit,
+            supplier: finalSupplier
           }));
         } else if (databaseProduct) {
           // Автозаполняем ТОЛЬКО цены из загруженной базы данных
           console.log('✅ Заполняем цены из базы данных:', databaseProduct);
+          finalPurchasePrice = databaseProduct.purchasePrice.toString();
+          finalRetailPrice = databaseProduct.retailPrice.toString();
+          hasPrices = true;
+          
           setCurrentProduct(prev => ({
             ...prev,
-            purchasePrice: databaseProduct.purchasePrice.toString(),
-            retailPrice: databaseProduct.retailPrice.toString(),
+            purchasePrice: finalPurchasePrice,
+            retailPrice: finalRetailPrice,
             quantity: prev.quantity || '1'
           }));
-          toast.success(`💡 Цены найдены в базе: закуп ${databaseProduct.purchasePrice} ₽, розница ${databaseProduct.retailPrice} ₽`);
+          toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`);
         }
         
-        // 4. ТАКЖЕ добавляем товар в очередь
-        const newPendingProduct: PendingProduct = {
-          id: `pending-${Date.now()}-${Math.random()}`,
-          barcode: sanitizedBarcode,
-          name: barcodeData.name,
-          category: barcodeData.category || (existing?.category || ''),
-          purchasePrice: existing?.purchasePrice.toString() || databaseProduct?.purchasePrice.toString() || '',
-          retailPrice: existing?.retailPrice.toString() || databaseProduct?.retailPrice.toString() || '',
-          quantity: '1',
-          unit: existing?.unit || 'шт',
-          expiryDate: '',
-          supplier: existing?.supplier || '',
-          photos: allPhotos,
-          frontPhoto: barcodeData.frontPhoto,
-          barcodePhoto: barcodeData.barcodePhoto,
-        };
-        
-        setPendingProducts(prev => [...prev, newPendingProduct]);
-        
-        // 5. Сохраняем фотографии в product_images для истории
+        // 4. Сохраняем фотографии в product_images для истории
         console.log(`💾 Сохраняем ${allPhotos.length} фото в базу...`);
         for (const photoUrl of allPhotos) {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentUserId);
         }
         
-        // 6. Уведомления
-        if (existing) {
-          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Цены из базы`);
-        } else if (databaseProduct) {
-          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Цены найдены`);
+        // 5. ЕСЛИ ОБОИ ЦЕНЫ ЕСТЬ - СОХРАНЯЕМ СРАЗУ В БАЗУ
+        if (hasPrices && finalPurchasePrice && finalRetailPrice) {
+          console.log('💾 Обе цены есть, сохраняем сразу в базу products...');
+          
+          const productData = {
+            barcode: sanitizedBarcode,
+            name: barcodeData.name,
+            category: finalCategory,
+            purchase_price: parseFloat(finalPurchasePrice),
+            sale_price: parseFloat(finalRetailPrice),
+            quantity: 1,
+            unit: finalUnit,
+            supplier: finalSupplier || null,
+            expiry_date: null,
+            created_by: currentUserId
+          };
+          
+          const { error: insertError } = await supabase
+            .from('products')
+            .insert(productData);
+          
+          if (insertError) {
+            console.error('❌ Ошибка сохранения в products:', insertError);
+            toast.error('❌ Ошибка сохранения товара');
+          } else {
+            toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`);
+            addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - сохранен автоматически`);
+            
+            // Очищаем форму
+            setCurrentProduct({
+              barcode: '',
+              name: '',
+              category: '',
+              purchasePrice: '',
+              retailPrice: '',
+              quantity: '',
+              unit: 'шт',
+              expiryDate: '',
+              supplier: '',
+            });
+            setPhotos([]);
+            setTempFrontPhoto('');
+            setTempBarcodePhoto('');
+          }
         } else {
-          toast.success(`✅ "${barcodeData.name}" - форма заполнена и добавлен в очередь! Введите цены`);
+          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с заполненной категорией)
+          console.log('📋 Цен нет, добавляем в очередь с категорией...');
+          
+          const newPendingProduct: PendingProduct = {
+            id: `pending-${Date.now()}-${Math.random()}`,
+            barcode: sanitizedBarcode,
+            name: barcodeData.name,
+            category: finalCategory,
+            purchasePrice: '',
+            retailPrice: '',
+            quantity: '1',
+            unit: finalUnit,
+            expiryDate: '',
+            supplier: finalSupplier,
+            photos: allPhotos,
+            frontPhoto: barcodeData.frontPhoto,
+            barcodePhoto: barcodeData.barcodePhoto,
+          };
+          
+          setPendingProducts(prev => [...prev, newPendingProduct]);
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`);
+          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь`);
         }
-        
-        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - форма заполнена + в очередь`);
         
         // Закрываем сканер
         setShowAIScanner(false);

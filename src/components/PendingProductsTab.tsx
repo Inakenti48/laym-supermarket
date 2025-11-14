@@ -15,6 +15,7 @@ export const PendingProductsTab = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const ITEMS_PER_PAGE = 50;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
@@ -55,7 +56,14 @@ export const PendingProductsTab = () => {
 
   // Загрузка временных товаров с пагинацией
   useEffect(() => {
+    let isMounted = true;
+    let loadTimeout: NodeJS.Timeout;
+
     const fetchPendingProducts = async () => {
+      // Защита от параллельных загрузок
+      if (isLoading) return;
+      
+      setIsLoading(true);
       try {
         // Получаем общее количество
         const { count, error: countError } = await supabase
@@ -64,7 +72,11 @@ export const PendingProductsTab = () => {
         
         if (countError) {
           console.error('Error counting pending products:', countError);
-        } else {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+        
+        if (isMounted) {
           setTotalCount(count || 0);
         }
 
@@ -80,11 +92,14 @@ export const PendingProductsTab = () => {
 
         if (error) {
           console.error('Error fetching pending products:', error);
-          toast.error('Ошибка загрузки очереди товаров');
+          if (isMounted) {
+            toast.error('Ошибка загрузки очереди товаров');
+            setIsLoading(false);
+          }
           return;
         }
 
-        if (data) {
+        if (data && isMounted) {
           const products = data.map((item: any) => ({
             id: item.id,
             barcode: item.barcode || '',
@@ -105,10 +120,24 @@ export const PendingProductsTab = () => {
         }
       } catch (error: any) {
         console.error('Network error loading pending products:', error);
-        if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-          toast.error('Ошибка сети при загрузке очереди. Проверьте подключение');
+        if (isMounted) {
+          toast.error('Ошибка сети при загрузке очереди');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
         }
       }
+    };
+
+    // Debounced загрузка для realtime обновлений
+    const debouncedFetch = () => {
+      clearTimeout(loadTimeout);
+      loadTimeout = setTimeout(() => {
+        if (isMounted) {
+          fetchPendingProducts();
+        }
+      }, 500);
     };
 
     fetchPendingProducts();
@@ -124,15 +153,17 @@ export const PendingProductsTab = () => {
           table: 'vremenno_product_foto'
         },
         () => {
-          fetchPendingProducts();
+          debouncedFetch();
         }
       )
       .subscribe();
 
     return () => {
+      isMounted = false;
+      clearTimeout(loadTimeout);
       supabase.removeChannel(channel);
     };
-  }, [currentPage]);
+  }, [currentPage, isLoading]);
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
     // Обновляем и в базе и в локальном state

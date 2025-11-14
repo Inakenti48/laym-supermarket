@@ -339,79 +339,104 @@ export const PendingProductsTab = () => {
     }
   };
 
-  const handleTransferAllReady = async () => {
+  const handleTransferAllReady = async (autoMode = false) => {
     if (totalCount === 0) {
-      toast.info('Очередь пуста');
+      if (!autoMode) toast.info('Очередь пуста');
       return;
     }
 
-    const confirmTransfer = window.confirm(
-      `Перенести все ГОТОВЫЕ товары из очереди в базу?\n\n` +
-      `Будут перенесены только товары с заполненными полями и фотографиями.\n` +
-      `Незаполненные останутся в очереди.`
-    );
+    // Запрашиваем подтверждение только при первом ручном запуске
+    if (!autoMode) {
+      const confirmTransfer = window.confirm(
+        `Запустить автоматический перенос ВСЕХ готовых товаров?\n\n` +
+        `Процесс будет продолжаться автоматически, пока есть готовые товары.\n` +
+        `Незаполненные останутся в очереди.`
+      );
 
-    if (!confirmTransfer) return;
+      if (!confirmTransfer) return;
+    }
 
     try {
-      toast.loading('Переношу готовые товары...');
+      if (!autoMode) {
+        toast.loading('🔄 Запуск автоматического переноса...', { id: 'transfer' });
+      }
       
+      console.log('🚀 Запуск переноса готовых товаров...');
       const { data, error } = await supabase.functions.invoke('transfer-queue-to-products');
 
       if (error) {
         console.error('Ошибка вызова функции:', error);
-        toast.error('Ошибка при переносе товаров');
+        toast.error('Ошибка при переносе товаров', { id: 'transfer' });
         return;
       }
 
       if (data.success) {
-        const message = `✅ Перенесено: ${data.transferred}` + 
-          (data.skipped > 0 ? `\nОсталось в очереди: ${data.skipped}` : '');
-        toast.success(message);
+        console.log(`✅ Перенесено: ${data.transferred}, Пропущено: ${data.skipped}`);
         
-        // КРИТИЧНО: Принудительная перезагрузка очереди для продолжения автозаполнения
-        console.log('🔄 Перезагрузка очереди после переноса...');
+        // Обновляем сообщение о прогрессе
+        toast.loading(
+          `✅ Перенесено: ${data.transferred} | Осталось: ${data.skipped}`,
+          { id: 'transfer' }
+        );
+        
+        // Перезагружаем очередь
         setCurrentPage(1);
-        setPendingProducts([]); // Очищаем локальный state
         
-        // Запускаем повторную загрузку товаров
-        setTimeout(async () => {
-          try {
-            const { data: updatedProducts, error } = await supabase
-              .from('vremenno_product_foto')
-              .select('*')
-              .order('created_at', { ascending: true });
-            
-            if (!error && updatedProducts) {
-              const products = updatedProducts.map((item: any) => ({
-                id: item.id,
-                barcode: item.barcode || '',
-                name: item.product_name || '',
-                category: item.category || '',
-                purchasePrice: item.purchase_price?.toString() || '',
-                retailPrice: item.retail_price?.toString() || '',
-                quantity: item.quantity?.toString() || '',
-                unit: (item.unit || 'шт') as 'шт' | 'кг',
-                expiryDate: item.expiry_date || '',
-                supplier: item.supplier || '',
-                frontPhoto: item.front_photo || undefined,
-                barcodePhoto: item.barcode_photo || undefined,
-                photos: item.image_url ? [item.image_url] : [],
-              }));
-              console.log(`✅ Загружено ${products.length} товаров после переноса`);
-              setPendingProducts(products);
-              setTotalCount(products.length);
-            }
-          } catch (e) {
-            console.error('Ошибка перезагрузки:', e);
+        // Небольшая задержка перед следующей проверкой
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Загружаем обновленную очередь
+        const { data: updatedProducts, error: loadError } = await supabase
+          .from('vremenno_product_foto')
+          .select('*')
+          .order('created_at', { ascending: true });
+        
+        if (!loadError && updatedProducts) {
+          const products = updatedProducts.map((item: any) => ({
+            id: item.id,
+            barcode: item.barcode || '',
+            name: item.product_name || '',
+            category: item.category || '',
+            purchasePrice: item.purchase_price?.toString() || '',
+            retailPrice: item.retail_price?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            unit: (item.unit || 'шт') as 'шт' | 'кг',
+            expiryDate: item.expiry_date || '',
+            supplier: item.supplier || '',
+            frontPhoto: item.front_photo || undefined,
+            barcodePhoto: item.barcode_photo || undefined,
+            photos: item.image_url ? [item.image_url] : [],
+          }));
+          
+          setPendingProducts(products);
+          setTotalCount(products.length);
+          
+          // Проверяем, есть ли еще готовые товары для переноса
+          const hasMoreReady = products.some(p => 
+            p.barcode && p.name && p.category && 
+            p.purchasePrice && p.retailPrice && p.quantity &&
+            (p.frontPhoto || p.barcodePhoto || p.photos.length > 0)
+          );
+          
+          if (hasMoreReady && data.transferred > 0) {
+            // Продолжаем автоматический перенос
+            console.log('🔄 Обнаружены еще готовые товары, продолжаем...');
+            setTimeout(() => handleTransferAllReady(true), 1500);
+          } else {
+            // Процесс завершен
+            console.log('✅ Перенос завершен');
+            toast.success(
+              `✅ Процесс завершен!\nВсего перенесено товаров\nОсталось в очереди: ${products.length}`,
+              { id: 'transfer', duration: 5000 }
+            );
           }
-        }, 500);
+        }
       } else {
-        toast.error(`Ошибка: ${data.error}`);
+        toast.error(`Ошибка: ${data.error}`, { id: 'transfer' });
       }
     } catch (error: any) {
       console.error('Ошибка переноса:', error);
-      toast.error('Ошибка при переносе товаров');
+      toast.error('Ошибка при переносе товаров', { id: 'transfer' });
     }
   };
 
@@ -586,7 +611,7 @@ export const PendingProductsTab = () => {
           </div>
           <div className="flex gap-3">
             <Button
-              onClick={handleTransferAllReady}
+              onClick={() => handleTransferAllReady(false)}
               disabled={totalCount === 0}
               variant="default"
               className="flex-1 h-10 bg-primary hover:bg-primary/90"

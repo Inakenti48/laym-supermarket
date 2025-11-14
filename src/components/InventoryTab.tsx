@@ -106,32 +106,92 @@ export const InventoryTab = () => {
     };
   });
 
+  // Функция автоопределения категории по названию товара
+  const determineCategoryFromName = (productName: string): string => {
+    const name = productName.toLowerCase();
+    
+    // Продукты питания
+    if (name.includes('хлеб') || name.includes('молоко') || name.includes('сыр') || 
+        name.includes('масло') || name.includes('мясо') || name.includes('колбаса') ||
+        name.includes('сосиски') || name.includes('яйц') || name.includes('творог') ||
+        name.includes('йогурт') || name.includes('кефир') || name.includes('сметана') ||
+        name.includes('мука') || name.includes('сахар') || name.includes('соль')) {
+      return 'Продукты питания';
+    }
+    
+    // Напитки
+    if (name.includes('вода') || name.includes('сок') || name.includes('газировка') ||
+        name.includes('кола') || name.includes('пепси') || name.includes('фанта') ||
+        name.includes('спрайт') || name.includes('лимонад') || name.includes('чай') ||
+        name.includes('кофе') || name.includes('напиток') || name.includes('drink') ||
+        name.includes('juice')) {
+      return 'Напитки';
+    }
+    
+    // Бытовая химия
+    if (name.includes('порошок') || name.includes('моющ') || name.includes('чист') ||
+        name.includes('мыло') || name.includes('гель') || name.includes('отбеливатель') ||
+        name.includes('средство для')) {
+      return 'Бытовая химия';
+    }
+    
+    // Косметика
+    if (name.includes('шампунь') || name.includes('кондиционер') || name.includes('крем') || 
+        name.includes('лосьон') || name.includes('помада') || name.includes('тушь') || 
+        name.includes('маска') || name.includes('скраб') || name.includes('дезодорант') || 
+        name.includes('парфюм')) {
+      return 'Косметика';
+    }
+    
+    // Детские товары
+    if (name.includes('детск') || name.includes('памперс') || name.includes('подгузник') ||
+        name.includes('соска') || name.includes('бутылочка') || name.includes('игрушка') ||
+        name.includes('baby') || name.includes('kid') || name.includes('cup')) {
+      return 'Детские товары';
+    }
+    
+    return 'Другое';
+  };
+
   // Сохраняем состояние формы при изменении
   useEffect(() => {
     localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
   }, [currentProduct]);
 
-  // Автосохранение при заполнении всех обязательных полей
+  // Автозаполнение категории при изменении названия
+  useEffect(() => {
+    if (currentProduct.name && !currentProduct.category) {
+      const autoCategory = determineCategoryFromName(currentProduct.name);
+      setCurrentProduct(prev => ({ ...prev, category: autoCategory }));
+    }
+  }, [currentProduct.name]);
+
+  // Автосохранение при заполнении обязательных полей
   useEffect(() => {
     const autoSaveProduct = async () => {
-      // Проверяем все обязательные поля (кроме срока годности и поставщика)
-      const isComplete = currentProduct.barcode?.trim() &&
-                        currentProduct.name?.trim() &&
-                        currentProduct.category?.trim() &&
-                        currentProduct.purchasePrice &&
-                        currentProduct.retailPrice &&
-                        currentProduct.quantity &&
-                        parseFloat(currentProduct.purchasePrice) > 0 &&
-                        parseFloat(currentProduct.retailPrice) > 0 &&
-                        parseFloat(currentProduct.quantity) > 0;
-
-      if (!isComplete) return;
+      // Минимальные обязательные поля: штрихкод и название
+      const hasMinimumFields = currentProduct.barcode?.trim() && currentProduct.name?.trim();
+      
+      if (!hasMinimumFields) return;
       if (!currentUserId) return;
 
       // Проверяем права доступа
       if (userRole !== 'admin' && userRole !== 'inventory' && !canSaveQueue) return;
 
-      console.log('🔄 Автосохранение товара в базу...');
+      // Автоопределяем категорию, если не заполнена
+      const category = currentProduct.category || determineCategoryFromName(currentProduct.name);
+
+      const hasBothPrices = currentProduct.purchasePrice && 
+                           currentProduct.retailPrice && 
+                           parseFloat(currentProduct.purchasePrice) > 0 && 
+                           parseFloat(currentProduct.retailPrice) > 0;
+
+      const hasQuantity = currentProduct.quantity && parseFloat(currentProduct.quantity) > 0;
+
+      // Если НЕ ВСЕ поля заполнены (нет обеих цен или количества), сохраняем
+      if (!hasBothPrices || !hasQuantity) return;
+
+      console.log('🔄 Автосохранение товара...');
 
       try {
         const purchasePrice = parseFloat(currentProduct.purchasePrice);
@@ -149,42 +209,44 @@ export const InventoryTab = () => {
           }
         }
 
-        const { error: saveError } = await supabase
-          .from('products')
-          .insert({
-            barcode: currentProduct.barcode,
-            name: currentProduct.name,
-            category: currentProduct.category,
-            supplier: currentProduct.supplier || null,
-            unit: currentProduct.unit,
-            purchase_price: purchasePrice,
-            sale_price: retailPrice,
-            quantity: quantity,
-            expiry_date: currentProduct.expiryDate || null,
-            payment_type: 'full',
-            paid_amount: purchasePrice * quantity,
-            debt_amount: 0,
-            created_by: currentUserId,
-          });
+        if (hasBothPrices && hasQuantity) {
+          // Если обе цены и количество заполнены - сохраняем в products
+          const { error: saveError } = await supabase
+            .from('products')
+            .insert({
+              barcode: currentProduct.barcode,
+              name: currentProduct.name,
+              category,
+              supplier: currentProduct.supplier || null,
+              unit: currentProduct.unit,
+              purchase_price: purchasePrice,
+              sale_price: retailPrice,
+              quantity: quantity,
+              expiry_date: currentProduct.expiryDate || null,
+              payment_type: 'full',
+              paid_amount: purchasePrice * quantity,
+              debt_amount: 0,
+              created_by: currentUserId,
+            });
 
-        if (saveError) {
-          // Если ошибка из-за дубликата, не показываем ее
-          if (saveError.code === '23505') {
-            console.log('⚠️ Товар уже существует');
+          if (saveError) {
+            if (saveError.code === '23505') {
+              console.log('⚠️ Товар уже существует');
+              return;
+            }
+            console.error('❌ Ошибка автосохранения:', saveError);
             return;
           }
-          console.error('❌ Ошибка автосохранения:', saveError);
-          return;
-        }
 
-        // Сохраняем фото если есть
-        if (frontPhoto || barcodePhoto) {
-          if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
-          if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
-        }
+          // Сохраняем фото если есть
+          if (frontPhoto || barcodePhoto) {
+            if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
+            if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
+          }
 
-        toast.success(`✅ Товар "${currentProduct.name}" автоматически сохранен!`);
-        addLog(`Автосохранение: ${currentProduct.name} (${currentProduct.barcode})`);
+          toast.success(`✅ Товар "${currentProduct.name}" сохранен в базу!`);
+          addLog(`Автосохранение: ${currentProduct.name} (${currentProduct.barcode})`);
+        }
 
         // Очищаем форму
         setCurrentProduct({
@@ -214,6 +276,117 @@ export const InventoryTab = () => {
     const timer = setTimeout(() => {
       autoSaveProduct();
     }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [currentProduct, currentUserId, userRole, canSaveQueue, photos, tempFrontPhoto, tempBarcodePhoto]);
+
+  // Автоматическое добавление в очередь, если нет обеих цен но есть название и штрихкод
+  useEffect(() => {
+    const autoAddToQueue = async () => {
+      // Проверяем минимальные поля
+      const hasMinimumFields = currentProduct.barcode?.trim() && currentProduct.name?.trim();
+      if (!hasMinimumFields) return;
+      if (!currentUserId) return;
+
+      // Проверяем права доступа
+      if (userRole !== 'admin' && userRole !== 'inventory' && !canSaveQueue) return;
+
+      // Автоопределяем категорию
+      const category = currentProduct.category || determineCategoryFromName(currentProduct.name);
+
+      const hasBothPrices = currentProduct.purchasePrice && 
+                           currentProduct.retailPrice && 
+                           parseFloat(currentProduct.purchasePrice) > 0 && 
+                           parseFloat(currentProduct.retailPrice) > 0;
+
+      // Если обе цены ЕСТЬ - не добавляем в очередь (товар сохранится через автосохранение в products)
+      if (hasBothPrices) return;
+
+      // Если нет обеих цен - добавляем в очередь
+      console.log('🔄 Автоматическое добавление в очередь...');
+
+      try {
+        // Определяем фото
+        let frontPhoto = tempFrontPhoto || '';
+        let barcodePhoto = tempBarcodePhoto || '';
+        
+        if (!frontPhoto && !barcodePhoto && photos.length > 0) {
+          frontPhoto = photos[0];
+          if (photos.length > 1) {
+            barcodePhoto = photos[1];
+          }
+        }
+
+        const queueData = {
+          product_name: currentProduct.name,
+          barcode: currentProduct.barcode,
+          category,
+          purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
+          retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
+          quantity: currentProduct.quantity ? parseInt(currentProduct.quantity) : null,
+          supplier: currentProduct.supplier || null,
+          expiry_date: currentProduct.expiryDate || null,
+          unit: currentProduct.unit,
+          payment_type: 'full',
+          paid_amount: null,
+          debt_amount: null,
+          image_url: frontPhoto || '',
+          storage_path: frontPhoto || '',
+          front_photo: frontPhoto || null,
+          barcode_photo: barcodePhoto || null,
+          created_by: currentUserId,
+        };
+
+        const { error } = await supabase
+          .from('vremenno_product_foto')
+          .insert([queueData]);
+
+        if (error) {
+          if (error.code === '23505') {
+            console.log('⚠️ Товар уже в очереди');
+            return;
+          }
+          console.error('❌ Ошибка добавления в очередь:', error);
+          return;
+        }
+
+        // Сохраняем фото если есть
+        if (frontPhoto || barcodePhoto) {
+          if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
+          if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
+        }
+
+        toast.success(`✅ Товар "${currentProduct.name}" добавлен в очередь!`);
+        addLog(`Добавлено в очередь: ${currentProduct.name} (${currentProduct.barcode})`);
+
+        // Очищаем форму
+        setCurrentProduct({
+          barcode: '',
+          name: '',
+          category: '',
+          purchasePrice: '',
+          retailPrice: '',
+          quantity: '',
+          unit: 'шт',
+          expiryDate: '',
+          supplier: '',
+        });
+        setPhotos([]);
+        setCapturedImage('');
+        setTempFrontPhoto('');
+        setTempBarcodePhoto('');
+        setSuggestedProduct(null);
+        localStorage.removeItem('inventory_form_data');
+
+      } catch (error: any) {
+        console.error('❌ Ошибка добавления в очередь:', error);
+      }
+    };
+
+    // Debounce - ждем 2 секунды после последнего изменения
+    const timer = setTimeout(() => {
+      autoAddToQueue();
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [currentProduct, currentUserId, userRole, canSaveQueue, photos, tempFrontPhoto, tempBarcodePhoto]);

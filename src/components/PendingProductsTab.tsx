@@ -369,8 +369,43 @@ export const PendingProductsTab = () => {
           (data.skipped > 0 ? `\nОсталось в очереди: ${data.skipped}` : '');
         toast.success(message);
         
-        // Обновляем список
+        // КРИТИЧНО: Принудительная перезагрузка очереди для продолжения автозаполнения
+        console.log('🔄 Перезагрузка очереди после переноса...');
         setCurrentPage(1);
+        setPendingProducts([]); // Очищаем локальный state
+        
+        // Запускаем повторную загрузку товаров
+        setTimeout(async () => {
+          try {
+            const { data: updatedProducts, error } = await supabase
+              .from('vremenno_product_foto')
+              .select('*')
+              .order('created_at', { ascending: true });
+            
+            if (!error && updatedProducts) {
+              const products = updatedProducts.map((item: any) => ({
+                id: item.id,
+                barcode: item.barcode || '',
+                name: item.product_name || '',
+                category: item.category || '',
+                purchasePrice: item.purchase_price?.toString() || '',
+                retailPrice: item.retail_price?.toString() || '',
+                quantity: item.quantity?.toString() || '',
+                unit: (item.unit || 'шт') as 'шт' | 'кг',
+                expiryDate: item.expiry_date || '',
+                supplier: item.supplier || '',
+                frontPhoto: item.front_photo || undefined,
+                barcodePhoto: item.barcode_photo || undefined,
+                photos: item.image_url ? [item.image_url] : [],
+              }));
+              console.log(`✅ Загружено ${products.length} товаров после переноса`);
+              setPendingProducts(products);
+              setTotalCount(products.length);
+            }
+          } catch (e) {
+            console.error('Ошибка перезагрузки:', e);
+          }
+        }, 500);
       } else {
         toast.error(`Ошибка: ${data.error}`);
       }

@@ -111,6 +111,113 @@ export const InventoryTab = () => {
     localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
   }, [currentProduct]);
 
+  // Автосохранение при заполнении всех обязательных полей
+  useEffect(() => {
+    const autoSaveProduct = async () => {
+      // Проверяем все обязательные поля (кроме срока годности и поставщика)
+      const isComplete = currentProduct.barcode?.trim() &&
+                        currentProduct.name?.trim() &&
+                        currentProduct.category?.trim() &&
+                        currentProduct.purchasePrice &&
+                        currentProduct.retailPrice &&
+                        currentProduct.quantity &&
+                        parseFloat(currentProduct.purchasePrice) > 0 &&
+                        parseFloat(currentProduct.retailPrice) > 0 &&
+                        parseFloat(currentProduct.quantity) > 0;
+
+      if (!isComplete) return;
+      if (!currentUserId) return;
+
+      // Проверяем права доступа
+      if (userRole !== 'admin' && userRole !== 'inventory' && !canSaveQueue) return;
+
+      console.log('🔄 Автосохранение товара в базу...');
+
+      try {
+        const purchasePrice = parseFloat(currentProduct.purchasePrice);
+        const retailPrice = parseFloat(currentProduct.retailPrice);
+        const quantity = parseFloat(currentProduct.quantity);
+
+        // Определяем фото
+        let frontPhoto = tempFrontPhoto || '';
+        let barcodePhoto = tempBarcodePhoto || '';
+        
+        if (!frontPhoto && !barcodePhoto && photos.length > 0) {
+          frontPhoto = photos[0];
+          if (photos.length > 1) {
+            barcodePhoto = photos[1];
+          }
+        }
+
+        const { error: saveError } = await supabase
+          .from('products')
+          .insert({
+            barcode: currentProduct.barcode,
+            name: currentProduct.name,
+            category: currentProduct.category,
+            supplier: currentProduct.supplier || null,
+            unit: currentProduct.unit,
+            purchase_price: purchasePrice,
+            sale_price: retailPrice,
+            quantity: quantity,
+            expiry_date: currentProduct.expiryDate || null,
+            payment_type: 'full',
+            paid_amount: purchasePrice * quantity,
+            debt_amount: 0,
+            created_by: currentUserId,
+          });
+
+        if (saveError) {
+          // Если ошибка из-за дубликата, не показываем ее
+          if (saveError.code === '23505') {
+            console.log('⚠️ Товар уже существует');
+            return;
+          }
+          console.error('❌ Ошибка автосохранения:', saveError);
+          return;
+        }
+
+        // Сохраняем фото если есть
+        if (frontPhoto || barcodePhoto) {
+          if (frontPhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, frontPhoto, currentUserId);
+          if (barcodePhoto) await saveProductImage(currentProduct.barcode, currentProduct.name, barcodePhoto, currentUserId);
+        }
+
+        toast.success(`✅ Товар "${currentProduct.name}" автоматически сохранен!`);
+        addLog(`Автосохранение: ${currentProduct.name} (${currentProduct.barcode})`);
+
+        // Очищаем форму
+        setCurrentProduct({
+          barcode: '',
+          name: '',
+          category: '',
+          purchasePrice: '',
+          retailPrice: '',
+          quantity: '',
+          unit: 'шт',
+          expiryDate: '',
+          supplier: '',
+        });
+        setPhotos([]);
+        setCapturedImage('');
+        setTempFrontPhoto('');
+        setTempBarcodePhoto('');
+        setSuggestedProduct(null);
+        localStorage.removeItem('inventory_form_data');
+
+      } catch (error: any) {
+        console.error('❌ Ошибка автосохранения:', error);
+      }
+    };
+
+    // Debounce - ждем 1.5 секунды после последнего изменения
+    const timer = setTimeout(() => {
+      autoSaveProduct();
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [currentProduct, currentUserId, userRole, canSaveQueue, photos, tempFrontPhoto, tempBarcodePhoto]);
+
   // Автоматический поиск товара в базе данных по штрихкоду
   useEffect(() => {
     const searchInDatabase = async () => {

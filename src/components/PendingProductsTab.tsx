@@ -60,51 +60,26 @@ export const PendingProductsTab = () => {
     let loadTimeout: NodeJS.Timeout;
 
     const fetchPendingProducts = async (forceLoad = false) => {
-      // Защита от параллельных загрузок
-      if (!forceLoad && isLoading) {
-        console.log('⏳ Загрузка уже выполняется, пропуск...');
-        return;
-      }
+      if (!forceLoad && isLoading) return;
       
       setIsLoading(true);
       try {
-        // Получаем общее количество
-        const { count, error: countError } = await supabase
-          .from('vremenno_product_foto')
-          .select('*', { count: 'exact', head: true });
-        
-        if (countError) {
-          console.error('Error counting pending products:', countError);
-          if (isMounted) setIsLoading(false);
-          return;
-        }
-        
-        if (isMounted) {
-          setTotalCount(count || 0);
-        }
-
-        // Загружаем товары с пагинацией
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
-        console.log(`📄 Загрузка страницы ${currentPage}: товары ${from}-${to}`);
-
-        const { data, error } = await supabase
+        const { data, error, count } = await supabase
           .from('vremenno_product_foto')
-          .select('*')
+          .select('*', { count: 'exact' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
-        if (error) {
-          console.error('Error fetching pending products:', error);
-          if (isMounted) {
-            toast.error('Ошибка загрузки очереди товаров');
-            setIsLoading(false);
-          }
+        if (error || !isMounted) {
+          if (isMounted) setIsLoading(false);
           return;
         }
 
-        if (data && isMounted) {
+        if (data) {
+          setTotalCount(count || 0);
           const products = data.map((item: any) => ({
             id: item.id,
             barcode: item.barcode || '',
@@ -121,41 +96,24 @@ export const PendingProductsTab = () => {
             photos: item.image_url ? [item.image_url] : [],
           }));
           setPendingProducts(products);
-          console.log(`✅ Загружено ${products.length} из ${count} товаров (стр. ${currentPage})`);
         }
       } catch (error: any) {
-        console.error('Network error loading pending products:', error);
-        if (isMounted) {
-          toast.error('Ошибка сети при загрузке очереди');
-        }
+        // Silent fail
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    // Debounced загрузка для realtime обновлений (только для первой страницы)
     const debouncedFetch = () => {
-      // Realtime обновления применяем только на первой странице
-      if (currentPage !== 1) {
-        console.log('⏭️ Realtime обновление пропущено (не первая страница)');
-        return;
-      }
-      
+      if (currentPage !== 1) return;
       clearTimeout(loadTimeout);
       loadTimeout = setTimeout(() => {
-        if (isMounted && !isLoading) {
-          console.log('🔄 Realtime обновление (страница 1)');
-          fetchPendingProducts();
-        }
-      }, 500);
+        if (isMounted && !isLoading) fetchPendingProducts();
+      }, 200);
     };
 
-    // Загружаем при изменении страницы
     fetchPendingProducts(true);
 
-    // Realtime подписка на изменения
     const channel = supabase
       .channel('pending_products_changes')
       .on(
@@ -165,9 +123,7 @@ export const PendingProductsTab = () => {
           schema: 'public',
           table: 'vremenno_product_foto'
         },
-        () => {
-          debouncedFetch();
-        }
+        () => debouncedFetch()
       )
       .subscribe();
 
@@ -201,22 +157,13 @@ export const PendingProductsTab = () => {
         })
         .eq('id', id);
 
-      if (error) {
-        console.error('Error updating pending product:', error);
-        toast.error('Ошибка обновления товара');
-        return;
-      }
+      if (error) return;
 
       setPendingProducts(prev =>
         prev.map(p => p.id === id ? updatedProduct : p)
       );
     } catch (error: any) {
-      console.error('Network error:', error);
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-        toast.error('Ошибка сети. Проверьте подключение к интернету');
-      } else {
-        toast.error('Ошибка обновления товара');
-      }
+      // Silent fail
     }
   };
 
@@ -227,21 +174,12 @@ export const PendingProductsTab = () => {
         .delete()
         .eq('id', id);
 
-      if (error) {
-        console.error('Error removing pending product:', error);
-        toast.error('Ошибка удаления товара');
-        return;
-      }
+      if (error) return;
 
       setPendingProducts(prev => prev.filter(p => p.id !== id));
       toast.success('Товар удален из очереди');
     } catch (error: any) {
-      console.error('Network error:', error);
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-        toast.error('Ошибка сети. Проверьте подключение к интернету');
-      } else {
-        toast.error('Ошибка удаления товара');
-      }
+      // Silent fail
     }
   };
 
@@ -261,19 +199,14 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      console.log('💾 Начало сохранения товара:', product.name);
       
-      // Получаем пользователя из Supabase сессии
       const loginUser = await getCurrentLoginUser();
       const userId = loginUser?.id;
       
       if (!userId) {
-        console.error('❌ Не удалось получить ID пользователя');
         toast.error('Ошибка: не удалось определить пользователя. Попробуйте перезайти в систему.');
         return;
       }
-      
-      console.log('👤 Пользователь:', loginUser.login, 'ID:', userId);
       
       const supplier = suppliers.find(s => s.name === product.supplier);
 
@@ -295,57 +228,29 @@ export const PendingProductsTab = () => {
         photos: [],
       };
 
-      console.log('📝 Сохранение товара в базу данных...');
       await saveProduct(productData, userId);
-      console.log('✅ Товар сохранен в products');
 
-      // Сохраняем все фотографии включая лицевую и штрихкод
       const allPhotos = [
         ...(product.frontPhoto ? [product.frontPhoto] : []),
         ...(product.barcodePhoto ? [product.barcodePhoto] : []),
         ...product.photos
       ];
 
-      console.log(`📸 Сохранение ${allPhotos.length} фотографий...`);
       for (const photo of allPhotos) {
         await saveProductImage(product.barcode, product.name, photo, userId);
       }
-      console.log('✅ Фотографии сохранены');
 
-      console.log('🗑️ Удаление товара из очереди...');
       const { error: deleteError } = await supabase
         .from('vremenno_product_foto')
         .delete()
         .eq('id', id);
 
-      if (deleteError) {
-        console.error('⚠️ Ошибка удаления из очереди:', deleteError);
-        // Не прерываем процесс, товар уже сохранен
-      } else {
-        console.log('✅ Товар удален из очереди');
-      }
-
       addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
 
       setPendingProducts(prev => prev.filter(p => p.id !== id));
       toast.success(`✅ Товар "${product.name}" успешно добавлен`);
-      console.log('🎉 Процесс сохранения завершен успешно');
     } catch (error: any) {
-      console.error('❌ Ошибка при сохранении товара:', error);
-      console.error('❌ Детали ошибки:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-        toast.error('❌ Ошибка сети. Проверьте подключение к интернету');
-      } else if (error.message?.includes('JWT')) {
-        toast.error('❌ Ошибка авторизации. Попробуйте перезайти в систему');
-      } else {
-        toast.error(`❌ Ошибка при добавлении товара: ${error.message || 'Неизвестная ошибка'}`);
-      }
+      toast.error(`❌ Ошибка при добавлении товара`);
     }
   };
 
@@ -459,29 +364,21 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      console.log('💾 Начало массового сохранения товаров...');
       
-      // Получаем пользователя из Supabase сессии
       const loginUser = await getCurrentLoginUser();
       const userId = loginUser?.id;
       
       if (!userId) {
-        console.error('❌ Не удалось получить ID пользователя');
-        toast.error('Ошибка: не удалось определить пользователя. Попробуйте перезайти в систему.');
+        toast.error('Не удалось получить ID пользователя');
         return;
       }
-      
-      console.log('👤 Пользователь:', loginUser.login, 'ID:', userId);
 
       let successCount = 0;
       let errorCount = 0;
       const skippedCount = pendingProducts.length - completeProducts.length;
-      
-      console.log(`📦 Будет обработано товаров: ${completeProducts.length}, пропущено: ${skippedCount}`);
 
       for (const product of completeProducts) {
         try {
-          console.log(`\n📦 Обработка товара: ${product.name} (${product.barcode})`);
           const supplier = suppliers.find(s => s.name === product.supplier);
 
           const productData = {
@@ -504,7 +401,6 @@ export const PendingProductsTab = () => {
 
           await saveProduct(productData, userId);
 
-          // Сохраняем все фотографии включая лицевую и штрихкод
           const allPhotos = [
             ...(product.frontPhoto ? [product.frontPhoto] : []),
             ...(product.barcodePhoto ? [product.barcodePhoto] : []),
@@ -522,22 +418,12 @@ export const PendingProductsTab = () => {
 
           addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
 
-          console.log(`✅ Товар ${product.name} успешно сохранен`);
           successCount++;
         } catch (error: any) {
-          console.error(`❌ Ошибка сохранения товара ${product.name}:`, error);
-          console.error('❌ Детали ошибки:', {
-            message: error.message,
-            code: error.code,
-            details: error.details
-          });
           errorCount++;
         }
       }
-      
-      console.log(`\n📊 Итоги: успешно ${successCount}, ошибок ${errorCount}, пропущено ${skippedCount}`);
 
-      // Обновляем список, убирая только сохраненные товары
       setPendingProducts(prev => prev.filter(p => 
         !completeProducts.find(cp => cp.id === p.id)
       ));
@@ -549,12 +435,7 @@ export const PendingProductsTab = () => {
         toast.error(`Ошибок при добавлении: ${errorCount}`);
       }
     } catch (error: any) {
-      console.error('Network error:', error);
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-        toast.error('Ошибка сети. Проверьте подключение к интернету');
-      } else {
-        toast.error('Ошибка при сохранении товаров');
-      }
+      toast.error('Ошибка при сохранении товаров');
     }
   };
 

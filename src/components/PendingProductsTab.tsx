@@ -59,9 +59,9 @@ export const PendingProductsTab = () => {
     let isMounted = true;
     let loadTimeout: NodeJS.Timeout;
 
-    const fetchPendingProducts = async () => {
+    const fetchPendingProducts = async (forceLoad = false) => {
       // Защита от параллельных загрузок
-      if (isLoading) {
+      if (!forceLoad && isLoading) {
         console.log('⏳ Загрузка уже выполняется, пропуск...');
         return;
       }
@@ -86,6 +86,8 @@ export const PendingProductsTab = () => {
         // Загружаем товары с пагинацией
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
+
+        console.log(`📄 Загрузка страницы ${currentPage}: товары ${from}-${to}`);
 
         const { data, error } = await supabase
           .from('vremenno_product_foto')
@@ -133,17 +135,25 @@ export const PendingProductsTab = () => {
       }
     };
 
-    // Debounced загрузка для realtime обновлений
+    // Debounced загрузка для realtime обновлений (только для первой страницы)
     const debouncedFetch = () => {
+      // Realtime обновления применяем только на первой странице
+      if (currentPage !== 1) {
+        console.log('⏭️ Realtime обновление пропущено (не первая страница)');
+        return;
+      }
+      
       clearTimeout(loadTimeout);
       loadTimeout = setTimeout(() => {
         if (isMounted && !isLoading) {
+          console.log('🔄 Realtime обновление (страница 1)');
           fetchPendingProducts();
         }
       }, 500);
     };
 
-    fetchPendingProducts();
+    // Загружаем при изменении страницы
+    fetchPendingProducts(true);
 
     // Realtime подписка на изменения
     const channel = supabase
@@ -166,7 +176,7 @@ export const PendingProductsTab = () => {
       clearTimeout(loadTimeout);
       supabase.removeChannel(channel);
     };
-  }, [currentPage]); // Убрал isLoading из зависимостей!
+  }, [currentPage]);
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
     // Обновляем и в базе и в локальном state

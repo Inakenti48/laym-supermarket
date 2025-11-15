@@ -59,13 +59,10 @@ export const PendingProductsTab = () => {
     let isMounted = true;
 
     const fetchPendingProducts = async (forceLoad = false) => {
-      console.log('🔄 Начало загрузки товаров, страница:', currentPage);
       setIsLoading(true);
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
-
-        console.log('📊 Запрос диапазона:', from, '-', to);
 
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
@@ -73,17 +70,8 @@ export const PendingProductsTab = () => {
           .order('created_at', { ascending: true })
           .range(from, to);
 
-        console.log('📦 Получено:', { count, dataLength: data?.length, error });
-
-        if (error) {
-          console.error('❌ Ошибка загрузки:', error);
-          throw error;
-        }
-        
-        if (!isMounted) {
-          console.log('⚠️ Компонент размонтирован');
-          return;
-        }
+        if (error) throw error;
+        if (!isMounted) return;
 
         setTotalCount(count || 0);
         
@@ -103,21 +91,17 @@ export const PendingProductsTab = () => {
             barcodePhoto: item.barcode_photo || undefined,
             photos: item.image_url ? [item.image_url] : [],
           }));
-          console.log('✅ Продукты готовы:', products.length);
           setPendingProducts(products);
         } else {
-          console.log('⚠️ Нет данных для отображения');
           setPendingProducts([]);
         }
       } catch (error: any) {
-        console.error('❌ Критическая ошибка:', error);
         if (isMounted) {
           setPendingProducts([]);
           setTotalCount(0);
         }
       } finally {
         if (isMounted) {
-          console.log('🏁 Загрузка завершена');
           setIsLoading(false);
         }
       }
@@ -136,8 +120,7 @@ export const PendingProductsTab = () => {
           table: 'vremenno_product_foto'
         },
         () => {
-          // Мгновенное обновление без задержек
-          if (isMounted && !isLoading) {
+          if (isMounted) {
             fetchPendingProducts();
           }
         }

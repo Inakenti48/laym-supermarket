@@ -57,7 +57,6 @@ export const PendingProductsTab = () => {
   // Загрузка временных товаров с пагинацией
   useEffect(() => {
     let isMounted = true;
-    let loadTimeout: NodeJS.Timeout;
 
     const fetchPendingProducts = async (forceLoad = false) => {
       setIsLoading(true);
@@ -106,13 +105,7 @@ export const PendingProductsTab = () => {
       }
     };
 
-    const debouncedFetch = () => {
-      clearTimeout(loadTimeout);
-      loadTimeout = setTimeout(() => {
-        if (isMounted && !isLoading) fetchPendingProducts();
-      }, 200);
-    };
-
+    // Мгновенная загрузка без задержек
     fetchPendingProducts(true);
 
     const channel = supabase
@@ -124,13 +117,17 @@ export const PendingProductsTab = () => {
           schema: 'public',
           table: 'vremenno_product_foto'
         },
-        () => debouncedFetch()
+        () => {
+          // Мгновенное обновление без задержек
+          if (isMounted && !isLoading) {
+            fetchPendingProducts();
+          }
+        }
       )
       .subscribe();
 
     return () => {
       isMounted = false;
-      clearTimeout(loadTimeout);
       supabase.removeChannel(channel);
     };
   }, [currentPage]);

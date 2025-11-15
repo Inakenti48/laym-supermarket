@@ -106,7 +106,6 @@ export const PendingProductsTab = () => {
     };
 
     const debouncedFetch = () => {
-      if (currentPage !== 1) return;
       clearTimeout(loadTimeout);
       loadTimeout = setTimeout(() => {
         if (isMounted && !isLoading) fetchPendingProducts();

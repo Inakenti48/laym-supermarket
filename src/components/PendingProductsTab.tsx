@@ -60,26 +60,22 @@ export const PendingProductsTab = () => {
     let loadTimeout: NodeJS.Timeout;
 
     const fetchPendingProducts = async (forceLoad = false) => {
-      if (!forceLoad && isLoading) return;
-      
       setIsLoading(true);
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
-        const { data, error, count } = await supabase
+        const { data, count } = await supabase
           .from('vremenno_product_foto')
           .select('*', { count: 'exact' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
-        if (error || !isMounted) {
-          if (isMounted) setIsLoading(false);
-          return;
-        }
+        if (!isMounted) return;
 
-        if (data) {
-          setTotalCount(count || 0);
+        setTotalCount(count || 0);
+        
+        if (data && data.length > 0) {
           const products = data.map((item: any) => ({
             id: item.id,
             barcode: item.barcode || '',
@@ -96,9 +92,14 @@ export const PendingProductsTab = () => {
             photos: item.image_url ? [item.image_url] : [],
           }));
           setPendingProducts(products);
+        } else {
+          setPendingProducts([]);
         }
       } catch (error: any) {
-        // Silent fail
+        if (isMounted) {
+          setPendingProducts([]);
+          setTotalCount(0);
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -443,26 +444,16 @@ export const PendingProductsTab = () => {
     if (pendingProducts.length === 0) return;
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('vremenno_product_foto')
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000');
 
-      if (error) {
-        console.error('Error clearing pending products:', error);
-        toast.error('Ошибка очистки очереди');
-        return;
-      }
-
       setPendingProducts([]);
+      setTotalCount(0);
       toast.success('Очередь очищена');
     } catch (error: any) {
-      console.error('Network error:', error);
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
-        toast.error('Ошибка сети. Проверьте подключение к интернету');
-      } else {
-        toast.error('Ошибка очистки очереди');
-      }
+      // Silent fail
     }
   };
 

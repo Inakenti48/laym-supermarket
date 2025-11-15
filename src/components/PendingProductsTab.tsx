@@ -379,56 +379,47 @@ export const PendingProductsTab = () => {
           { id: 'transfer' }
         );
         
-        // Перезагружаем очередь
+        // Перезагружаем очередь - сбрасываем на первую страницу
         setCurrentPage(1);
         
         // Небольшая задержка перед следующей проверкой
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Загружаем обновленную очередь
-        const { data: updatedProducts, error: loadError } = await supabase
+        // Получаем общее количество для проверки готовых товаров
+        const { count, error: countError } = await supabase
           .from('vremenno_product_foto')
-          .select('*')
-          .order('created_at', { ascending: true });
+          .select('*', { count: 'exact', head: true });
         
-        if (!loadError && updatedProducts) {
-          const products = updatedProducts.map((item: any) => ({
-            id: item.id,
-            barcode: item.barcode || '',
-            name: item.product_name || '',
-            category: item.category || '',
-            purchasePrice: item.purchase_price?.toString() || '',
-            retailPrice: item.retail_price?.toString() || '',
-            quantity: item.quantity?.toString() || '',
-            unit: (item.unit || 'шт') as 'шт' | 'кг',
-            expiryDate: item.expiry_date || '',
-            supplier: item.supplier || '',
-            frontPhoto: item.front_photo || undefined,
-            barcodePhoto: item.barcode_photo || undefined,
-            photos: item.image_url ? [item.image_url] : [],
-          }));
+        if (!countError && count !== null) {
+          setTotalCount(count);
           
-          setPendingProducts(products);
-          setTotalCount(products.length);
+          // Загружаем только первую страницу для проверки готовых товаров
+          const { data: firstPageProducts, error: loadError } = await supabase
+            .from('vremenno_product_foto')
+            .select('*')
+            .order('created_at', { ascending: true })
+            .range(0, ITEMS_PER_PAGE - 1);
           
-          // Проверяем, есть ли еще готовые товары для переноса
-          const hasMoreReady = products.some(p => 
-            p.barcode && p.name && p.category && 
-            p.purchasePrice && p.retailPrice && p.quantity &&
-            (p.frontPhoto || p.barcodePhoto || p.photos.length > 0)
-          );
-          
-          if (hasMoreReady && data.transferred > 0) {
-            // Продолжаем автоматический перенос
-            console.log('🔄 Обнаружены еще готовые товары, продолжаем...');
-            setTimeout(() => handleTransferAllReady(true), 1500);
-          } else {
-            // Процесс завершен
-            console.log('✅ Перенос завершен');
-            toast.success(
-              `✅ Процесс завершен!\nВсего перенесено товаров\nОсталось в очереди: ${products.length}`,
-              { id: 'transfer', duration: 5000 }
+          if (!loadError && firstPageProducts) {
+            // Проверяем, есть ли еще готовые товары для переноса на первой странице
+            const hasMoreReady = firstPageProducts.some((item: any) => 
+              item.barcode && item.product_name && item.category && 
+              item.purchase_price && item.retail_price && item.quantity &&
+              (item.front_photo || item.barcode_photo || item.image_url)
             );
+            
+            if (hasMoreReady && data.transferred > 0) {
+              // Продолжаем автоматический перенос
+              console.log('🔄 Обнаружены еще готовые товары, продолжаем...');
+              setTimeout(() => handleTransferAllReady(true), 1500);
+            } else {
+              // Процесс завершен
+              console.log('✅ Перенос завершен');
+              toast.success(
+                `✅ Процесс завершен!\nВсего перенесено товаров\nОсталось в очереди: ${count}`,
+                { id: 'transfer', duration: 5000 }
+              );
+            }
           }
         }
       } else {

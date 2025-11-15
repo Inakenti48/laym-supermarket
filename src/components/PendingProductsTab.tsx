@@ -65,11 +65,20 @@ export const PendingProductsTab = () => {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
-        const { data, count } = await supabase
+        console.log('Загрузка товаров, страница:', currentPage, 'от', from, 'до', to);
+
+        const { data, count, error } = await supabase
           .from('vremenno_product_foto')
           .select('*', { count: 'exact' })
           .order('created_at', { ascending: true })
           .range(from, to);
+
+        console.log('Результат запроса:', { data, count, error });
+
+        if (error) {
+          console.error('Ошибка при загрузке товаров:', error);
+          throw error;
+        }
 
         if (!isMounted) return;
 
@@ -91,11 +100,14 @@ export const PendingProductsTab = () => {
             barcodePhoto: item.barcode_photo || undefined,
             photos: item.image_url ? [item.image_url] : [],
           }));
+          console.log('Сформированные продукты:', products.length, 'шт');
           setPendingProducts(products);
         } else {
+          console.log('Нет данных для отображения');
           setPendingProducts([]);
         }
       } catch (error: any) {
+        console.error('Ошибка при загрузке товаров:', error);
         if (isMounted) {
           setPendingProducts([]);
           setTotalCount(0);

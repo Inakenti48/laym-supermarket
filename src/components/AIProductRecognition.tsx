@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
+import { retryOperation } from '@/lib/retryUtils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -224,22 +225,31 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         .eq('product_name', productName)
         .maybeSingle();
 
-      // Если товара нет, добавляем в временную базу
+      // Если товара нет, добавляем в временную базу с повторными попытками
       if (!existing) {
-        const { error: dbError } = await supabase
-          .from('vremenno_product_foto')
-          .insert({
-            barcode,
-            product_name: productName,
-            image_url: urlData.publicUrl,
-            storage_path: filePath
-          });
+        await retryOperation(
+          async () => {
+            const { error: dbError } = await supabase
+              .from('vremenno_product_foto')
+              .insert({
+                barcode,
+                product_name: productName,
+                image_url: urlData.publicUrl,
+                storage_path: filePath
+              });
 
-        if (dbError) {
-          console.error('Database insert error:', dbError);
-        } else {
-          console.log('Photo saved to temporary storage');
-        }
+            if (dbError) throw dbError;
+            
+            console.log('Photo saved to temporary storage');
+          },
+          {
+            maxAttempts: 5,
+            initialDelay: 1000,
+            onRetry: (attempt) => {
+              console.log(`🔄 Повторная попытка сохранения в очередь (попытка ${attempt})...`);
+            }
+          }
+        );
       } else {
         console.log('Product already exists in temporary storage');
       }

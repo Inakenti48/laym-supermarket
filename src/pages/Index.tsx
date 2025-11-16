@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, TrendingUp
 } from 'lucide-react';
 import { DashboardTab } from '@/components/DashboardTab';
 import { DatabaseBackupButton } from '@/components/DatabaseBackupButton';
@@ -18,6 +18,7 @@ import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
 import { CancellationsTab } from '@/components/CancellationsTab';
 import { PendingProductsTab } from '@/components/PendingProductsTab';
 import { RoleSelector } from '@/components/RoleSelector';
+import { WBAnalyticsTab } from '@/components/WBAnalyticsTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -26,7 +27,7 @@ import { User } from '@supabase/supabase-js';
 import { AppRole, getUserRole } from '@/lib/supabaseAuth';
 import { loginByUsername, getCurrentSession, getCurrentLoginUser, getCurrentLoginUserSync, logoutUser } from '@/lib/loginAuth';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'wb-analytics';
 
 const Index = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -49,6 +50,7 @@ const Index = () => {
     { id: 'diagnostics' as Tab, label: 'Диагностика', icon: Settings, roles: ['admin'] },
     { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
     { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
+    { id: 'wb-analytics' as Tab, label: 'WB Аналитика', icon: TrendingUp, roles: ['admin'] },
     { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
   ];
 
@@ -243,7 +245,8 @@ const Index = () => {
             {activeTab === 'logs' && <LogsTab />}
             {activeTab === 'employees' && <EmployeesTab />}
             {activeTab === 'cancellations' && <CancellationsTab />}
-            {!['dashboard', 'cashier', 'cashier2', 'inventory', 'pending-products', 'suppliers', 'reports', 'expiry', 'diagnostics', 'logs', 'employees', 'cancellations'].includes(activeTab) && (
+            {activeTab === 'wb-analytics' && <WBAnalyticsTab />}
+            {!['dashboard', 'cashier', 'cashier2', 'inventory', 'pending-products', 'suppliers', 'reports', 'expiry', 'diagnostics', 'logs', 'employees', 'cancellations', 'wb-analytics'].includes(activeTab) && (
               <div className="text-center py-12">
                 <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
                 <p className="text-muted-foreground">

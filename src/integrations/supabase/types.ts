@@ -554,6 +554,42 @@ export type Database = {
         }
         Relationships: []
       }
+      wb_analytics_tasks: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          error_message: string | null
+          id: string
+          parameters: Json
+          result: Json | null
+          status: string
+          task_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          parameters: Json
+          result?: Json | null
+          status?: string
+          task_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          parameters?: Json
+          result?: Json | null
+          status?: string
+          task_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

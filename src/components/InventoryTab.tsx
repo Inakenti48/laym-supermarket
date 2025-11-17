@@ -878,7 +878,8 @@ export const InventoryTab = () => {
           
           if (selectError) {
             console.error('❌ Ошибка проверки:', selectError);
-            toast.error('❌ Ошибка сохранения товара');
+            toast.error('❌ Ошибка проверки товара в базе');
+            return;
           } else if (existing) {
             // Товар существует - обновляем количество
             const { error: updateError } = await supabase
@@ -895,7 +896,8 @@ export const InventoryTab = () => {
           
             if (updateError) {
               console.error('❌ Ошибка обновления товара:', updateError);
-              toast.error('❌ Ошибка сохранения товара');
+              toast.error('❌ Ошибка обновления товара в базе');
+              return;
             } else {
               toast.success(`✅ "${barcodeData.name}" обновлен в базе (количество +1)!`);
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - обновлен`);
@@ -921,7 +923,8 @@ export const InventoryTab = () => {
 
             if (insertError) {
               console.error('❌ Ошибка создания товара:', insertError);
-              toast.error('❌ Ошибка сохранения товара');
+              toast.error('❌ Ошибка создания товара в базе');
+              return;
             } else {
               toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`);
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - сохранен автоматически`);
@@ -929,22 +932,20 @@ export const InventoryTab = () => {
           }
 
           // После успешного сохранения очищаем форму
-          if (!selectError) {
-            setCurrentProduct({
-              barcode: '',
-              name: '',
-              category: '',
-              purchasePrice: '',
-              retailPrice: '',
-              quantity: '',
-              unit: 'шт',
-              expiryDate: '',
-              supplier: '',
-            });
-            setPhotos([]);
-            setTempFrontPhoto('');
-            setTempBarcodePhoto('');
-          }
+          setCurrentProduct({
+            barcode: '',
+            name: '',
+            category: '',
+            purchasePrice: '',
+            retailPrice: '',
+            quantity: '',
+            unit: 'шт',
+            expiryDate: '',
+            supplier: '',
+          });
+          setPhotos([]);
+          setTempFrontPhoto('');
+          setTempBarcodePhoto('');
         } else {
           // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с заполненной категорией)
           console.log('📋 Цен нет, добавляем в очередь с категорией...');

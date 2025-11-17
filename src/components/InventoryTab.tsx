@@ -91,7 +91,7 @@ export const InventoryTab = () => {
           purchasePrice: '',
           retailPrice: '',
           quantity: '',
-          unit: 'шт' as 'шт' | 'кг',
+          unit: 'шт',
           expiryDate: '',
           supplier: '',
         };
@@ -104,7 +104,7 @@ export const InventoryTab = () => {
       purchasePrice: '',
       retailPrice: '',
       quantity: '',
-      unit: 'шт' as 'шт' | 'кг',
+      unit: 'шт',
       expiryDate: '',
       supplier: '',
     };
@@ -622,7 +622,7 @@ export const InventoryTab = () => {
               purchasePrice: item.purchase_price ? String(item.purchase_price) : '',
               retailPrice: item.retail_price ? String(item.retail_price) : '',
               quantity: item.quantity ? String(item.quantity) : '1',
-              unit: (item.unit === 'кг' ? 'кг' : 'шт') as 'кг' | 'шт',
+              unit: 'шт',
               supplier: item.supplier || '',
               expiryDate: item.expiry_date || '',
               photos: photos,
@@ -821,7 +821,7 @@ export const InventoryTab = () => {
         let hasPrices = false;
         let finalPurchasePrice = '';
         let finalRetailPrice = '';
-        let finalUnit: 'шт' | 'кг' = 'шт';
+        let finalUnit = 'шт';
         let finalSupplier = '';
         let finalCategory = barcodeData.category || '';
         
@@ -1387,7 +1387,7 @@ export const InventoryTab = () => {
             purchasePrice: parseFloat(product.purchasePrice),
             retailPrice: parseFloat(product.retailPrice),
             quantity: parseFloat(product.quantity),
-            unit: product.unit,
+            unit: 'шт' as const,
             expiryDate: product.expiryDate || undefined,
             photos: allPhotos,
             paymentType: 'full',
@@ -2104,20 +2104,11 @@ export const InventoryTab = () => {
                 <label className="text-sm md:text-xs font-medium mb-1.5 block">
                   Ед. <span className="text-destructive">*</span>
                 </label>
-                <Select
-                  value={currentProduct.unit}
-                  onValueChange={(value: 'шт' | 'кг') => 
-                    setCurrentProduct({ ...currentProduct, unit: value })
-                  }
-                >
-                  <SelectTrigger className="text-sm md:text-sm h-11 md:h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="шт" className="text-sm md:text-xs">шт</SelectItem>
-                    <SelectItem value="кг" className="text-sm md:text-xs">кг</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  value="шт"
+                  disabled
+                  className="text-sm md:text-sm h-11 md:h-9 bg-muted"
+                />
               </div>
             </div>
 

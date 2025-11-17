@@ -659,13 +659,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           toast.success(`📦 Название распознано: ${scannedName}`);
         }
         
-        setTimeout(() => setNotification(''), 1000);
+        setNotification('✅ Форма заполнена!');
         
-        // Сбрасываем состояние для следующего сканирования
-        console.log('🔄 Сброс состояния после успешного распознавания');
-        setDualPhotoStep('none');
-        setTempFrontPhoto('');
-        setTempBarcodePhoto('');
+        // НЕ сбрасываем состояние автоматически - пользователь закроет сканер сам
+        // setDualPhotoStep('none');
+        // setTempFrontPhoto('');
+        // setTempBarcodePhoto('');
       } else {
         console.log('⚠️ Ничего не распознано');
         setNotification('❌ Ничего не распознано');

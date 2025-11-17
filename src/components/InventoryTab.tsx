@@ -968,9 +968,10 @@ export const InventoryTab = () => {
           addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь`);
         }
         
-        // Закрываем сканер
-        setShowAIScanner(false);
-        setAiScanMode('product');
+        // Не закрываем сканер автоматически - пользователь сам закроет
+        // Показываем успешное сообщение
+        toast.success(`✅ Форма заполнена! Проверьте поля ниже и нажмите "Добавить товар"`);
+        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - форма заполнена`);
         
       } catch (error: any) {
         console.error('❌ Ошибка handleScan:', error);

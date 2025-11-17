@@ -26,52 +26,49 @@ export const BarcodeScanner = ({ onScan, autoFocus = false }: BarcodeScannerProp
 
   // Keyboard scanner listener (USB scanners act as keyboards)
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       // Игнорируем только если фокус на textarea или contenteditable элементах
       const activeElement = document.activeElement;
       if (activeElement?.tagName === 'TEXTAREA' || 
           activeElement?.getAttribute('contenteditable') === 'true') {
         return;
       }
-      
-      // Для обычных input - пропускаем только если вводится текст (не штрихкод)
-      // Сканеры вводят очень быстро, поэтому если это не наш input и происходит быстрый ввод - это сканер
-      if (activeElement?.tagName === 'INPUT' && activeElement !== inputRef.current) {
-        // Разрешаем сканирование, если это быстрый ввод (скорее всего сканер)
-        // Сканеры вводят символы менее чем за 50мс между нажатиями
-      }
 
       // Enter - завершение сканирования
-      if (e.key === 'Enter' && barcodeBufferRef.current) {
-        e.preventDefault();
-        const scannedBarcode = barcodeBufferRef.current;
-        barcodeBufferRef.current = '';
-        
-        if (scannedBarcode.length >= 3) {
+      if (e.key === 'Enter') {
+        if (barcodeBufferRef.current.length >= 3) {
+          e.preventDefault();
+          const scannedBarcode = barcodeBufferRef.current;
+          console.log('🔍 Штрихкод отсканирован:', scannedBarcode);
+          barcodeBufferRef.current = '';
           onScan(scannedBarcode);
           setBarcode('');
-          toast.success('Штрихкод отсканирован');
+          toast.success(`✅ Отсканирован: ${scannedBarcode}`);
         }
         return;
       }
 
-      // Накапливаем символы
-      if (e.key.length === 1) {
+      // Накапливаем цифры и буквы (штрихкоды обычно содержат только их)
+      if (/^[0-9a-zA-Z]$/.test(e.key)) {
         barcodeBufferRef.current += e.key;
+        console.log('📝 Буфер:', barcodeBufferRef.current);
         
-        // Сброс буфера через 100мс (сканеры вводят очень быстро)
+        // Сброс буфера через 150мс (сканеры вводят очень быстро)
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
         }
         timeoutRef.current = setTimeout(() => {
+          if (barcodeBufferRef.current.length > 0) {
+            console.log('⏱️ Таймаут - сброс буфера');
+          }
           barcodeBufferRef.current = '';
-        }, 100);
+        }, 150);
       }
     };
 
-    window.addEventListener('keypress', handleKeyPress);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keypress', handleKeyPress);
+      window.removeEventListener('keydown', handleKeyDown);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

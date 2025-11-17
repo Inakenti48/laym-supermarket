@@ -16,7 +16,7 @@ export interface PendingProduct {
   purchasePrice: string;
   retailPrice: string;
   quantity: string;
-  unit: 'шт' | 'кг';
+  unit: string;
   expiryDate?: string;
   supplier?: string;
   photos: string[];

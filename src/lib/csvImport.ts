@@ -66,7 +66,7 @@ export const importCSVProducts = async (csvContent: string, userId: string): Pro
         barcode: product.barcode,
         name: product.name,
         category: product.category,
-        unit: product.unit,
+        unit: 'шт' as const,
         quantity: product.quantity,
         purchasePrice: product.purchasePrice,
         retailPrice: product.retailPrice,

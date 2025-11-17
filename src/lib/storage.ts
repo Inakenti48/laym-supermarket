@@ -9,7 +9,7 @@ export interface StoredProduct {
   purchasePrice: number;
   retailPrice: number;
   quantity: number;
-  unit: 'шт' | 'кг';
+  unit: 'шт';
   expiryDate?: string;
   photos: string[];
   paymentType: 'full' | 'partial' | 'debt';
@@ -138,7 +138,7 @@ export const getStoredProducts = async (): Promise<StoredProduct[]> => {
     purchasePrice: Number(p.purchase_price),
     retailPrice: Number(p.sale_price),
     quantity: p.quantity,
-    unit: p.unit as 'шт' | 'кг',
+    unit: 'шт' as const,
     expiryDate: p.expiry_date || undefined,
     photos: [],
     paymentType: p.payment_type as 'full' | 'partial' | 'debt',
@@ -170,7 +170,7 @@ export const findProductByBarcode = async (barcode: string): Promise<StoredProdu
     purchasePrice: Number(data.purchase_price),
     retailPrice: Number(data.sale_price),
     quantity: data.quantity,
-    unit: data.unit as 'шт' | 'кг',
+    unit: 'шт' as const,
     expiryDate: data.expiry_date || undefined,
     photos: [],
     paymentType: data.payment_type as 'full' | 'partial' | 'debt',
@@ -237,7 +237,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
           purchasePrice: Number(data.purchase_price),
           retailPrice: Number(data.sale_price),
           quantity: data.quantity,
-          unit: data.unit as 'шт' | 'кг',
+          unit: 'шт' as const,
           expiryDate: data.expiry_date || undefined,
           photos: [],
           paymentType: data.payment_type as 'full' | 'partial' | 'debt',
@@ -299,7 +299,7 @@ export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdat
           purchasePrice: Number(data.purchase_price),
           retailPrice: Number(data.sale_price),
           quantity: data.quantity,
-          unit: data.unit as 'шт' | 'кг',
+          unit: 'шт' as const,
           expiryDate: data.expiry_date || undefined,
           photos: product.photos || [],
           paymentType: data.payment_type as 'full' | 'partial' | 'debt',

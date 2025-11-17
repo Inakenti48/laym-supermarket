@@ -634,8 +634,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       // Извлекаем данные из ответа
       const scannedBarcode = scanData?.barcode || '';
       const scannedName = scanData?.name || '';
+      const scannedCategory = scanData?.category || '';
 
-      console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName });
+      console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName, scannedCategory });
 
       if (scannedBarcode || scannedName) {
         // КРИТИЧНО: Проверяем существующий товар в базе перед добавлением
@@ -658,7 +659,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setPendingRecognitionData({
             barcode: scannedBarcode,
             name: scannedName,
-            category: '',
+            category: scannedCategory,
             frontPhoto: tempFrontPhoto,
             barcodePhoto: tempBarcodePhoto
           });
@@ -678,7 +679,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         onProductFound({
           barcode: scannedBarcode,
           name: scannedName,
-          category: '',
+          category: scannedCategory,
           frontPhoto: tempFrontPhoto,
           barcodePhoto: tempBarcodePhoto
         });

@@ -262,9 +262,8 @@ export const PendingProductsTab = () => {
     // Запрашиваем подтверждение только при первом ручном запуске
     if (!autoMode) {
       const confirmTransfer = window.confirm(
-        `Запустить автоматический перенос ВСЕХ готовых товаров?\n\n` +
-        `Процесс будет продолжаться автоматически, пока есть готовые товары.\n` +
-        `Незаполненные останутся в очереди.`
+        `Запустить перенос ВСЕХ готовых товаров?\n\n` +
+        `Незаполненные товары останутся в очереди.`
       );
 
       if (!confirmTransfer) return;
@@ -272,73 +271,112 @@ export const PendingProductsTab = () => {
 
     try {
       if (!autoMode) {
-        toast.loading('🔄 Запуск автоматического переноса...', { id: 'transfer' });
+        toast.loading('🔄 Запуск переноса...', { id: 'transfer' });
       }
       
       console.log('🚀 Запуск переноса готовых товаров...');
-      const { data, error } = await supabase.functions.invoke('transfer-queue-to-products');
+      
+      // Получаем все готовые товары из очереди
+      const { data: queueItems, error } = await supabase
+        .from('vremenno_product_foto')
+        .select('*')
+        .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Ошибка вызова функции:', error);
-        toast.error('Ошибка при переносе товаров', { id: 'transfer' });
+        console.error('Ошибка загрузки очереди:', error);
+        toast.error('Ошибка при загрузке товаров', { id: 'transfer' });
         return;
       }
 
-      if (data.success) {
-        console.log(`✅ Перенесено: ${data.transferred}, Пропущено: ${data.skipped}`);
-        
-        // Обновляем сообщение о прогрессе
-        toast.loading(
-          `✅ Перенесено: ${data.transferred} | Осталось: ${data.skipped}`,
-          { id: 'transfer' }
-        );
-        
-        // Перезагружаем очередь - сбрасываем на первую страницу
-        setCurrentPage(1);
-        
-        // Небольшая задержка перед следующей проверкой
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Получаем общее количество для проверки готовых товаров
-        const { count, error: countError } = await supabase
-          .from('vremenno_product_foto')
-          .select('*', { count: 'exact', head: true });
-        
-        if (!countError && count !== null) {
-          setTotalCount(count);
-          
-          // Загружаем только первую страницу для проверки готовых товаров
-          const { data: firstPageProducts, error: loadError } = await supabase
-            .from('vremenno_product_foto')
-            .select('*')
-            .order('created_at', { ascending: true })
-            .range(0, ITEMS_PER_PAGE - 1);
-          
-          if (!loadError && firstPageProducts) {
-            // Проверяем, есть ли еще готовые товары для переноса на первой странице
-            const hasMoreReady = firstPageProducts.some((item: any) => 
-              item.barcode && item.product_name && item.category && 
-              item.purchase_price && item.retail_price && item.quantity &&
-              (item.front_photo || item.barcode_photo || item.image_url)
-            );
-            
-            if (hasMoreReady && data.transferred > 0) {
-              // Продолжаем автоматический перенос
-              console.log('🔄 Обнаружены еще готовые товары, продолжаем...');
-              setTimeout(() => handleTransferAllReady(true), 1500);
-            } else {
-              // Процесс завершен
-              console.log('✅ Перенос завершен');
-              toast.success(
-                `✅ Процесс завершен!\nВсего перенесено товаров\nОсталось в очереди: ${count}`,
-                { id: 'transfer', duration: 5000 }
-              );
-            }
-          }
-        }
-      } else {
-        toast.error(`Ошибка: ${data.error}`, { id: 'transfer' });
+      if (!queueItems || queueItems.length === 0) {
+        toast.info('Нет товаров для переноса', { id: 'transfer' });
+        return;
       }
+
+      const loginUser = await getCurrentLoginUser();
+      const userId = loginUser?.id;
+      
+      if (!userId) {
+        toast.error('Ошибка: не удалось определить пользователя', { id: 'transfer' });
+        return;
+      }
+
+      let transferred = 0;
+      let skipped = 0;
+
+      for (const item of queueItems) {
+        // Проверяем, готов ли товар
+        const isReady = item.barcode && item.product_name && item.category && 
+                       item.purchase_price && item.retail_price && item.quantity &&
+                       (item.front_photo || item.barcode_photo || item.image_url);
+
+        if (!isReady) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          const supplier = suppliers.find(s => s.name === item.supplier);
+
+          const paymentType = (item.payment_type === 'debt' || item.payment_type === 'partial') 
+            ? item.payment_type 
+            : 'full';
+
+          const productData = {
+            barcode: String(item.barcode),
+            name: String(item.product_name),
+            category: String(item.category),
+            purchasePrice: parseFloat(String(item.purchase_price)),
+            retailPrice: parseFloat(String(item.retail_price)),
+            quantity: parseFloat(String(item.quantity)),
+            unit: 'шт' as const,
+            expiryDate: item.expiry_date ? String(item.expiry_date) : undefined,
+            supplier: item.supplier ? String(item.supplier) : undefined,
+            supplierPhone: supplier?.phone,
+            paymentType: paymentType as 'full' | 'partial' | 'debt',
+            paidAmount: Number(item.paid_amount) || (parseFloat(String(item.purchase_price)) * parseFloat(String(item.quantity))),
+            debtAmount: Number(item.debt_amount) || 0,
+            addedBy: String(userId),
+            photos: [],
+          };
+
+          await saveProduct(productData, userId);
+
+          const allPhotos = [
+            ...(item.front_photo ? [item.front_photo] : []),
+            ...(item.barcode_photo ? [item.barcode_photo] : []),
+            ...(item.image_url ? [item.image_url] : [])
+          ];
+
+          for (const photo of allPhotos) {
+            await saveProductImage(item.barcode, item.product_name, photo, userId);
+          }
+
+          await supabase
+            .from('vremenno_product_foto')
+            .delete()
+            .eq('id', item.id);
+
+          addLog(`Товар ${item.product_name} (${item.barcode}) перенесен из очереди`);
+          transferred++;
+
+          if (transferred % 5 === 0) {
+            toast.loading(`✅ Перенесено: ${transferred}`, { id: 'transfer' });
+          }
+        } catch (error) {
+          console.error(`Ошибка при переносе товара ${item.product_name}:`, error);
+          skipped++;
+        }
+      }
+
+      setCurrentPage(1);
+      
+      toast.success(
+        `✅ Перенос завершен!\nПеренесено: ${transferred} | Пропущено: ${skipped}`,
+        { id: 'transfer', duration: 5000 }
+      );
+      
+      console.log(`✅ Перенос завершен. Перенесено: ${transferred}, Пропущено: ${skipped}`);
     } catch (error: any) {
       console.error('Ошибка переноса:', error);
       toast.error('Ошибка при переносе товаров', { id: 'transfer' });

@@ -42,7 +42,7 @@ export const DashboardTab = () => {
       const totalProducts = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
       const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.quantity || 0)), 0);
 
-      // Подсчет товаров с низким остатком (менее 10 единиц)
+      // Подсчет товаров с низким остатком (менее 10 шт)
       const lowStockCount = products.filter(p => (p.quantity || 0) < 10).length;
 
       // Истекающие товары (в течение 3 дней)

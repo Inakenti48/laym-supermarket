@@ -1118,7 +1118,7 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                           <span className="font-semibold text-primary">{product.retailPrice} ₽</span>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                          Остаток: {product.quantity} {product.unit}
+                          Остаток: {product.quantity} шт
                         </div>
                       </button>
                     ))}

@@ -745,7 +745,7 @@ export const SuppliersTab = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-2 block">Цена за единицу *</label>
+              <label className="text-sm font-medium mb-2 block">Цена за шт *</label>
               <Input
                 type="number"
                 step="0.01"

@@ -882,7 +882,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
               
               {mode !== 'dual' && (
                 <div className="flex items-center gap-3 justify-center">
-                  <span className="text-foreground text-sm font-medium">Штук:</span>
+                  <span className="text-foreground text-sm font-medium">шт:</span>
                   <Button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     variant="outline"

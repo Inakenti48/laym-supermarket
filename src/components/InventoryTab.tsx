@@ -760,7 +760,7 @@ export const InventoryTab = () => {
           }
         }
         
-        toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} ${existingProduct.unit})`);
+        toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} шт)`);
         addLog(`Автодобавление: ${existingProduct.name} +1 (всего: ${newQuantity})`);
         
         setShowAIScanner(false);
@@ -1402,7 +1402,7 @@ export const InventoryTab = () => {
           if (saved) {
             successCount++;
             savedProductIds.push(product.id);
-            addLog(`Добавлен товар: ${product.name} (${product.quantity} ${product.unit})`);
+            addLog(`Добавлен товар: ${product.name} (${product.quantity} шт)`);
             console.log(`✅ [${i + 1}/${totalProducts}] Товар "${product.name}" сохранен`);
           } else {
             errorCount++;

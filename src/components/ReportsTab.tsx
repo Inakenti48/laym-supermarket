@@ -207,7 +207,7 @@ export const ReportsTab = () => {
                       <TableCell>{product.category}</TableCell>
                       <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
                       <TableCell className="text-right">
-                        {product.quantity} {product.unit}
+                        {product.quantity} шт
                       </TableCell>
                       <TableCell className="text-right">{product.purchasePrice}₽</TableCell>
                       <TableCell className="text-right">{product.retailPrice}₽</TableCell>

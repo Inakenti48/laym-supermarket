@@ -303,28 +303,47 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url);
-    const path = url.pathname;
+    const action = url.searchParams.get('action') || 'tasks';
 
-    // GET /task/{id} - получить статус задачи
-    if (req.method === 'GET' && path.includes('/task/')) {
-      const taskId = path.split('/').pop();
+    // GET - получить все задачи или конкретную задачу
+    if (req.method === 'GET') {
+      if (action === 'tasks') {
+        const { data: tasks, error } = await supabaseClient
+          .from('wb_analytics_tasks')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+
+        return new Response(
+          JSON.stringify(tasks),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
-      const { data: task, error } = await supabaseClient
-        .from('wb_analytics_tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
+      if (action === 'task') {
+        const taskId = url.searchParams.get('id');
+        if (!taskId) throw new Error('Task ID is required');
+        
+        const { data: task, error } = await supabaseClient
+          .from('wb_analytics_tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      return new Response(
-        JSON.stringify(task),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+        return new Response(
+          JSON.stringify(task),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    // POST /search_stock - создать задачу мониторинга стока
-    if (req.method === 'POST' && path.includes('/search_stock')) {
+    // POST - создать задачу
+    if (req.method === 'POST') {
+      if (action === 'search_stock') {
       const params: SearchParams = await req.json();
       
       if (!params.query) {
@@ -364,58 +383,42 @@ serve(async (req) => {
       );
     }
 
-    // POST /category_sales - создать задачу анализа категории
-    if (req.method === 'POST' && path.includes('/category_sales')) {
-      const params: CategoryParams = await req.json();
-      
-      if (!params.catalogUrl) {
-        throw new Error('catalogUrl parameter is required');
+      if (action === 'category_sales') {
+        const params: CategoryParams = await req.json();
+        
+        if (!params.catalogUrl) {
+          throw new Error('catalogUrl parameter is required');
+        }
+
+        const { data: task, error: insertError } = await supabaseClient
+          .from('wb_analytics_tasks')
+          .insert({
+            task_type: 'category_sales',
+            parameters: params,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        const serviceRoleClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        EdgeRuntime.waitUntil(
+          analyzeCategorySales(serviceRoleClient, task.id, params)
+        );
+
+        return new Response(
+          JSON.stringify({ 
+            taskId: task.id,
+            message: 'Task started',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-
-      const { data: task, error: insertError } = await supabaseClient
-        .from('wb_analytics_tasks')
-        .insert({
-          task_type: 'category_sales',
-          parameters: params,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      const serviceRoleClient = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
-      EdgeRuntime.waitUntil(
-        analyzeCategorySales(serviceRoleClient, task.id, params)
-      );
-
-      return new Response(
-        JSON.stringify({ 
-          taskId: task.id,
-          message: 'Task started',
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // GET /tasks - получить все задачи пользователя
-    if (req.method === 'GET' && path.includes('/tasks')) {
-      const { data: tasks, error } = await supabaseClient
-        .from('wb_analytics_tasks')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-
-      return new Response(
-        JSON.stringify(tasks),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
     return new Response(

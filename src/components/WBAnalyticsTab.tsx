@@ -37,8 +37,8 @@ export const WBAnalyticsTab = () => {
 
   const fetchTasks = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('wb-analytics/tasks', {
-        method: 'GET',
+      const { data, error } = await supabase.functions.invoke('wb-analytics', {
+        body: { action: 'tasks' },
       });
 
       if (error) throw error;
@@ -85,8 +85,7 @@ export const WBAnalyticsTab = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('wb-analytics/search_stock', {
-        method: 'POST',
+      const { data, error } = await supabase.functions.invoke('wb-analytics?action=search_stock', {
         body: {
           query: stockQuery,
           limit: stockLimit,
@@ -117,8 +116,7 @@ export const WBAnalyticsTab = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('wb-analytics/category_sales', {
-        method: 'POST',
+      const { data, error } = await supabase.functions.invoke('wb-analytics?action=category_sales', {
         body: {
           catalogUrl: categoryUrl,
           limit: categoryLimit,

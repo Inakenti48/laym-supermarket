@@ -584,18 +584,30 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleAIScan = async () => {
     if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
       console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
+      toast.warning('⚠️ Нужны обе фотографии для распознавания');
       return;
     }
     
     console.log('🚀 handleAIScan НАЧАЛО: AI распознавание двух фото');
+    console.log('📸 Размеры фото:', {
+      front: tempFrontPhoto.length,
+      barcode: tempBarcodePhoto.length
+    });
+    
     setIsProcessing(true);
     setNotification('🔍 AI сканирование фотографий...');
+    toast.info('🔍 Отправляем фотографии на распознавание...');
     
     try {
       // Сжимаем изображения перед отправкой
       console.log('📦 Сжатие изображений...');
       const compressedFront = await compressForAI(tempFrontPhoto);
       const compressedBarcode = await compressForAI(tempBarcodePhoto);
+      
+      console.log('📦 После сжатия:', {
+        front: compressedFront.length,
+        barcode: compressedBarcode.length
+      });
       
       // КРИТИЧНО: Вызываем ТОЛЬКО scan-product-photos для режима dual
       console.log('📷 Вызов scan-product-photos edge function...');
@@ -938,17 +950,31 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 </Button>
               )}
               
-              {/* Кнопка AI распознавания после двух фото */}
               {mode === 'dual' && dualPhotoStep === 'ready' && (
-                <div className="space-y-2">
+                <div className="space-y-2 animate-in slide-in-from-bottom-4">
+                  <div className="bg-green-50 dark:bg-green-950 border-2 border-green-500 rounded-lg p-3 mb-2">
+                    <p className="text-sm font-bold text-green-700 dark:text-green-300 text-center flex items-center justify-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Обе фотографии готовы! Нажмите кнопку ниже
+                    </p>
+                  </div>
                   <Button
                     onClick={handleAIScan}
                     size="lg"
-                    className="rounded-full shadow-lg w-full bg-green-600 hover:bg-green-700"
+                    className="rounded-full shadow-xl w-full bg-green-600 hover:bg-green-700 text-white font-bold text-base py-7 animate-pulse"
                     disabled={!cameraReady || isProcessing || !tempFrontPhoto || !tempBarcodePhoto}
                   >
-                    <CheckCircle className="h-5 w-5 mr-2" />
-                    ✅ Распознать товар
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                        Распознавание...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-6 w-6 mr-2" />
+                        ✅ РАСПОЗНАТЬ ТОВАР
+                      </>
+                    )}
                   </Button>
                   <Button
                     onClick={() => {
@@ -958,9 +984,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                       setDualPhotoStep('none');
                       toast.info('📸 Начните сначала: снимите лицевую сторону');
                     }}
-                    size="sm"
                     variant="outline"
+                    size="sm"
                     className="w-full"
+                    disabled={isProcessing}
                   >
                     🔄 Переснять
                   </Button>

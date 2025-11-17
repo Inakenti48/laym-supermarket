@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PhotoReportsTab } from './PhotoReportsTab';
 import { Card } from '@/components/ui/card';
-import { FileText, Image, TrendingUp } from 'lucide-react';
+import { FileText, Image, TrendingUp, X } from 'lucide-react';
 import { getAllProducts } from '@/lib/storage';
 import { getSuppliers } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Table,
@@ -21,6 +22,7 @@ export const ReportsTab = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -105,6 +107,11 @@ export const ReportsTab = () => {
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.value - a.value);
 
+  // Фильтрация товаров по выбранной категории
+  const filteredProducts = selectedCategory 
+    ? products.filter(p => p.category === selectedCategory)
+    : products;
+
   return (
     <div className="space-y-6">
       <div>
@@ -170,23 +177,50 @@ export const ReportsTab = () => {
 
           {/* Товары по категориям */}
           <Card className="p-6">
-            <h3 className="font-semibold text-lg mb-4">Товары по категориям</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg">Товары по категориям</h3>
+              {selectedCategory && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCategory(null)}
+                  className="h-8"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Показать все
+                </Button>
+              )}
+            </div>
             <div className="space-y-3">
               {categories.map((cat) => (
-                <div key={cat.name} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                  <div>
+                <button
+                  key={cat.name}
+                  onClick={() => setSelectedCategory(cat.name === selectedCategory ? null : cat.name)}
+                  className={`w-full flex items-center justify-between p-3 rounded-lg transition-all ${
+                    selectedCategory === cat.name
+                      ? 'bg-primary text-primary-foreground shadow-md scale-[1.02]'
+                      : 'bg-muted/50 hover:bg-muted hover:shadow-sm'
+                  }`}
+                >
+                  <div className="text-left">
                     <div className="font-medium">{cat.name}</div>
-                    <div className="text-sm text-muted-foreground">{cat.count} товаров</div>
+                    <div className={`text-sm ${selectedCategory === cat.name ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                      {cat.count} товаров
+                    </div>
                   </div>
-                  <Badge variant="secondary">{cat.value.toFixed(2)}₽</Badge>
-                </div>
+                  <Badge variant={selectedCategory === cat.name ? "secondary" : "secondary"}>
+                    {cat.value.toFixed(2)}₽
+                  </Badge>
+                </button>
               ))}
             </div>
           </Card>
 
           {/* Список всех товаров */}
           <Card className="p-6">
-            <h3 className="font-semibold text-lg mb-4">Все товары ({products.length})</h3>
+            <h3 className="font-semibold text-lg mb-4">
+              {selectedCategory ? `${selectedCategory} (${filteredProducts.length})` : `Все товары (${products.length})`}
+            </h3>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -201,7 +235,7 @@ export const ReportsTab = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <TableRow key={product.id}>
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.category}</TableCell>

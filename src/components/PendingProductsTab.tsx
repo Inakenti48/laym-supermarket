@@ -6,6 +6,7 @@ import { PendingProductItem, PendingProduct } from './PendingProductItem';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { saveProduct, saveProductImage } from '@/lib/storage';
+import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint';
 import { addLog } from '@/lib/auth';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { getCurrentLoginUser } from '@/lib/loginAuth';
@@ -227,7 +228,7 @@ export const PendingProductsTab = () => {
         photos: [],
       };
 
-      await saveProduct(productData, userId);
+      await saveProductWithBarcodeGeneration(productData, userId, true);
 
       const allPhotos = [
         ...(product.frontPhoto ? [product.frontPhoto] : []),
@@ -340,7 +341,7 @@ export const PendingProductsTab = () => {
             photos: [],
           };
 
-          await saveProduct(productData, userId);
+          await saveProductWithBarcodeGeneration(productData, userId, true);
 
           const allPhotos = [
             ...(item.front_photo ? [item.front_photo] : []),

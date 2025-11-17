@@ -639,40 +639,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName, scannedCategory });
 
       if (scannedBarcode || scannedName) {
-        // КРИТИЧНО: Проверяем существующий товар в базе перед добавлением
-        console.log('🔍 Проверяем наличие товара в базе...');
-        
-        const { data: existingProduct, error: checkError } = await supabase
-          .from('products')
-          .select('id, barcode, name, purchase_price, sale_price, quantity, unit, category, supplier')
-          .or(`barcode.eq.${scannedBarcode},name.ilike.%${scannedName}%`)
-          .maybeSingle();
-
-        if (checkError) {
-          console.error('Ошибка проверки товара:', checkError);
-        }
-
-        if (existingProduct) {
-          console.log('✅ Товар найден в базе:', existingProduct);
-          // Сохраняем данные для диалога подтверждения
-          setExistingProductData(existingProduct);
-          setPendingRecognitionData({
-            barcode: scannedBarcode,
-            name: scannedName,
-            category: scannedCategory,
-            frontPhoto: tempFrontPhoto,
-            barcodePhoto: tempBarcodePhoto
-          });
-          setShowExistingProductDialog(true);
-          setNotification('');
-          setIsProcessing(false);
-          return;
-        }
-
-        // Товар не найден - обычная логика
-        console.log('ℹ️ Товар не найден в базе, добавляем в очередь');
-        setNotification('✅ Данные извлечены!');
-        
         console.log('✅ Передача данных родителю с обеими фотографиями');
         
         // Передаем данные родителю с обеими фотографиями

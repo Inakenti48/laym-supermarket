@@ -7,6 +7,7 @@ import { getAllProducts } from '@/lib/storage';
 import { getSuppliers } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Table,
@@ -221,38 +222,48 @@ export const ReportsTab = () => {
             <h3 className="font-semibold text-lg mb-4">
               {selectedCategory ? `${selectedCategory} (${filteredProducts.length})` : `Все товары (${products.length})`}
             </h3>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Название</TableHead>
-                    <TableHead>Категория</TableHead>
-                    <TableHead>Штрихкод</TableHead>
-                    <TableHead className="text-right">Количество</TableHead>
-                    <TableHead className="text-right">Закуп</TableHead>
-                    <TableHead className="text-right">Розница</TableHead>
-                    <TableHead className="text-right">Итого</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">{product.name}</TableCell>
-                      <TableCell>{product.category}</TableCell>
-                      <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
-                      <TableCell className="text-right">
-                        {product.quantity} шт
-                      </TableCell>
-                      <TableCell className="text-right">{product.purchasePrice}₽</TableCell>
-                      <TableCell className="text-right">{product.retailPrice}₽</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {(product.purchasePrice * product.quantity).toFixed(2)}₽
-                      </TableCell>
+            <ScrollArea className="h-[600px] w-full">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Название</TableHead>
+                      <TableHead>Категория</TableHead>
+                      <TableHead>Штрихкод</TableHead>
+                      <TableHead className="text-right">Количество</TableHead>
+                      <TableHead className="text-right">Закуп</TableHead>
+                      <TableHead className="text-right">Розница</TableHead>
+                      <TableHead className="text-right">Итого</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          Нет товаров в этой категории
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell className="font-medium">{product.name}</TableCell>
+                          <TableCell>{product.category}</TableCell>
+                          <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
+                          <TableCell className="text-right">
+                            {product.quantity} шт
+                          </TableCell>
+                          <TableCell className="text-right">{product.purchasePrice}₽</TableCell>
+                          <TableCell className="text-right">{product.retailPrice}₽</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {(product.purchasePrice * product.quantity).toFixed(2)}₽
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </ScrollArea>
           </Card>
             </>
           )}

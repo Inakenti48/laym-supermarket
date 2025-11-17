@@ -44,7 +44,7 @@ export const ExpiryTab = () => {
       const removed = await removeExpiredProduct(product.barcode);
       if (removed) {
         const expiryDate = new Date(product.expiryDate!).toLocaleDateString('ru-RU');
-        const logMessage = `Убран с прилавки товар со сроком годности до ${expiryDate}: "${product.name}", количество: ${product.quantity} ${product.unit}`;
+        const logMessage = `Убран с прилавки товар со сроком годности до ${expiryDate}: "${product.name}", количество: ${product.quantity} шт`;
         await logSystemAction(logMessage);
         toast.success('Товар удален из прилавка');
         
@@ -104,7 +104,7 @@ export const ExpiryTab = () => {
                       <span className="font-medium">Штрихкод:</span> {product.barcode}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">Количество:</span> {product.quantity} {product.unit}
+                      <span className="font-medium">Количество:</span> {product.quantity} шт
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">

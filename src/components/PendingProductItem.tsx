@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface PendingProduct {
   id: string;
@@ -39,15 +39,51 @@ interface PendingProductItemProps {
   onRemove: (id: string) => void;
   onSave: (id: string) => void;
   onSupplierAdded: (supplier: Supplier) => void;
+  autoEdit?: boolean;
+  onMoveToNext?: () => void;
 }
 
-export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onSave, onSupplierAdded }: PendingProductItemProps) => {
+export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onSave, onSupplierAdded, autoEdit, onMoveToNext }: PendingProductItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState(product);
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (autoEdit && !isEditing) {
+      setIsEditing(true);
+      setEditedProduct(product);
+    }
+  }, [autoEdit]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && isEditing && autoEdit) {
+        e.preventDefault();
+        handleSaveAndNext();
+      }
+    };
+
+    if (autoEdit && isEditing) {
+      window.addEventListener('keydown', handleKeyDown);
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isEditing, autoEdit, editedProduct]);
+
+  const handleSaveAndNext = () => {
+    onUpdate(product.id, editedProduct);
+    setIsEditing(false);
+    if (onMoveToNext) {
+      onMoveToNext();
+    }
+  };
 
   // Собираем все фото в один массив
   const allPhotos = [
@@ -85,7 +121,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
     (product.frontPhoto || product.barcodePhoto || product.photos.length > 0);
 
   return (
-    <Card className="p-4 space-y-3 bg-background/50 shadow-sm hover:shadow-md transition-shadow">
+    <Card ref={cardRef} className={`p-4 space-y-3 bg-background/50 shadow-sm hover:shadow-md transition-shadow ${autoEdit && isEditing ? 'ring-2 ring-primary' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           {isEditing ? (

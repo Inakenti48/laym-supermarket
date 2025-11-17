@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ActiveDevicesMonitor } from './ActiveDevicesMonitor';
+import { WiFiPrinterSettings } from './WiFiPrinterSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Device {
@@ -150,6 +151,10 @@ export const DiagnosticsTab = () => {
         <TabsTrigger value="monitor">
           <Monitor className="h-4 w-4 mr-2" />
           Активные устройства
+        </TabsTrigger>
+        <TabsTrigger value="printer">
+          <Settings className="h-4 w-4 mr-2" />
+          Wi-Fi Принтер
         </TabsTrigger>
       </TabsList>
 
@@ -339,6 +344,10 @@ export const DiagnosticsTab = () => {
 
       <TabsContent value="monitor">
         <ActiveDevicesMonitor />
+      </TabsContent>
+
+      <TabsContent value="printer">
+        <WiFiPrinterSettings />
       </TabsContent>
     </Tabs>
   );

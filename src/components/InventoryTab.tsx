@@ -18,6 +18,7 @@ import { ProductReturnsTab } from './ProductReturnsTab';
 import { addLog } from '@/lib/auth';
 import { toast } from 'sonner';
 import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage } from '@/lib/storage';
+import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -1397,13 +1398,18 @@ export const InventoryTab = () => {
             supplier: product.supplier || undefined,
           };
 
-          const saved = await saveProduct(productData, currentUserLogin || 'unknown');
+          const saved = await saveProductWithBarcodeGeneration(productData, currentUserId, true);
           
-          if (saved) {
+          if (saved.success) {
             successCount++;
             savedProductIds.push(product.id);
             addLog(`Добавлен товар: ${product.name} (${product.quantity} шт)`);
             console.log(`✅ [${i + 1}/${totalProducts}] Товар "${product.name}" сохранен`);
+            
+            // Если были сгенерированы новые штрих-коды, добавляем информацию в лог
+            if (saved.isDuplicate && saved.generatedBarcodes) {
+              console.log(`  🏷️ Сгенерировано ${saved.generatedBarcodes.length} новых штрих-кодов`);
+            }
           } else {
             errorCount++;
             console.error(`❌ [${i + 1}/${totalProducts}] Не удалось сохранить "${product.name}"`);

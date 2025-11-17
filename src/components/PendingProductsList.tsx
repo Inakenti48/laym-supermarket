@@ -1,3 +1,4 @@
+import React from 'react';
 import { Package, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,6 +24,10 @@ interface PendingProductsListProps {
   onSupplierAdded: (supplier: Supplier) => void;
 }
 
+interface ExtendedPendingProduct extends PendingProduct {
+  isAutoEditing?: boolean;
+}
+
 export const PendingProductsList = ({
   products,
   suppliers,
@@ -33,10 +38,18 @@ export const PendingProductsList = ({
   onClearAll,
   onSupplierAdded,
 }: PendingProductsListProps) => {
+  const [currentEditingIndex, setCurrentEditingIndex] = React.useState<number>(0);
+
   const hasCompleteProducts = products.length > 0 && products.some(p => 
     p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
     (p.frontPhoto || p.barcodePhoto || (p.photos && p.photos.length > 0))
   );
+
+  const handleMoveToNext = () => {
+    if (currentEditingIndex < products.length - 1) {
+      setCurrentEditingIndex(currentEditingIndex + 1);
+    }
+  };
 
   return (
     <Card className="w-full bg-muted/30">
@@ -77,8 +90,8 @@ export const PendingProductsList = ({
             <p className="text-sm mt-2">Отсканируйте товары для добавления</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((product) => (
+          <div className="flex flex-col gap-3">
+            {products.map((product, index) => (
               <PendingProductItem
                 key={product.id}
                 product={product}
@@ -87,6 +100,8 @@ export const PendingProductsList = ({
                 onRemove={onRemoveProduct}
                 onSave={onSaveProduct}
                 onSupplierAdded={onSupplierAdded}
+                autoEdit={index === currentEditingIndex}
+                onMoveToNext={handleMoveToNext}
               />
             ))}
           </div>

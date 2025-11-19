@@ -764,7 +764,8 @@ export const InventoryTab = () => {
         toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} шт)`);
         addLog(`Автодобавление: ${existingProduct.name} +1 (всего: ${newQuantity})`);
         
-        // Камера остается открытой для продолжения сканирования
+        setShowAIScanner(false);
+        setAiScanMode('product');
         
         return;
       } catch (error: any) {
@@ -998,7 +999,7 @@ export const InventoryTab = () => {
         setPhotos([...photos, barcodeData.capturedImage]);
       }
       
-      // Камера остается открытой для продолжения сканирования
+      setShowAIScanner(false);
       return;
     }
     
@@ -1024,15 +1025,15 @@ export const InventoryTab = () => {
     if (photoStep === 'front' && barcodeData.capturedImage) {
       setTempFrontPhoto(barcodeData.capturedImage);
       setPhotoStep('barcode');
-      // Камера остается открытой
-      toast.info('📸 Отлично! Теперь сфотографируйте штрих-код');
+      setShowAIScanner(false);
+      toast.info('📸 Отлично! Теперь нажмите кнопку "AI Сканирование" снова и сфотографируйте штрих-код');
       return;
     }
     
     if (photoStep === 'barcode' && barcodeData.capturedImage) {
       setTempBarcodePhoto(barcodeData.capturedImage);
       setPhotoStep('none');
-      // Камера остается открытой
+      setShowAIScanner(false);
     }
     
     // Сохраняем capturedImage во временное состояние

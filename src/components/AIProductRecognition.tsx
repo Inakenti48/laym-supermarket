@@ -841,9 +841,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             </div>
           )}
 
-          {/* Уведомления - ниже кнопок управления */}
           {notification && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in z-[50]">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in z-10">
               {notification.includes('✅') ? (
                 <CheckCircle className="h-5 w-5" />
               ) : (
@@ -853,9 +852,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             </div>
           )}
 
-          {/* Индикатор обработки - ниже кнопок */}
           {isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[50]">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
               <div className="flex flex-col items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl shadow-lg min-w-[200px]">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <div className="text-center space-y-0.5">
@@ -866,9 +864,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             </div>
           )}
 
-          {/* Кнопки управления - поверх всех уведомлений */}
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
               {mode === 'dual' && (
                 <div className="mb-2 text-center space-y-1">
                   {!tempFrontPhoto && !tempBarcodePhoto && (

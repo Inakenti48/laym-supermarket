@@ -228,7 +228,7 @@ export const PendingProductsTab = () => {
         photos: [],
       };
 
-      await saveProductWithBarcodeGeneration(productData, userId, true);
+      const result = await saveProductWithBarcodeGeneration(productData, userId, true);
 
       const allPhotos = [
         ...(product.frontPhoto ? [product.frontPhoto] : []),
@@ -236,8 +236,18 @@ export const PendingProductsTab = () => {
         ...product.photos
       ];
 
-      for (const photo of allPhotos) {
-        await saveProductImage(product.barcode, product.name, photo, userId);
+      // Если были сгенерированы новые штрих-коды, сохраняем фото для каждого
+      if (result.generatedBarcodes && result.generatedBarcodes.length > 0) {
+        for (const newBarcode of result.generatedBarcodes) {
+          for (const photo of allPhotos) {
+            await saveProductImage(newBarcode, product.name, photo, userId);
+          }
+        }
+      } else {
+        // Если дубликата не было, сохраняем фото с оригинальным штрих-кодом
+        for (const photo of allPhotos) {
+          await saveProductImage(product.barcode, product.name, photo, userId);
+        }
       }
 
       const { error: deleteError } = await supabase
@@ -341,7 +351,7 @@ export const PendingProductsTab = () => {
             photos: [],
           };
 
-          await saveProductWithBarcodeGeneration(productData, userId, true);
+          const result = await saveProductWithBarcodeGeneration(productData, userId, true);
 
           const allPhotos = [
             ...(item.front_photo ? [item.front_photo] : []),
@@ -349,8 +359,18 @@ export const PendingProductsTab = () => {
             ...(item.image_url ? [item.image_url] : [])
           ];
 
-          for (const photo of allPhotos) {
-            await saveProductImage(item.barcode, item.product_name, photo, userId);
+          // Если были сгенерированы новые штрих-коды, сохраняем фото для каждого
+          if (result.generatedBarcodes && result.generatedBarcodes.length > 0) {
+            for (const newBarcode of result.generatedBarcodes) {
+              for (const photo of allPhotos) {
+                await saveProductImage(newBarcode, item.product_name, photo, userId);
+              }
+            }
+          } else {
+            // Если дубликата не было, сохраняем фото с оригинальным штрих-кодом
+            for (const photo of allPhotos) {
+              await saveProductImage(item.barcode, item.product_name, photo, userId);
+            }
           }
 
           await supabase

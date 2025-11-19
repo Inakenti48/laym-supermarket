@@ -842,7 +842,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           )}
 
           {notification && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in z-10">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in z-[50]">
               {notification.includes('✅') ? (
                 <CheckCircle className="h-5 w-5" />
               ) : (

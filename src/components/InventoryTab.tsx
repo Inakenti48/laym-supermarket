@@ -782,23 +782,21 @@ export const InventoryTab = () => {
         
         console.log('📸 Обработка режима двух фото (dual)');
 
-        // Проверяем обязательные поля
+        // Даже если что‑то не распознано, все равно стараемся заполнить форму
         if (!sanitizedBarcode) {
-          toast.error('❌ Штрихкод не распознан');
-          return;
+          toast.warning('⚠️ Штрихкод не распознан, заполните его вручную');
         }
         
         if (!barcodeData.name) {
-          toast.error('❌ Название товара не распознано');
-          return;
+          toast.warning('⚠️ Название не распознано, заполните его вручную');
         }
         
         // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
         console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name, category: barcodeData.category });
         setCurrentProduct(prev => ({
           ...prev,
-          barcode: sanitizedBarcode,
-          name: barcodeData.name,
+          barcode: sanitizedBarcode || prev.barcode,
+          name: barcodeData.name || prev.name,
           category: barcodeData.category || prev.category,
           quantity: prev.quantity || '1' // Устанавливаем количество по умолчанию
         }));
@@ -825,6 +823,13 @@ export const InventoryTab = () => {
         let finalUnit = 'шт';
         let finalSupplier = '';
         let finalCategory = barcodeData.category || '';
+
+        // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
+        if (!sanitizedBarcode) {
+          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.');
+          addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
+          return;
+        }
         
         if (existing) {
           // Автозаполняем из основной базы

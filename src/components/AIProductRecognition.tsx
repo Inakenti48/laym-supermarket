@@ -465,7 +465,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setTempFrontPhoto(image);
           setDualPhotoStep('barcode');
           setNotification('✅ Фото 1/2 - лицевая');
-          toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод');
+          toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод', { position: 'top-center' });
           setTimeout(() => setNotification(''), 1500);
         } else if (!tempBarcodePhoto) {
           // Шаг 2: Захватываем ШТРИХКОД
@@ -473,12 +473,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setTempBarcodePhoto(image);
           setDualPhotoStep('ready');
           setNotification('✅ Фото 2/2 - штрихкод');
-          toast.success('📸 Обе фотографии готовы! Нажмите ✅ для распознавания');
+          toast.success('📸 Обе фотографии готовы! Нажмите ✅ для распознавания', { position: 'top-center' });
           setTimeout(() => setNotification(''), 1500);
         } else {
           // Если оба фото уже есть, игнорируем дополнительные нажатия
           console.log('⚠️ Обе фотографии уже захвачены, игнорируем нажатие');
-          toast.warning('Обе фотографии уже захвачены. Нажмите кнопку распознавания.');
+          toast.warning('Обе фотографии уже захвачены. Нажмите кнопку распознавания.', { position: 'top-center' });
         }
         setIsProcessing(false);
         return; // ВАЖНО: выходим БЕЗ распознавания
@@ -500,7 +500,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             console.error('Ошибка вызова recognize-expiry-date:', error);
             setNotification('❌ Ошибка');
             setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при распознавании дат');
+            toast.error('Ошибка при распознавании дат', { position: 'top-center' });
             return;
           }
 
@@ -520,13 +520,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           } else {
             setNotification('❌ Даты не найдены');
             setTimeout(() => setNotification(''), 1500);
-            toast.warning('⚠️ Даты не найдены на изображении');
+            toast.warning('⚠️ Даты не найдены на изображении', { position: 'top-center' });
           }
         } catch (err: any) {
           console.error('Ошибка распознавания срока годности:', err);
           setNotification('❌ Ошибка');
           setTimeout(() => setNotification(''), 1500);
-          toast.error('Ошибка при распознавании дат');
+          toast.error('Ошибка при распознавании дат', { position: 'top-center' });
         }
         
         setIsProcessing(false);
@@ -569,9 +569,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     } catch (err: any) {
       console.error('Recognition error:', err);
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
-        toast.error('Слишком много запросов');
+        toast.error('Слишком много запросов', { position: 'top-center' });
       } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
-        toast.error('Требуется пополнить баланс');
+        toast.error('Требуется пополнить баланс', { position: 'top-center' });
       }
       setNotification('');
     } finally {
@@ -584,7 +584,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleAIScan = async () => {
     if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
       console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
-      toast.warning('⚠️ Нужны обе фотографии для распознавания');
+      toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
       return;
     }
     
@@ -596,7 +596,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     
     setIsProcessing(true);
     setNotification('🔍 AI сканирование фотографий...');
-    toast.info('🔍 Отправляем фотографии на распознавание...');
+    toast.info('🔍 Отправляем фотографии на распознавание...', { position: 'top-center' });
     
     try {
       // Сжимаем изображения перед отправкой
@@ -624,7 +624,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         console.error('❌ Ошибка AI-сканирования:', scanError);
         setNotification('❌ Ошибка сканирования');
         setTimeout(() => setNotification(''), 1500);
-        toast.error('Ошибка при AI-сканировании фотографий');
+        toast.error('Ошибка при AI-сканировании фотографий', { position: 'top-center' });
         setIsProcessing(false);
         return;
       }
@@ -652,11 +652,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         // Показываем что именно распознано
         if (scannedBarcode && scannedName) {
-          toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`);
+          toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`, { position: 'top-center' });
         } else if (scannedBarcode) {
-          toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
+          toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { position: 'top-center' });
         } else if (scannedName) {
-          toast.success(`📦 Название распознано: ${scannedName}`);
+          toast.success(`📦 Название распознано: ${scannedName}`, { position: 'top-center' });
         }
         
         setNotification('✅ Форма заполнена!');
@@ -669,13 +669,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         console.log('⚠️ Ничего не распознано');
         setNotification('❌ Ничего не распознано');
         setTimeout(() => setNotification(''), 1500);
-        toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.');
+        toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.', { position: 'top-center' });
       }
     } catch (err: any) {
       console.error('Ошибка при AI-сканировании:', err);
       setNotification('❌ Ошибка');
       setTimeout(() => setNotification(''), 1500);
-      toast.error('Ошибка при AI-сканировании товара');
+      toast.error('Ошибка при AI-сканировании товара', { position: 'top-center' });
     }
     
     setIsProcessing(false);
@@ -701,7 +701,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     setTempBarcodePhoto('');
     setDualPhotoStep('none');
     
-    toast.success('✅ Товар добавлен в базу автоматически');
+    toast.success('✅ Товар добавлен в базу автоматически', { position: 'top-center' });
   };
 
   const handleRejectExistingProduct = () => {
@@ -950,7 +950,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                       setTempFrontPhoto('');
                       setTempBarcodePhoto('');
                       setDualPhotoStep('none');
-                      toast.info('📸 Начните сначала: снимите лицевую сторону');
+                      toast.info('📸 Начните сначала: снимите лицевую сторону', { position: 'top-center' });
                     }}
                     variant="outline"
                     size="sm"

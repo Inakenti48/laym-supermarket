@@ -730,7 +730,7 @@ export const InventoryTab = () => {
           .single();
         
         if (fetchError || !existingProduct) {
-          toast.error('Ошибка получения товара из базы');
+          toast.error('Ошибка получения товара из базы', { position: 'top-center' });
           return;
         }
         
@@ -744,7 +744,7 @@ export const InventoryTab = () => {
         
         if (updateError) {
           console.error('Ошибка обновления количества:', updateError);
-          toast.error('Ошибка обновления количества товара');
+          toast.error('Ошибка обновления количества товара', { position: 'top-center' });
           return;
         }
         
@@ -761,7 +761,7 @@ export const InventoryTab = () => {
           }
         }
         
-        toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} шт)`);
+        toast.success(`✅ Добавлено: ${existingProduct.name} (${newQuantity} шт)`, { position: 'top-center' });
         addLog(`Автодобавление: ${existingProduct.name} +1 (всего: ${newQuantity})`);
         
         // Камера остается открытой для продолжения сканирования
@@ -770,7 +770,7 @@ export const InventoryTab = () => {
         return;
       } catch (error: any) {
         console.error('Ошибка автодобавления:', error);
-        toast.error('Ошибка при автоматическом добавлении товара');
+        toast.error('Ошибка при автоматическом добавлении товара', { position: 'top-center' });
         return;
       }
     }
@@ -862,7 +862,7 @@ export const InventoryTab = () => {
             retailPrice: finalRetailPrice,
             quantity: prev.quantity || '1'
           }));
-          toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`);
+          toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         }
         
         // 4. Сохраняем фотографии в product_images для истории
@@ -884,7 +884,7 @@ export const InventoryTab = () => {
           
           if (selectError) {
             console.error('❌ Ошибка проверки:', selectError);
-            toast.error('❌ Ошибка проверки товара в базе');
+            toast.error('❌ Ошибка проверки товара в базе', { position: 'top-center' });
           } else if (existing) {
             // Товар существует - обновляем количество
             const { error: updateError } = await supabase
@@ -901,9 +901,9 @@ export const InventoryTab = () => {
           
             if (updateError) {
               console.error('❌ Ошибка обновления товара:', updateError);
-              toast.error('❌ Ошибка обновления товара в базе');
+              toast.error('❌ Ошибка обновления товара в базе', { position: 'top-center' });
             } else {
-              toast.success(`✅ "${barcodeData.name}" обновлен в базе (количество +1)!`);
+              toast.success(`✅ "${barcodeData.name}" обновлен в базе (количество +1)!`, { position: 'top-center' });
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - обновлен`);
             }
           } else {
@@ -927,9 +927,9 @@ export const InventoryTab = () => {
 
             if (insertError) {
               console.error('❌ Ошибка создания товара:', insertError);
-              toast.error('❌ Ошибка создания товара в базе');
+              toast.error('❌ Ошибка создания товара в базе', { position: 'top-center' });
             } else {
-              toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`);
+              toast.success(`✅ "${barcodeData.name}" автоматически сохранен в базу!`, { position: 'top-center' });
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - сохранен автоматически`);
             }
           }
@@ -970,7 +970,7 @@ export const InventoryTab = () => {
           };
           
           setPendingProducts(prev => [...prev, newPendingProduct]);
-          toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`);
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`, { position: 'top-center' });
           addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь`);
         }
         
@@ -981,7 +981,7 @@ export const InventoryTab = () => {
         
       } catch (error: any) {
         console.error('❌ Ошибка handleScan:', error);
-        toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`);
+         toast.error(`❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`, { position: 'top-center' });
       }
       return;
     }
@@ -992,11 +992,11 @@ export const InventoryTab = () => {
       
       if (barcodeData.expiryDate) {
         setCurrentProduct({ ...currentProduct, expiryDate: barcodeData.expiryDate });
-        toast.success(`✅ Срок годности: ${new Date(barcodeData.expiryDate).toLocaleDateString('ru-RU')}`);
+        toast.success(`✅ Срок годности: ${new Date(barcodeData.expiryDate).toLocaleDateString('ru-RU')}`, { position: 'top-center' });
       }
       
       if (barcodeData.manufacturingDate) {
-        toast.info(`📦 Дата производства: ${new Date(barcodeData.manufacturingDate).toLocaleDateString('ru-RU')}`);
+        toast.info(`📦 Дата производства: ${new Date(barcodeData.manufacturingDate).toLocaleDateString('ru-RU')}`, { position: 'top-center' });
       }
       
       // Добавляем фото в список
@@ -1041,7 +1041,7 @@ export const InventoryTab = () => {
       setTempFrontPhoto(barcodeData.capturedImage);
       setPhotoStep('barcode');
       // Камера остается открытой
-      toast.info('📸 Отлично! Теперь сфотографируйте штрих-код');
+      toast.info('📸 Отлично! Теперь сфотографируйте штрих-код', { position: 'top-center' });
       return;
     }
     

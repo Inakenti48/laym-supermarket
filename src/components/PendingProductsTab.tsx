@@ -60,6 +60,7 @@ export const PendingProductsTab = () => {
 
     const fetchPendingProducts = async (forceLoad = false) => {
       setIsLoading(true);
+      setPendingProducts([]); // Очищаем список при смене страницы
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
@@ -550,7 +551,12 @@ export const PendingProductsTab = () => {
         </div>
 
         <div className="p-6">
-          {pendingProducts.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center text-muted-foreground py-12">
+              <div className="h-16 w-16 mx-auto mb-4 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <p className="text-base font-medium">Загрузка товаров...</p>
+            </div>
+          ) : pendingProducts.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
               <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-base font-medium">Очередь пуста</p>

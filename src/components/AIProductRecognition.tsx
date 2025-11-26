@@ -685,32 +685,62 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             console.log('✅ Товар распознан успешно!');
             success = true;
             
-            // Передаем данные родителю с обеими фотографиями
-            onProductFound({
-              barcode: scannedBarcode,
-              name: scannedName,
-              category: scannedCategory,
-              frontPhoto: savedFrontPhoto,
-              barcodePhoto: savedBarcodePhoto
-            });
+            // Проверяем, есть ли товар с таким штрихкодом в базе
+            const allProducts = await getAllProducts();
+            const existingProduct = scannedBarcode 
+              ? allProducts.find(p => p.barcode === scannedBarcode)
+              : null;
             
-            // Показываем что именно распознано
-            if (scannedBarcode && scannedName) {
-              toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
-                position: 'top-center',
-                id: 'ai-scan-progress',
-                duration: 4000
+            if (existingProduct) {
+              console.log('✅ Товар найден в базе с ценами:', existingProduct);
+              
+              // Сохраняем данные для диалога
+              setExistingProductData(existingProduct);
+              setPendingRecognitionData({
+                barcode: scannedBarcode,
+                name: scannedName,
+                category: scannedCategory,
+                frontPhoto: savedFrontPhoto,
+                barcodePhoto: savedBarcodePhoto
               });
-            } else if (scannedBarcode) {
-              toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
+              
+              // Показываем диалог с предложением использовать существующие цены
+              setShowExistingProductDialog(true);
+              
+              toast.info(`🔍 Товар найден в базе: ${existingProduct.name}`, { 
                 position: 'top-center',
                 id: 'ai-scan-progress'
               });
-            } else if (scannedName) {
-              toast.success(`✅ Название распознано: ${scannedName}`, { 
-                position: 'top-center',
-                id: 'ai-scan-progress'
+            } else {
+              // Товар не найден в базе, отправляем в очередь для заполнения
+              console.log('ℹ️ Товар не найден в базе, отправляем в очередь');
+              
+              onProductFound({
+                barcode: scannedBarcode,
+                name: scannedName,
+                category: scannedCategory,
+                frontPhoto: savedFrontPhoto,
+                barcodePhoto: savedBarcodePhoto
               });
+              
+              // Показываем что именно распознано
+              if (scannedBarcode && scannedName) {
+                toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
+                  position: 'top-center',
+                  id: 'ai-scan-progress',
+                  duration: 4000
+                });
+              } else if (scannedBarcode) {
+                toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
+                  position: 'top-center',
+                  id: 'ai-scan-progress'
+                });
+              } else if (scannedName) {
+                toast.success(`✅ Название распознано: ${scannedName}`, { 
+                  position: 'top-center',
+                  id: 'ai-scan-progress'
+                });
+              }
             }
           } else {
             console.log(`⚠️ Попытка ${attempt}: Пустой результат распознавания`);

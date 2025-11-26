@@ -785,11 +785,11 @@ export const InventoryTab = () => {
 
         // Даже если что‑то не распознано, все равно стараемся заполнить форму
         if (!sanitizedBarcode) {
-          toast.warning('⚠️ Штрихкод не распознан, заполните его вручную', { position: 'top-center' });
+          console.log('⚠️ Штрихкод не распознан, заполните его вручную');
         }
         
         if (!barcodeData.name) {
-          toast.warning('⚠️ Название не распознано, заполните его вручную', { position: 'top-center' });
+          console.log('⚠️ Название не распознано, заполните его вручную');
         }
         
         // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
@@ -827,7 +827,7 @@ export const InventoryTab = () => {
 
         // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
         if (!sanitizedBarcode) {
-          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.', { position: 'top-center' });
+          console.log('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.');
           addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
           return;
         }
@@ -1022,14 +1022,14 @@ export const InventoryTab = () => {
       setCurrentProduct(prev => ({ ...prev, barcode: sanitizedBarcode }));
       console.log('✅ Заполнен штрихкод:', sanitizedBarcode);
     } else {
-      toast.warning('⚠️ Штрихкод не распознан, введите вручную', { position: 'top-center' });
+      console.log('⚠️ Штрихкод не распознан, введите вручную');
     }
     
     if (barcodeData.name) {
       setCurrentProduct(prev => ({ ...prev, name: barcodeData.name || '' }));
       console.log('✅ Заполнено название:', barcodeData.name);
     } else {
-      toast.warning('⚠️ Название не распознано, введите вручную', { position: 'top-center' });
+      console.log('⚠️ Название не распознано, введите вручную');
     }
     
     if (barcodeData.category) {

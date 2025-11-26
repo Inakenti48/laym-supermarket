@@ -58,21 +58,34 @@ export const PendingProductsTab = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchPendingProducts = async (forceLoad = false) => {
+    const fetchPendingProducts = async () => {
       if (!isMounted) return;
-      
+
       setIsLoading(true);
-      
+
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
-        // Для первой загрузки считаем точное количество, дальше используем быстрый режим
-        const { data, count, error } = await supabase
+        // Лёгкий отдельный запрос только для подсчёта количества (без данных и картинок)
+        if (currentPage === 1) {
+          const { count, error: countError } = await supabase
+            .from('vremenno_product_foto')
+            .select('id', { count: 'exact', head: true });
+
+          if (countError) {
+            console.error('Ошибка подсчёта товаров:', countError);
+          } else {
+            setTotalCount(count || 0);
+          }
+        }
+
+        // Отдельный быстрый запрос только для текущей страницы
+        const { data, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*', { count: forceLoad ? 'exact' : 'planned' })
+          .select('*')
           .order('created_at', { ascending: true })
           .range(from, to);
 
@@ -83,10 +96,8 @@ export const PendingProductsTab = () => {
 
         if (!isMounted) return;
 
-        console.log(`Получено товаров: ${data?.length || 0} из ${count || 0}`);
-        
-        setTotalCount(count || 0);
-        
+        console.log(`Получено товаров для страницы ${currentPage}: ${data?.length || 0}`);
+
         if (data && data.length > 0) {
           const products = data.map((item: any) => ({
             id: item.id,
@@ -121,7 +132,7 @@ export const PendingProductsTab = () => {
     };
 
     // Мгновенная загрузка без задержек
-    fetchPendingProducts(true);
+    fetchPendingProducts();
 
     const channel = supabase
       .channel('pending_products_changes')

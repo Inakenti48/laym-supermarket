@@ -55,6 +55,20 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     };
   }, []);
 
+  // При активном AI-скане скрываем глобальные тосты, чтобы они не мешали
+  useEffect(() => {
+    if (hidden) {
+      document.body.classList.remove('ai-scan-active');
+      return;
+    }
+
+    document.body.classList.add('ai-scan-active');
+
+    return () => {
+      document.body.classList.remove('ai-scan-active');
+    };
+  }, [hidden]);
+
   const startCamera = async () => {
     try {
       setCameraReady(false);

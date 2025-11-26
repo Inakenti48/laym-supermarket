@@ -741,8 +741,13 @@ export const InventoryTab = () => {
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string; purchasePrice?: number; retailPrice?: number } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
-    // КРИТИЧНО: Автоматическое добавление к существующему товару
+    // КРИТИЧНО: Автоматическое добавление к существующему товару (только для admin/inventory)
     if (barcodeData.autoAddToProducts && barcodeData.existingProductId) {
+      // Проверяем права доступа
+      if (!canSaveSingle) {
+        toast.error('❌ У этого устройства нет прав на прямое сохранение товаров', { position: 'top-center' });
+        return;
+      }
       try {
         console.log('🚀 Автоматическое добавление к существующему товару:', barcodeData.existingProductId);
         
@@ -917,8 +922,34 @@ export const InventoryTab = () => {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentUserId);
         }
         
-        // 5. ЕСЛИ ОБОИ ЦЕНЫ ЕСТЬ - СОХРАНЯЕМ СРАЗУ В БАЗУ (UPSERT)
+        // 5. ЕСЛИ ОБОИ ЦЕНЫ ЕСТЬ - ПРОВЕРЯЕМ ПРАВА И СОХРАНЯЕМ
         if (hasPrices && finalPurchasePrice && finalRetailPrice) {
+          // Проверяем права доступа на прямое сохранение
+          if (!canSaveSingle) {
+            console.log('⚠️ Устройство не имеет прав на прямое сохранение, добавляем в очередь');
+            toast.warning('⚠️ Товар добавлен в очередь. Только admin/inventory могут сохранять напрямую.', { position: 'top-center' });
+            
+            // Добавляем в очередь вместо прямого сохранения
+            const newPending: PendingProduct = {
+              id: Date.now().toString(),
+              barcode: sanitizedBarcode,
+              name: barcodeData.name,
+              category: finalCategory,
+              purchasePrice: finalPurchasePrice,
+              retailPrice: finalRetailPrice,
+              quantity: '1',
+              unit: finalUnit,
+              supplier: finalSupplier,
+              photos: allPhotos,
+              frontPhoto: barcodeData.frontPhoto,
+              barcodePhoto: barcodeData.barcodePhoto,
+            };
+            
+            setPendingProducts(prev => [...prev, newPending]);
+            addLog(`В очередь (AI): ${barcodeData.name} (${sanitizedBarcode})`);
+            return;
+          }
+          
           console.log('💾 Обе цены есть, проверяем существующий товар...');
           
           // Проверяем существующий товар
@@ -1018,8 +1049,14 @@ export const InventoryTab = () => {
           setPhotos([]);
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
-          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ ТОЛЬКО В ОЧЕРЕДЬ (с автозаполненной категорией)
-          console.log('📋 Цен нет, добавляем ТОЛЬКО в очередь с категорией:', finalCategory);
+          // 6. ЕСЛИ ЦЕН НЕТ - ПРОВЕРЯЕМ ПРАВА И ДОБАВЛЯЕМ В ОЧЕРЕДЬ
+          console.log('📋 Цен нет, добавляем в очередь с категорией:', finalCategory);
+          
+          // Проверяем права доступа на добавление в очередь
+          if (!canSaveQueue) {
+            toast.error('❌ У этого устройства нет прав на добавление товаров в очередь', { position: 'top-center' });
+            return;
+          }
           
           const newPendingProduct: PendingProduct = {
             id: `pending-${Date.now()}-${Math.random()}`,

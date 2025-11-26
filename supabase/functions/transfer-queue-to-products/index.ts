@@ -136,18 +136,24 @@ serve(async (req) => {
         let purchasePrice = item.purchase_price;
         let retailPrice = item.retail_price;
 
-        if (!purchasePrice || !retailPrice) {
+        if (!purchasePrice || !retailPrice || purchasePrice === 0 || retailPrice === 0) {
           const csvPrices = await findPricesByBarcode(item.barcode);
-          if (csvPrices) {
+          if (csvPrices && csvPrices.purchase_price > 0 && csvPrices.sale_price > 0) {
             purchasePrice = csvPrices.purchase_price;
             retailPrice = csvPrices.sale_price;
             pricesFound++;
             console.log(`💡 Цены найдены в CSV для ${item.barcode}: ${purchasePrice} / ${retailPrice}`);
           } else {
-            // Устанавливаем цены в 0 если не нашли
-            purchasePrice = 0;
-            retailPrice = 0;
-            console.log(`⚠️ Цены не найдены для ${item.barcode}, устанавливаем 0`);
+            // Если цен нет - оставляем товар в очереди
+            const reason = 'Цены не найдены в CSV';
+            console.log(`⚠️ Оставляем в очереди ${item.product_name}: ${reason}`);
+            skipped++;
+            skippedItems.push({ 
+              barcode: item.barcode, 
+              name: item.product_name, 
+              reason 
+            });
+            continue;
           }
         }
 

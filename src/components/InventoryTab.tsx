@@ -894,12 +894,23 @@ export const InventoryTab = () => {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentUserId);
         }
         
-        // 5. ВСЕГДА СОХРАНЯЕМ В БАЗУ (с ценами или без)
-        console.log('💾 Сохраняем товар в базу...');
+        // 5. Сохраняем в базу ТОЛЬКО если есть цены
+        console.log('💾 Проверка наличия цен перед сохранением...');
         
-        // Если цен нет - устанавливаем 0
         const purchasePrice = hasPrices && finalPurchasePrice ? parseFloat(finalPurchasePrice) : 0;
         const retailPrice = hasPrices && finalRetailPrice ? parseFloat(finalRetailPrice) : 0;
+        
+        // Если цен нет - НЕ сохраняем автоматически
+        if (purchasePrice === 0 || retailPrice === 0) {
+          console.log('⚠️ Цены не найдены - товар останется в форме для ручного ввода');
+          toast.info(`⚠️ Цены не найдены для "${barcodeData.name}". Заполните вручную и нажмите "Добавить товар"`, { 
+            position: 'top-center',
+            duration: 5000 
+          });
+          return;
+        }
+        
+        console.log('💾 Сохраняем товар в базу с ценами...');
         
         // Проверяем существующий товар
         const { data: existing, error: selectError } = await supabase

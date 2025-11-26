@@ -582,8 +582,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   // Удалили автоматическое сканирование - только ручной захват
 
   const handleAIScan = async () => {
-    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
-      console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
+    if (isProcessing) {
+      console.log('⚠️ handleAIScan заблокирован: уже идет распознавание');
+      return;
+    }
+
+    if (!tempFrontPhoto || !tempBarcodePhoto) {
+      console.log('⚠️ handleAIScan: не хватает фото для распознавания', { hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
       toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
       return;
     }
@@ -593,25 +598,23 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       front: tempFrontPhoto.length,
       barcode: tempBarcodePhoto.length
     });
-    
-    // Сохраняем фотографии локально перед очисткой
+
+    // Фиксируем текущие фото, но НЕ очищаем их до завершения распознавания,
+    // чтобы пользователь видел, что идет обработка именно этого товара
     const savedFrontPhoto = tempFrontPhoto;
     const savedBarcodePhoto = tempBarcodePhoto;
+
+    // Переводим интерфейс в режим обработки
+    setIsProcessing(true);
+    setNotification('🔍 Распознавание товара...');
     
-    // Сразу очищаем состояние, чтобы можно было сканировать следующий товар
-    setTempFrontPhoto('');
-    setTempBarcodePhoto('');
-    setDualPhotoStep('none');
-    
-    // Показываем, что распознавание началось
-    toast.info('🔍 Товар отправлен на распознавание. Можете сканировать следующий!', { 
+    toast.info('🔍 Товар отправлен на распознавание. Подождите несколько секунд...', { 
       position: 'top-center',
       id: 'ai-scan-start',
       duration: 3000
     });
     
-    // Запускаем распознавание в фоне (не блокируя UI)
-    (async () => {
+    try {
       // Автоповтор до 3 раз при пустом результате или ошибке
       const maxRetries = 3;
       let attempt = 0;
@@ -732,7 +735,15 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
-    })();
+    } finally {
+      // После завершения распознавания сбрасываем состояние, чтобы можно было сканировать следующий товар
+      setIsProcessing(false);
+      setNotification('');
+      setTempFrontPhoto('');
+      setTempBarcodePhoto('');
+      setDualPhotoStep('none');
+      console.log('✅ handleAIScan ЗАВЕРШЕНО: состояние сброшено, можно сканировать следующий товар');
+    }
   };
 
   const handleConfirmExistingProduct = async () => {

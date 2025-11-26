@@ -831,8 +831,14 @@ export const InventoryTab = () => {
           finalRetailPrice = barcodeData.retailPrice.toString();
           hasPrices = true;
           
+          // Автоматически определяем категорию на основе названия если не заполнена
+          if (!finalCategory && barcodeData.name) {
+            finalCategory = determineCategoryFromName(barcodeData.name);
+          }
+          
           setCurrentProduct(prev => ({
             ...prev,
+            category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
             quantity: prev.quantity || '1'
@@ -1109,9 +1115,9 @@ export const InventoryTab = () => {
       id: `pending-${Date.now()}-${Math.random()}`,
       barcode: sanitizedBarcode,
       name: barcodeData.name || '',
-      category: barcodeData.category || '',
-      purchasePrice: '',
-      retailPrice: '',
+      category: barcodeData.category || determineCategoryFromName(barcodeData.name || ''),
+      purchasePrice: barcodeData.purchasePrice?.toString() || '', // Цены из CSV если есть
+      retailPrice: barcodeData.retailPrice?.toString() || '',     // Цены из CSV если есть
       quantity: barcodeData.quantity?.toString() || '1',
       unit: 'шт',
       expiryDate: '',
@@ -1121,8 +1127,8 @@ export const InventoryTab = () => {
       barcodePhoto: (tempBarcodePhoto || barcodeData.capturedImage) || undefined,
     };
 
-    // Если есть штрихкод, ищем в базе для автозаполнения
-    if (sanitizedBarcode) {
+    // Если есть штрихкод и нет цен, ищем в основной базе для автозаполнения
+    if (sanitizedBarcode && !newPendingProduct.purchasePrice && !newPendingProduct.retailPrice) {
       const existing = await findProductByBarcode(sanitizedBarcode);
       if (existing) {
         newPendingProduct.category = existing.category;
@@ -1263,7 +1269,10 @@ export const InventoryTab = () => {
       try {
         const purchasePrice = parseFloat(productWithUpdates.purchasePrice);
         const retailPrice = parseFloat(productWithUpdates.retailPrice);
-        const quantity = productWithUpdates.quantity ? parseFloat(productWithUpdates.quantity) : 1;
+        // Если количество 0, устанавливаем 1
+        const quantity = productWithUpdates.quantity && parseFloat(productWithUpdates.quantity) > 0 
+          ? parseFloat(productWithUpdates.quantity) 
+          : 1;
         
         const { error: saveError } = await supabase
           .from('products')

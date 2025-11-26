@@ -21,10 +21,11 @@ interface AIProductRecognitionProps {
   onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string; autoAddToProducts?: boolean; existingProductId?: string; purchasePrice?: number; retailPrice?: number }) => void;
   mode?: 'product' | 'barcode' | 'expiry' | 'dual';
   hidden?: boolean;
-  hasIncompleteProducts?: boolean; // Есть ли незавершенные товары в очереди
+  hasIncompleteProducts?: boolean;
+  onClose?: () => void; // Коллбек при закрытии для показа буфера
 }
 
-export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden = false, hasIncompleteProducts = false }: AIProductRecognitionProps) => {
+export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden = false, hasIncompleteProducts = false, onClose }: AIProductRecognitionProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -44,6 +45,17 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [showExistingProductDialog, setShowExistingProductDialog] = useState(false);
   const [existingProductData, setExistingProductData] = useState<any>(null);
   const [pendingRecognitionData, setPendingRecognitionData] = useState<any>(null);
+  
+  // Буфер для отложенных уведомлений
+  const toastBufferRef = useRef<Array<{ type: 'success' | 'error' | 'info' | 'warning'; message: string }>>([]);
+  
+  // Хелпер для буферизации тостов вместо показа
+  const bufferedToast = {
+    success: (msg: string) => toastBufferRef.current.push({ type: 'success', message: msg }),
+    error: (msg: string) => toastBufferRef.current.push({ type: 'error', message: msg }),
+    info: (msg: string) => toastBufferRef.current.push({ type: 'info', message: msg }),
+    warning: (msg: string) => toastBufferRef.current.push({ type: 'warning', message: msg })
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -52,6 +64,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     return () => {
       isMountedRef.current = false;
       stopCamera();
+      // При размонтировании показываем все буферизованные тосты внизу
+      if (toastBufferRef.current.length > 0) {
+        toastBufferRef.current.forEach(({ type, message }) => {
+          toast[type](message, { position: 'bottom-center' });
+        });
+        toastBufferRef.current = [];
+      }
     };
   }, []);
 
@@ -465,7 +484,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setTempFrontPhoto(image);
           setDualPhotoStep('barcode');
           setNotification('✅ Фото 1/2');
-          toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод', { position: 'top-center' });
+          bufferedToast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод');
           setTimeout(() => setNotification(''), 1500);
           setIsProcessing(false);
           return; // Ждем второе фото
@@ -475,7 +494,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setTempBarcodePhoto(image);
           setDualPhotoStep('ready');
           setNotification('✅ Фото 2/2');
-          toast.success('📸 Обе фотографии захвачены! Запускаю распознавание...', { position: 'top-center' });
+          bufferedToast.success('📸 Обе фотографии захвачены! Запускаю распознавание...');
           
           // АВТОМАТИЧЕСКИ запускаем распознавание после захвата второго фото
           setTimeout(() => {
@@ -487,7 +506,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         } else {
           // Если оба фото уже есть, игнорируем дополнительные нажатия
           console.log('⚠️ Обе фотографии уже захвачены, идет распознавание...');
-          toast.warning('Распознавание уже запущено, подождите...', { position: 'top-center' });
+          bufferedToast.warning('Распознавание уже запущено, подождите...');
           setIsProcessing(false);
           return;
         }
@@ -509,7 +528,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             console.error('Ошибка вызова recognize-expiry-date:', error);
             setNotification('❌ Ошибка');
             setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при распознавании дат', { position: 'top-center' });
+            bufferedToast.error('Ошибка при распознавании дат');
             return;
           }
 
@@ -529,13 +548,13 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           } else {
             setNotification('❌ Даты не найдены');
             setTimeout(() => setNotification(''), 1500);
-            toast.warning('⚠️ Даты не найдены на изображении', { position: 'top-center' });
+            bufferedToast.warning('⚠️ Даты не найдены на изображении');
           }
         } catch (err: any) {
           console.error('Ошибка распознавания срока годности:', err);
           setNotification('❌ Ошибка');
           setTimeout(() => setNotification(''), 1500);
-          toast.error('Ошибка при распознавании дат', { position: 'top-center' });
+          bufferedToast.error('Ошибка при распознавании дат');
         }
         
         setIsProcessing(false);
@@ -578,9 +597,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     } catch (err: any) {
       console.error('Recognition error:', err);
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
-        toast.error('Слишком много запросов', { position: 'top-center' });
+        bufferedToast.error('Слишком много запросов');
       } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
-        toast.error('Требуется пополнить баланс', { position: 'top-center' });
+        bufferedToast.error('Требуется пополнить баланс');
       }
       setNotification('');
     } finally {
@@ -593,7 +612,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleAIScan = async () => {
     if (!tempFrontPhoto || !tempBarcodePhoto) {
       console.log('⚠️ handleAIScan заблокирован: нужны обе фотографии');
-      toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
+      bufferedToast.warning('⚠️ Нужны обе фотографии для распознавания');
       return;
     }
     
@@ -617,11 +636,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     setNotification('🔍 Отправка...');
     
     // Показываем, что распознавание началось
-    toast.info('🔍 Товар отправлен на распознавание. Можете закрыть сканер или сканировать следующий!', { 
-      position: 'top-center',
-      id: 'ai-scan-start',
-      duration: 3000
-    });
+    bufferedToast.info('🔍 Товар отправлен на распознавание. Можете закрыть сканер или сканировать следующий!');
     
     // Через 800ms очищаем состояние UI, чтобы можно было сканировать следующий товар
     setTimeout(() => {
@@ -644,10 +659,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         attempt++;
         
         try {
-          toast.info(`🔍 Распознавание... (попытка ${attempt}/${maxRetries})`, { 
-            position: 'top-center',
-            id: 'ai-scan-progress'
-          });
+          bufferedToast.info(`🔍 Распознавание... (попытка ${attempt}/${maxRetries})`);
           
           // Сжимаем изображения перед отправкой
           console.log(`📦 Попытка ${attempt}: Сжатие изображений...`);
@@ -674,10 +686,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             console.error(`❌ Попытка ${attempt}: Ошибка AI-сканирования:`, scanError);
             
             if (attempt >= maxRetries) {
-              toast.error('❌ Не удалось распознать товар после 3 попыток. Попробуйте сделать более четкие фото.', { 
-                position: 'top-center',
-                id: 'ai-scan-progress'
-              });
+              bufferedToast.error('❌ Не удалось распознать товар после 3 попыток. Попробуйте сделать более четкие фото.');
               break;
             }
             
@@ -721,10 +730,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
               // Показываем диалог с предложением использовать существующие цены
               setShowExistingProductDialog(true);
               
-              toast.info(`🔍 Товар найден в базе: ${existingProduct.name}`, { 
-                position: 'top-center',
-                id: 'ai-scan-progress'
-              });
+              bufferedToast.info(`🔍 Товар найден в базе: ${existingProduct.name}`);
             } else {
               // Проверяем загруженную CSV базу
               console.log('🔍 Проверяем загруженную CSV базу...');
@@ -748,11 +754,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                   retailPrice: csvProduct.retailPrice        // Только цены из CSV
                 });
                 
-                toast.success(`✅ Распознано: ${scannedName || 'Товар'}\n💰 Цены из базы: ${csvProduct.purchasePrice} ₽ / ${csvProduct.retailPrice} ₽`, {
-                  position: 'top-center',
-                  id: 'ai-scan-progress',
-                  duration: 4000
-                });
+                bufferedToast.success(`✅ Распознано: ${scannedName || 'Товар'}\n💰 Цены из базы: ${csvProduct.purchasePrice} ₽ / ${csvProduct.retailPrice} ₽`);
               } else {
                 // Товар не найден ни в одной базе, отправляем в очередь для заполнения
                 console.log('ℹ️ Товар не найден ни в одной базе, отправляем в очередь');
@@ -767,21 +769,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 
                 // Показываем что именно распознано
                 if (scannedBarcode && scannedName) {
-                  toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
-                    position: 'top-center',
-                    id: 'ai-scan-progress',
-                    duration: 4000
-                  });
+                  bufferedToast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`);
                 } else if (scannedBarcode) {
-                  toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
-                    position: 'top-center',
-                    id: 'ai-scan-progress'
-                  });
+                  bufferedToast.success(`✅ Штрихкод распознан: ${scannedBarcode}`);
                 } else if (scannedName) {
-                  toast.success(`✅ Название распознано: ${scannedName}`, { 
-                    position: 'top-center',
-                    id: 'ai-scan-progress'
-                  });
+                  bufferedToast.success(`✅ Название распознано: ${scannedName}`);
                 }
               }
             }
@@ -789,10 +781,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             console.log(`⚠️ Попытка ${attempt}: Пустой результат распознавания`);
             
             if (attempt >= maxRetries) {
-              toast.warning(`⚠️ Не удалось распознать товар после ${maxRetries} попыток. Попробуйте сделать более четкие фото штрихкода и лицевой стороны.`, { 
-                position: 'top-center',
-                id: 'ai-scan-progress'
-              });
+              bufferedToast.warning(`⚠️ Не удалось распознать товар после ${maxRetries} попыток. Попробуйте сделать более четкие фото штрихкода и лицевой стороны.`);
               break;
             }
             
@@ -803,10 +792,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           console.error(`❌ Попытка ${attempt}: Ошибка при AI-сканировании:`, err);
           
           if (attempt >= maxRetries) {
-            toast.error(`❌ Ошибка при AI-сканировании после ${maxRetries} попыток. Проверьте соединение и попробуйте снова.`, { 
-              position: 'top-center',
-              id: 'ai-scan-progress'
-            });
+            bufferedToast.error(`❌ Ошибка при AI-сканировании после ${maxRetries} попыток. Проверьте соединение и попробуйте снова.`);
             break;
           }
           

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Image, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,10 +22,32 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
   const [frontPhoto, setFrontPhoto] = useState<string>('');
   const [barcodePhoto, setBarcodePhoto] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Буфер для отложенных уведомлений
+  const toastBufferRef = useRef<Array<{ type: 'success' | 'error' | 'info' | 'warning'; message: string }>>([]);
+  
+  // Хелпер для буферизации тостов
+  const bufferedToast = {
+    success: (msg: string) => toastBufferRef.current.push({ type: 'success', message: msg }),
+    error: (msg: string) => toastBufferRef.current.push({ type: 'error', message: msg }),
+    info: (msg: string) => toastBufferRef.current.push({ type: 'info', message: msg }),
+    warning: (msg: string) => toastBufferRef.current.push({ type: 'warning', message: msg })
+  };
+  
+  // При закрытии показываем все буферизованные тосты внизу
+  const handleClose = () => {
+    if (toastBufferRef.current.length > 0) {
+      toastBufferRef.current.forEach(({ type, message }) => {
+        toast[type](message, { position: 'bottom-center' });
+      });
+      toastBufferRef.current = [];
+    }
+    onClose();
+  };
 
   const handleFileSelect = async (file: File, type: 'front' | 'barcode') => {
     if (!file.type.startsWith('image/')) {
-      toast.error('Пожалуйста, выберите изображение');
+      bufferedToast.error('Пожалуйста, выберите изображение');
       return;
     }
 
@@ -34,10 +56,10 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       const base64 = reader.result as string;
       if (type === 'front') {
         setFrontPhoto(base64);
-        toast.success('✅ Лицевое фото загружено');
+        bufferedToast.success('✅ Лицевое фото загружено');
       } else {
         setBarcodePhoto(base64);
-        toast.success('✅ Фото штрихкода загружено');
+        bufferedToast.success('✅ Фото штрихкода загружено');
       }
     };
     reader.readAsDataURL(file);
@@ -45,7 +67,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
 
   const recognizeFromPhotos = async () => {
     if (!frontPhoto || !barcodePhoto) {
-      toast.error('Загрузите оба фото');
+      bufferedToast.error('Загрузите оба фото');
       return;
     }
 
@@ -79,7 +101,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
             console.warn('⚠️ Ошибка проверки в базе, переходим к AI:', matchError);
           } else if (matchData?.recognized && matchData.barcode !== 'UNKNOWN') {
             console.log('✅ Товар найден в базе:', matchData.barcode);
-            toast.success(`✅ Товар найден: ${matchData.productName}`);
+            bufferedToast.success(`✅ Товар найден: ${matchData.productName}`);
             
             onProductFound({
               barcode: matchData.barcode,
@@ -88,7 +110,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
               frontPhoto,
               barcodePhoto
             });
-            onClose();
+            handleClose();
             return;
           }
         } catch (checkError) {
@@ -129,7 +151,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
         .getPublicUrl(`temporary/${barcodeFileName}`);
 
       // Вызываем edge function для распознавания
-      toast.info('🤖 AI анализирует фотографии...');
+      bufferedToast.info('🤖 AI анализирует фотографии...');
       
       const { data: scanData, error: scanError } = await supabase.functions.invoke(
         'scan-product-photos',
@@ -153,11 +175,11 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       const category = scanData?.category || '';
       
       if (!barcode && !name) {
-        toast.error('❌ Не удалось распознать товар');
+        bufferedToast.error('❌ Не удалось распознать товар');
         return;
       }
       
-      toast.success(`✅ Распознано: ${name || 'товар'}`);
+      bufferedToast.success(`✅ Распознано: ${name || 'товар'}`);
       
       onProductFound({
         barcode,
@@ -166,12 +188,12 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
         frontPhoto,
         barcodePhoto
       });
-      onClose();
+      handleClose();
       
     } catch (error: any) {
       console.error('❌ Критическая ошибка распознавания:', error);
       const errorMessage = error.message || 'Не удалось распознать товар';
-      toast.error(`❌ ${errorMessage}. Попробуйте сделать более чёткие фотографии.`);
+      bufferedToast.error(`❌ ${errorMessage}. Попробуйте сделать более чёткие фотографии.`);
     } finally {
       setIsProcessing(false);
     }
@@ -185,7 +207,7 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
             <Image className="h-6 w-6" />
             Распознать из фото
           </h2>
-          <Button onClick={onClose} variant="ghost" size="icon">
+          <Button onClick={handleClose} variant="ghost" size="icon">
             <X className="h-5 w-5" />
           </Button>
         </div>

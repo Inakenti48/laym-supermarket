@@ -1895,6 +1895,13 @@ export const InventoryTab = () => {
             onProductFound={handleScan}
             mode={aiScanMode}
             hasIncompleteProducts={pendingProducts.some(p => !p.barcode || !p.name)}
+            onClose={() => {
+              setShowAIScanner(false);
+              setAiScanMode('product');
+              setPhotoStep('none');
+              setTempFrontPhoto('');
+              setTempBarcodePhoto('');
+            }}
           />
           <Button
             onClick={() => {

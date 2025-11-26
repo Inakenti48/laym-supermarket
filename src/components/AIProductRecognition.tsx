@@ -610,7 +610,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     
     setIsProcessing(true);
     setNotification('🔍 AI сканирование фотографий...');
-    toast.info('🔍 Отправляем фотографии на распознавание...', { position: 'top-center' });
     
     try {
       // Сжимаем изображения перед отправкой
@@ -653,22 +652,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         barcodePhoto: tempBarcodePhoto
       });
       
-      // Показываем результат
+      // Для удобства оставляем только тихую текстовую подсказку в блоке камеры,
+      // без всплывающих тостов
       if (scanError) {
-        setNotification('⚠️ В очередь');
-        toast.info('⚠️ AI не смог распознать. Заполните данные вручную', { position: 'top-center' });
+        setNotification('⚠️ Не удалось распознать, заполните вручную');
       } else if (scannedBarcode && scannedName) {
-        setNotification('✅ Распознано!');
-        toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`, { position: 'top-center' });
+        setNotification('✅ Товар распознан AI');
       } else if (scannedBarcode) {
-        setNotification('✅ Штрихкод!');
-        toast.success(`✅ Штрихкод: ${scannedBarcode}. Заполните название`, { position: 'top-center' });
+        setNotification('✅ Штрихкод распознан, заполните название');
       } else if (scannedName) {
-        setNotification('✅ Название!');
-        toast.success(`📦 Название: ${scannedName}. Заполните штрихкод`, { position: 'top-center' });
+        setNotification('✅ Название распознано, заполните штрихкод');
       } else {
-        setNotification('⚠️ В очередь');
-        toast.info('📸 Фото сохранены. Заполните данные вручную', { position: 'top-center' });
+        setNotification('📸 Фото сохранены, заполните данные вручную');
       }
       
       // Очищаем фотографии для следующего товара
@@ -677,7 +672,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setTempBarcodePhoto('');
     } catch (err: any) {
       console.error('Ошибка при AI-сканировании:', err);
-      setNotification('❌ Ошибка');
+      setNotification('❌ Ошибка AI, заполните данные вручную');
       setTimeout(() => setNotification(''), 1500);
     }
     

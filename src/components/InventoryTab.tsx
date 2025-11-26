@@ -714,7 +714,7 @@ export const InventoryTab = () => {
     };
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string; purchasePrice?: number; retailPrice?: number } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
     // КРИТИЧНО: Автоматическое добавление к существующему товару
@@ -823,15 +823,22 @@ export const InventoryTab = () => {
         let finalUnit = 'шт';
         let finalSupplier = '';
         let finalCategory = barcodeData.category || '';
-
-        // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
-        if (!sanitizedBarcode) {
-          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.', { position: 'top-center' });
-          addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
-          return;
-        }
         
-        if (existing) {
+        // Проверяем, есть ли цены в данных из AI-сканирования (из CSV базы)
+        if (barcodeData.purchasePrice && barcodeData.retailPrice) {
+          console.log('✅ Цены получены из CSV базы:', { purchasePrice: barcodeData.purchasePrice, retailPrice: barcodeData.retailPrice });
+          finalPurchasePrice = barcodeData.purchasePrice.toString();
+          finalRetailPrice = barcodeData.retailPrice.toString();
+          hasPrices = true;
+          
+          setCurrentProduct(prev => ({
+            ...prev,
+            purchasePrice: finalPurchasePrice,
+            retailPrice: finalRetailPrice,
+            quantity: prev.quantity || '1'
+          }));
+          toast.success(`💡 Цены загружены из базы: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
+        } else if (existing) {
           // Автозаполняем из основной базы
           finalPurchasePrice = existing.purchasePrice.toString();
           finalRetailPrice = existing.retailPrice.toString();
@@ -863,6 +870,13 @@ export const InventoryTab = () => {
             quantity: prev.quantity || '1'
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
+        }
+
+        // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
+        if (!sanitizedBarcode) {
+          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.', { position: 'top-center' });
+          addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
+          return;
         }
         
         // 4. Сохраняем фотографии в product_images для истории

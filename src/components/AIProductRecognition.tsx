@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 interface AIProductRecognitionProps {
-  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string; autoAddToProducts?: boolean; existingProductId?: string }) => void;
+  onProductFound: (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; expiryDate?: string; manufacturingDate?: string; frontPhoto?: string; barcodePhoto?: string; autoAddToProducts?: boolean; existingProductId?: string; purchasePrice?: number; retailPrice?: number }) => void;
   mode?: 'product' | 'barcode' | 'expiry' | 'dual';
   hidden?: boolean;
   hasIncompleteProducts?: boolean; // Есть ли незавершенные товары в очереди
@@ -712,34 +712,62 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 id: 'ai-scan-progress'
               });
             } else {
-              // Товар не найден в базе, отправляем в очередь для заполнения
-              console.log('ℹ️ Товар не найден в базе, отправляем в очередь');
+              // Проверяем загруженную CSV базу
+              console.log('🔍 Проверяем загруженную CSV базу...');
+              const { findProductInDatabase } = await import('@/lib/productsDatabase');
+              const csvProduct = scannedBarcode 
+                ? await findProductInDatabase(scannedBarcode)
+                : null;
               
-              onProductFound({
-                barcode: scannedBarcode,
-                name: scannedName,
-                category: scannedCategory,
-                frontPhoto: savedFrontPhoto,
-                barcodePhoto: savedBarcodePhoto
-              });
-              
-              // Показываем что именно распознано
-              if (scannedBarcode && scannedName) {
-                toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
+              if (csvProduct) {
+                console.log('✅ Товар найден в CSV базе с ценами:', csvProduct);
+                
+                // Отправляем в очередь с заполненными ценами из CSV
+                onProductFound({
+                  barcode: scannedBarcode || csvProduct.barcode,
+                  name: scannedName || csvProduct.name,
+                  category: scannedCategory,
+                  frontPhoto: savedFrontPhoto,
+                  barcodePhoto: savedBarcodePhoto,
+                  purchasePrice: csvProduct.purchasePrice,
+                  retailPrice: csvProduct.retailPrice
+                });
+                
+                toast.success(`✅ Товар найден в базе!\n📦 ${csvProduct.name}\n💰 Цены загружены автоматически`, { 
                   position: 'top-center',
                   id: 'ai-scan-progress',
                   duration: 4000
                 });
-              } else if (scannedBarcode) {
-                toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
-                  position: 'top-center',
-                  id: 'ai-scan-progress'
+              } else {
+                // Товар не найден ни в одной базе, отправляем в очередь для заполнения
+                console.log('ℹ️ Товар не найден ни в одной базе, отправляем в очередь');
+                
+                onProductFound({
+                  barcode: scannedBarcode,
+                  name: scannedName,
+                  category: scannedCategory,
+                  frontPhoto: savedFrontPhoto,
+                  barcodePhoto: savedBarcodePhoto
                 });
-              } else if (scannedName) {
-                toast.success(`✅ Название распознано: ${scannedName}`, { 
-                  position: 'top-center',
-                  id: 'ai-scan-progress'
-                });
+                
+                // Показываем что именно распознано
+                if (scannedBarcode && scannedName) {
+                  toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
+                    position: 'top-center',
+                    id: 'ai-scan-progress',
+                    duration: 4000
+                  });
+                } else if (scannedBarcode) {
+                  toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
+                    position: 'top-center',
+                    id: 'ai-scan-progress'
+                  });
+                } else if (scannedName) {
+                  toast.success(`✅ Название распознано: ${scannedName}`, { 
+                    position: 'top-center',
+                    id: 'ai-scan-progress'
+                  });
+                }
               }
             }
           } else {

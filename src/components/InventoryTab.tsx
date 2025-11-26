@@ -602,50 +602,53 @@ export const InventoryTab = () => {
     };
     loadSuppliers();
 
-    // Загрузка pending products из Supabase
+    // Загрузка pending products из Supabase (БЕЗ base64 изображений для скорости)
     const loadPendingProducts = async (page: number = 1) => {
       try {
         console.log('🔄 Загрузка очереди, страница:', page);
         
-        // Сначала получаем общее количество
+        // Подсчет через легкий запрос
         const { count, error: countError } = await supabase
           .from('vremenno_product_foto')
-          .select('*', { count: 'exact', head: true });
+          .select('id', { count: 'exact', head: true });
         
         if (countError) {
-          console.error('❌ Ошибка подсчета товаров:', countError);
-          console.error('❌ Детали ошибки:', JSON.stringify(countError, null, 2));
+          console.error('❌ Ошибка подсчета:', countError);
         } else {
           setQueueTotal(count || 0);
-          console.log('✅ Всего товаров в очереди:', count);
+          console.log('✅ Всего товаров:', count);
         }
         
-        // Загружаем товары с пагинацией
-        const from = (page - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-        console.log('📦 Запрос диапазона:', from, '-', to);
-        
+        // Загружаем ТОЛЬКО метаданные БЕЗ тяжелых base64 полей
         const { data, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*')
+          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, created_at, storage_path, front_photo_storage_path, barcode_photo_storage_path')
           .order('created_at', { ascending: false })
-          .range(from, to);
+          .limit(100);
         
         if (error) {
           console.error('❌ Ошибка загрузки очереди:', error);
-          console.error('❌ Детали ошибки:', JSON.stringify(error, null, 2));
-          console.error('❌ Код ошибки:', error.code);
-          console.error('❌ Сообщение:', error.message);
           toast.error(`Ошибка загрузки очереди: ${error.message}`);
           return;
         }
         
         if (data && data.length > 0) {
           const loaded: PendingProduct[] = data.map(item => {
+            // Используем пути к storage вместо base64
             const photos = [];
-            if (item.front_photo) photos.push(item.front_photo);
-            if (item.barcode_photo) photos.push(item.barcode_photo);
-            if (photos.length === 0 && item.image_url) photos.push(item.image_url);
+            const frontPhotoUrl = item.front_photo_storage_path 
+              ? supabase.storage.from('product-photos').getPublicUrl(item.front_photo_storage_path).data.publicUrl
+              : '';
+            const barcodePhotoUrl = item.barcode_photo_storage_path
+              ? supabase.storage.from('product-photos').getPublicUrl(item.barcode_photo_storage_path).data.publicUrl
+              : '';
+            const mainPhotoUrl = item.storage_path
+              ? supabase.storage.from('product-photos').getPublicUrl(item.storage_path).data.publicUrl
+              : '';
+              
+            if (frontPhotoUrl) photos.push(frontPhotoUrl);
+            if (barcodePhotoUrl) photos.push(barcodePhotoUrl);
+            if (photos.length === 0 && mainPhotoUrl) photos.push(mainPhotoUrl);
             
             return {
               id: item.id,
@@ -659,22 +662,22 @@ export const InventoryTab = () => {
               supplier: item.supplier || '',
               expiryDate: item.expiry_date || '',
               photos: photos,
-              frontPhoto: item.front_photo || item.image_url || '',
-              barcodePhoto: item.barcode_photo || '',
+              frontPhoto: frontPhotoUrl || mainPhotoUrl || '',
+              barcodePhoto: barcodePhotoUrl || '',
             };
           });
           setPendingProducts(loaded);
-          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page})`);
+          console.log(`✅ Загружено ${loaded.length} товаров`);
         } else {
           setPendingProducts([]);
           console.log('📦 Очередь пуста');
         }
       } catch (err) {
-        console.error('❌ КРИТИЧЕСКАЯ ошибка загрузки очереди:', err);
-        toast.error('Критическая ошибка загрузки очереди');
+        console.error('❌ Критическая ошибка загрузки:', err);
+        toast.error('Не удалось загрузить очередь товаров');
       }
     };
-    loadPendingProducts(queuePage);
+    loadPendingProducts(1);
 
     const suppliersChannel = supabase
       .channel('suppliers_changes_inventory')

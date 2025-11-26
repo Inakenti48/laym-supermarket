@@ -383,6 +383,84 @@ export const PendingProductsTab = () => {
     }
   };
 
+  const handleMassTransferWithCSV = async () => {
+    if (totalCount === 0) {
+      toast.info('Очередь пуста');
+      return;
+    }
+
+    const confirmTransfer = window.confirm(
+      `Запустить массовый перенос всех товаров из очереди?\n\n` +
+      `Цены будут найдены в CSV базе данных.\n` +
+      `Товары без штрихкода или названия будут пропущены.\n\n` +
+      `Всего в очереди: ${totalCount} товаров`
+    );
+
+    if (!confirmTransfer) return;
+
+    try {
+      toast.loading('🔄 Запуск массового переноса с поиском цен в CSV...', { id: 'mass-transfer' });
+      
+      const { data, error } = await supabase.functions.invoke('transfer-queue-to-products', {
+        body: {}
+      });
+
+      if (error) {
+        console.error('Ошибка вызова функции:', error);
+        toast.error('Ошибка при переносе товаров', { id: 'mass-transfer' });
+        return;
+      }
+
+      console.log('Результат переноса:', data);
+
+      if (data?.success) {
+        toast.success(
+          `✅ ${data.message}\n` +
+          (data.pricesFound ? `💡 Найдено цен в CSV: ${data.pricesFound}` : ''),
+          { id: 'mass-transfer', duration: 5000 }
+        );
+        
+        // Перезагружаем очередь
+        const from = (currentPage - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+        
+        const { data: queueData, count } = await supabase
+          .from('vremenno_product_foto')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: true })
+          .range(from, to);
+        
+        setTotalCount(count || 0);
+        
+        if (queueData && queueData.length > 0) {
+          const products = queueData.map((item: any) => ({
+            id: item.id,
+            barcode: item.barcode || '',
+            name: item.product_name || '',
+            category: item.category || '',
+            purchasePrice: item.purchase_price?.toString() || '',
+            retailPrice: item.retail_price?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            unit: 'шт',
+            expiryDate: item.expiry_date || '',
+            supplier: item.supplier || '',
+            frontPhoto: item.front_photo || undefined,
+            barcodePhoto: item.barcode_photo || undefined,
+            photos: item.image_url ? [item.image_url] : [],
+          }));
+          setPendingProducts(products);
+        } else {
+          setPendingProducts([]);
+        }
+      } else {
+        toast.error(data?.error || 'Неизвестная ошибка', { id: 'mass-transfer' });
+      }
+    } catch (error: any) {
+      console.error('Ошибка массового переноса:', error);
+      toast.error('Ошибка при переносе товаров', { id: 'mass-transfer' });
+    }
+  };
+
   const handleSaveAllProducts = async () => {
     if (pendingProducts.length === 0) {
       toast.info('Нет товаров для сохранения');
@@ -518,21 +596,30 @@ export const PendingProductsTab = () => {
               )}
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={() => handleTransferAllReady(false)}
               disabled={totalCount === 0}
               variant="default"
-              className="flex-1 h-10 bg-primary hover:bg-primary/90"
+              className="flex-1 min-w-[160px] h-10 bg-primary hover:bg-primary/90"
             >
               <Save className="h-4 w-4 mr-2" />
               Перенести готовые
             </Button>
             <Button
+              onClick={handleMassTransferWithCSV}
+              disabled={totalCount === 0}
+              variant="secondary"
+              className="flex-1 min-w-[160px] h-10"
+            >
+              <Package className="h-4 w-4 mr-2" />
+              Массовый перенос (CSV)
+            </Button>
+            <Button
               onClick={handleSaveAllProducts}
               disabled={!hasCompleteProducts}
               variant="outline"
-              className="flex-1 h-10"
+              className="flex-1 min-w-[140px] h-10"
             >
               <Save className="h-4 w-4 mr-2" />
               Занести все ({pendingProducts.length})

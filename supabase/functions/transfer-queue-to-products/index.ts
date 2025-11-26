@@ -6,6 +6,69 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CSV_FILES = [
+  '/data/products_part_1.csv',
+  '/data/products_part_2.csv',
+  '/data/products_part_3.csv',
+  '/data/products_part_4.csv',
+];
+
+interface CSVProductPrice {
+  barcode: string;
+  purchase_price: number;
+  sale_price: number;
+}
+
+let cachedProducts: CSVProductPrice[] | null = null;
+
+const loadCSVPrices = async (): Promise<CSVProductPrice[]> => {
+  if (cachedProducts) {
+    return cachedProducts;
+  }
+
+  const allProducts: CSVProductPrice[] = [];
+  const baseUrl = 'https://rfkfjfvlcushtejkgbmg.supabase.co';
+
+  for (const file of CSV_FILES) {
+    try {
+      const response = await fetch(`${baseUrl}${file}`);
+      const text = await response.text();
+      const lines = text.split('\n').filter(line => line.trim());
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length < 7) continue;
+
+        const barcode = parts[0];
+        const purchasePrice = parseFloat(parts[4]) || 0;
+        const salePrice = parseFloat(parts[5]) || 0;
+
+        if (barcode) {
+          allProducts.push({
+            barcode,
+            purchase_price: purchasePrice,
+            sale_price: salePrice
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error loading ${file}:`, error);
+    }
+  }
+
+  cachedProducts = allProducts;
+  console.log(`💾 Loaded ${allProducts.length} products from CSV`);
+  return allProducts;
+};
+
+const findPricesByBarcode = async (barcode: string): Promise<CSVProductPrice | null> => {
+  const products = await loadCSVPrices();
+  return products.find(p => p.barcode === barcode) || null;
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -17,6 +80,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     console.log('🚀 Начало массового переноса товаров из очереди');
+
+    // Загружаем CSV цены
+    console.log('📊 Загрузка CSV базы данных...');
+    await loadCSVPrices();
 
     // Получаем все товары из очереди
     const { data: queueItems, error: fetchError } = await supabase
@@ -44,48 +111,72 @@ serve(async (req) => {
 
     let transferred = 0;
     let skipped = 0;
+    let pricesFound = 0;
     const skippedItems: any[] = [];
 
     for (const item of queueItems) {
       try {
         // Проверяем обязательные поля
-        const hasAllFields = item.barcode && item.product_name && item.category && 
-            item.purchase_price && item.retail_price && item.quantity;
+        const hasBarcode = item.barcode && item.barcode.trim();
+        const hasName = item.product_name && item.product_name.trim();
         
-        // Проверяем наличие хотя бы одной фотографии
-        const hasPhotos = item.front_photo || item.barcode_photo || item.image_url;
-        
-        if (!hasAllFields || !hasPhotos) {
-          const reason = !hasAllFields ? 'Не заполнены обязательные поля' : 'Нет фотографий';
-          console.log(`⚠️ Пропуск товара ${item.product_name}: ${reason}`);
+        if (!hasBarcode || !hasName) {
+          const reason = 'Отсутствует штрихкод или название';
+          console.log(`⚠️ Пропуск товара: ${reason}`);
           skipped++;
           skippedItems.push({ 
             barcode: item.barcode, 
             name: item.product_name, 
             reason 
           });
-          continue; // Оставляем в очереди
+          continue;
+        }
+
+        // Ищем цены в CSV если их нет
+        let purchasePrice = item.purchase_price;
+        let retailPrice = item.retail_price;
+
+        if (!purchasePrice || !retailPrice) {
+          const csvPrices = await findPricesByBarcode(item.barcode);
+          if (csvPrices) {
+            purchasePrice = csvPrices.purchase_price;
+            retailPrice = csvPrices.sale_price;
+            pricesFound++;
+            console.log(`💡 Цены найдены в CSV для ${item.barcode}: ${purchasePrice} / ${retailPrice}`);
+          } else {
+            // Устанавливаем цены в 0 если не нашли
+            purchasePrice = 0;
+            retailPrice = 0;
+            console.log(`⚠️ Цены не найдены для ${item.barcode}, устанавливаем 0`);
+          }
         }
 
         // Проверяем, существует ли товар с таким штрихкодом
         const { data: existing } = await supabase
           .from('products')
-          .select('id, quantity')
+          .select('id, quantity, purchase_price, sale_price, category')
           .eq('barcode', item.barcode)
           .maybeSingle();
 
         if (existing) {
           // Обновляем количество существующего товара
-          const newQuantity = existing.quantity + item.quantity;
+          const newQuantity = existing.quantity + (item.quantity || 1);
+          const updateData: any = {
+            quantity: newQuantity,
+            supplier: item.supplier,
+            category: item.category || existing.category || 'Разное',
+            updated_at: new Date().toISOString(),
+          };
+
+          // Обновляем цены только если они есть (не 0)
+          if (purchasePrice > 0 || retailPrice > 0) {
+            updateData.purchase_price = purchasePrice;
+            updateData.sale_price = retailPrice;
+          }
+
           const { error: updateError } = await supabase
             .from('products')
-            .update({
-              quantity: newQuantity,
-              purchase_price: item.purchase_price,
-              sale_price: item.retail_price,
-              supplier: item.supplier,
-              updated_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq('id', existing.id);
 
           if (updateError) {
@@ -96,7 +187,7 @@ serve(async (req) => {
               name: item.product_name, 
               reason: updateError.message 
             });
-            continue; // Оставляем в очереди при ошибке
+            continue;
           }
 
           console.log(`✅ Товар ${item.product_name} обновлен (количество: ${newQuantity})`);
@@ -109,9 +200,9 @@ serve(async (req) => {
               name: item.product_name,
               category: item.category || 'Разное',
               unit: item.unit || 'шт',
-              purchase_price: item.purchase_price,
-              sale_price: item.retail_price,
-              quantity: item.quantity,
+              purchase_price: purchasePrice,
+              sale_price: retailPrice,
+              quantity: item.quantity || 1,
               supplier: item.supplier,
               expiry_date: item.expiry_date,
               payment_type: item.payment_type || 'full',
@@ -128,7 +219,7 @@ serve(async (req) => {
               name: item.product_name, 
               reason: insertError.message 
             });
-            continue; // Оставляем в очереди при ошибке
+            continue;
           }
 
           console.log(`✅ Товар ${item.product_name} добавлен`);
@@ -142,7 +233,7 @@ serve(async (req) => {
 
         for (const photo of photos) {
           if (photo.url && photo.path) {
-            const { error: photoError } = await supabase
+            await supabase
               .from('product_images')
               .insert({
                 barcode: item.barcode,
@@ -151,30 +242,14 @@ serve(async (req) => {
                 storage_path: photo.path,
                 created_by: item.created_by,
               });
-
-            if (photoError) {
-              console.error(`⚠️ Ошибка сохранения фото для ${item.product_name}:`, photoError);
-            }
           }
         }
 
         // Удаляем товар из очереди
-        const { error: deleteError } = await supabase
+        await supabase
           .from('vremenno_product_foto')
           .delete()
           .eq('id', item.id);
-
-        if (deleteError) {
-          console.error(`⚠️ Ошибка удаления из очереди ${item.product_name}:`, deleteError);
-        }
-
-        // Логируем действие
-        await supabase
-          .from('system_logs')
-          .insert({
-            message: `Товар ${item.product_name} (${item.barcode}) перенесен из очереди`,
-            user_id: item.created_by,
-          });
 
         transferred++;
       } catch (itemError: any) {
@@ -188,15 +263,16 @@ serve(async (req) => {
       }
     }
 
-    console.log(`🎉 Завершено: ${transferred} перенесено, ${skipped} пропущено`);
+    console.log(`🎉 Завершено: ${transferred} перенесено, ${skipped} пропущено, ${pricesFound} цен найдено в CSV`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Перенесено: ${transferred}, Пропущено (осталось в очереди): ${skipped}`,
+        message: `Перенесено: ${transferred}, Пропущено: ${skipped}, Цен найдено в CSV: ${pricesFound}`,
         transferred,
         skipped,
-        skippedItems: skippedItems.length > 0 ? skippedItems : undefined,
+        pricesFound,
+        skippedItems: skippedItems.length > 0 ? skippedItems.slice(0, 10) : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

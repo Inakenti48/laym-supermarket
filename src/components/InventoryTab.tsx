@@ -216,66 +216,90 @@ export const InventoryTab = () => {
 
         if (hasBothPrices && hasQuantity) {
           // Если обе цены и количество заполнены - сохраняем в products (UPSERT)
-          const { data: existing, error: selectError } = await supabase
-            .from('products')
-            .select('quantity, purchase_price, sale_price')
-            .eq('barcode', currentProduct.barcode)
-            .maybeSingle();
+          try {
+            const { data: existing, error: selectError } = await supabase
+              .from('products')
+              .select('quantity, purchase_price, sale_price')
+              .eq('barcode', currentProduct.barcode)
+              .maybeSingle();
 
-          if (selectError) {
-            console.error('❌ Ошибка проверки товара:', selectError);
-            toast.error('❌ Ошибка сохранения товара');
+            if (selectError) {
+              console.error('❌ Ошибка проверки товара:', selectError);
+              // Не блокируем процесс, пробуем сделать upsert
+            }
+
+            if (existing) {
+              // Товар существует - обновляем количество и цены
+              const { error: updateError } = await supabase
+                .from('products')
+                .update({
+                  quantity: existing.quantity + quantity,
+                  purchase_price: purchasePrice,
+                  sale_price: retailPrice,
+                  supplier: currentProduct.supplier || null,
+                  expiry_date: currentProduct.expiryDate || null,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('barcode', currentProduct.barcode);
+
+              if (updateError) {
+                console.error('❌ Ошибка обновления:', updateError);
+                return;
+              }
+
+              toast.success(`✅ Товар "${currentProduct.name}" обновлен! Количество: ${existing.quantity} + ${quantity} = ${existing.quantity + quantity}`);
+            } else {
+              // Товара нет - создаем новый с обработкой дубликатов
+              const { error: insertError } = await supabase
+                .from('products')
+                .insert({
+                  barcode: currentProduct.barcode,
+                  name: currentProduct.name,
+                  category,
+                  supplier: currentProduct.supplier || null,
+                  unit: currentProduct.unit,
+                  purchase_price: purchasePrice,
+                  sale_price: retailPrice,
+                  quantity: quantity,
+                  expiry_date: currentProduct.expiryDate || null,
+                  payment_type: 'full',
+                  paid_amount: purchasePrice * quantity,
+                  debt_amount: 0,
+                  created_by: currentUserId,
+                });
+
+              // Если ошибка дубликата - пробуем обновить
+              if (insertError?.code === '23505') {
+                console.log('⚠️ Товар уже существует, обновляем количество...');
+                const { data: existingProduct } = await supabase
+                  .from('products')
+                  .select('quantity')
+                  .eq('barcode', currentProduct.barcode)
+                  .maybeSingle();
+                
+                if (existingProduct) {
+                  await supabase
+                    .from('products')
+                    .update({
+                      quantity: existingProduct.quantity + quantity,
+                      purchase_price: purchasePrice,
+                      sale_price: retailPrice,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('barcode', currentProduct.barcode);
+                  
+                  toast.success(`✅ Товар "${currentProduct.name}" обновлен!`);
+                }
+              } else if (insertError) {
+                console.error('❌ Ошибка создания:', insertError);
+                return;
+              } else {
+                toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
+              }
+            }
+          } catch (err: any) {
+            console.error('❌ Критическая ошибка автосохранения:', err);
             return;
-          }
-
-          if (existing) {
-            // Товар существует - обновляем количество и цены
-            const { error: updateError } = await supabase
-              .from('products')
-              .update({
-                quantity: existing.quantity + quantity,
-                purchase_price: purchasePrice,
-                sale_price: retailPrice,
-                supplier: currentProduct.supplier || null,
-                expiry_date: currentProduct.expiryDate || null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('barcode', currentProduct.barcode);
-
-            if (updateError) {
-              console.error('❌ Ошибка обновления:', updateError);
-              toast.error('❌ Ошибка сохранения товара');
-              return;
-            }
-
-            toast.success(`✅ Товар "${currentProduct.name}" обновлен! Количество: ${existing.quantity} + ${quantity} = ${existing.quantity + quantity}`);
-          } else {
-            // Товара нет - создаем новый
-            const { error: insertError } = await supabase
-              .from('products')
-              .insert({
-                barcode: currentProduct.barcode,
-                name: currentProduct.name,
-                category,
-                supplier: currentProduct.supplier || null,
-                unit: currentProduct.unit,
-                purchase_price: purchasePrice,
-                sale_price: retailPrice,
-                quantity: quantity,
-                expiry_date: currentProduct.expiryDate || null,
-                payment_type: 'full',
-                paid_amount: purchasePrice * quantity,
-                debt_amount: 0,
-                created_by: currentUserId,
-              });
-
-            if (insertError) {
-              console.error('❌ Ошибка создания:', insertError);
-              toast.error('❌ Ошибка сохранения товара');
-              return;
-            }
-
-            toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
           }
 
           // Сохраняем фото если есть
@@ -947,7 +971,30 @@ export const InventoryTab = () => {
               .from('products')
               .insert(productData);
 
-            if (insertError) {
+            // Обработка дубликата - если товар уже есть, просто обновляем
+            if (insertError?.code === '23505') {
+              console.log('⚠️ Товар уже существует, обновляем количество...');
+              const { data: duplicateProduct } = await supabase
+                .from('products')
+                .select('quantity')
+                .eq('barcode', sanitizedBarcode)
+                .maybeSingle();
+              
+              if (duplicateProduct) {
+                await supabase
+                  .from('products')
+                  .update({
+                    quantity: duplicateProduct.quantity + 1,
+                    purchase_price: parseFloat(finalPurchasePrice),
+                    sale_price: parseFloat(finalRetailPrice),
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('barcode', sanitizedBarcode);
+                
+                toast.success(`✅ "${barcodeData.name}" количество обновлено!`, { position: 'top-center' });
+                addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - количество обновлено`);
+              }
+            } else if (insertError) {
               console.error('❌ Ошибка создания товара:', insertError);
               toast.error('❌ Ошибка создания товара в базе', { position: 'top-center' });
             } else {
@@ -1666,14 +1713,37 @@ export const InventoryTab = () => {
               created_by: currentUserId,
             });
 
-          if (saveError) {
+          // Обработка дубликата - если товар уже есть, просто обновляем
+          if (saveError?.code === '23505') {
+            console.log('⚠️ Товар уже существует при добавлении, обновляем количество...');
+            const { data: duplicateProduct } = await supabase
+              .from('products')
+              .select('quantity')
+              .eq('barcode', currentProduct.barcode)
+              .maybeSingle();
+            
+            if (duplicateProduct) {
+              await supabase
+                .from('products')
+                .update({
+                  quantity: duplicateProduct.quantity + quantity,
+                  purchase_price: purchasePrice,
+                  sale_price: retailPrice,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('barcode', currentProduct.barcode);
+              
+              console.log('✅ Количество товара обновлено');
+              toast.success(`✅ Товар "${currentProduct.name}" количество обновлено!`);
+            }
+          } else if (saveError) {
             console.error('❌ Ошибка сохранения в products:', saveError);
             toast.error(`❌ Ошибка сохранения: ${saveError.message}`);
             return;
+          } else {
+            console.log('✅ Новый товар сохранен');
+            toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
           }
-          
-          console.log('✅ Новый товар сохранен');
-          toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
         }
 
         // Сохраняем фото если есть

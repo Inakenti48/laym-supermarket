@@ -358,67 +358,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     console.log('📦 Сжатие изображения...');
     const compressedImage = await compressForAI(imageBase64);
     
-    // STEP 1: Попытка найти похожую фотографию в базе (приоритет)
-    console.log('🔍 Step 1: Searching for similar photo in database...');
-    
-    try {
-      const { data: existingPhotos, error: photosError } = await supabase
-        .from('product_images')
-        .select('barcode, product_name, image_url');
-      
-      if (!photosError && existingPhotos && existingPhotos.length > 0) {
-        console.log(`📸 Found ${existingPhotos.length} photos in database, trying to match...`);
-        
-        const { data: matchData, error: matchError } = await supabase.functions.invoke('recognize-product-by-photo', {
-          body: { 
-            imageBase64: compressedImage
-          }
-        });
-        
-        console.log('📦 Photo match response:', { matchData, matchError });
-        
-        // Проверяем правильную структуру ответа
-        if (!matchError && matchData?.result?.recognized && matchData?.result?.barcode) {
-          console.log('✅ Found matching product by photo:', matchData.result.barcode);
-          
-          // Ищем товар по штрихкоду ИЛИ по названию
-          const allProducts = await getAllProducts();
-          let product = allProducts.find(p => p.barcode === matchData.result.barcode);
-          
-          // Если не нашли по штрихкоду, ищем по названию
-          if (!product && matchData.result.name) {
-            product = allProducts.find(p => 
-              p.name.toLowerCase() === matchData.result.name.toLowerCase() ||
-              p.name.toLowerCase().includes(matchData.result.name.toLowerCase()) ||
-              matchData.result.name.toLowerCase().includes(p.name.toLowerCase())
-            );
-            if (product) {
-              console.log('✅ Product found by NAME match:', product.name);
-            }
-          }
-          
-          if (product) {
-            console.log('✅ Product found in database, using photo match result');
-            return {
-              barcode: product.barcode || matchData.result.barcode,
-              name: product.name,
-              category: product.category,
-              photoUrl: imageBase64 // Возвращаем изображение для сохранения
-            };
-          } else {
-            console.log('⚠️ Photo matched but product not in database');
-          }
-        } else {
-          console.log('❌ No matching photo found or not recognized:', matchData?.result);
-        }
-      }
-    } catch (photoError) {
-      console.error('Error during photo matching:', photoError);
-      console.log('Continuing with AI recognition...');
-    }
-    
-    // STEP 2: Если не нашли по фото - используем AI распознавание
-    console.log('🤖 Step 2: Using AI recognition...');
+    // Упрощаем логику: сразу обращаемся к AI, без предварительного поиска по фото,
+    // чтобы сканирование работало максимально быстро
+    console.log('🤖 AI распознавание (без предварительного поиска по фото)...');
     const allProducts = await getAllProducts();
     
     const { data, error } = await supabase.functions.invoke('recognize-product', {

@@ -64,32 +64,38 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
         const compressedFront = await compressForAI(frontPhoto);
         const compressedBarcode = await compressForAI(barcodePhoto);
         
-        const { data: matchData, error: matchError } = await supabase.functions.invoke(
-          'recognize-product-by-photo',
-          {
-            body: { 
-              frontPhoto: compressedFront,
-              barcodePhoto: compressedBarcode
+        try {
+          const { data: matchData, error: matchError } = await supabase.functions.invoke(
+            'recognize-product-by-photo',
+            {
+              body: { 
+                frontPhoto: compressedFront,
+                barcodePhoto: compressedBarcode
+              }
             }
-          }
-        );
+          );
 
-        if (!matchError && matchData?.recognized && matchData.barcode !== 'UNKNOWN') {
-          console.log('✅ Товар найден в базе:', matchData.barcode);
-          toast.success(`✅ Товар найден: ${matchData.productName}`);
-          
-          onProductFound({
-            barcode: matchData.barcode,
-            name: matchData.productName,
-            category: matchData.category,
-            frontPhoto,
-            barcodePhoto
-          });
-          onClose();
-          return;
+          if (matchError) {
+            console.warn('⚠️ Ошибка проверки в базе, переходим к AI:', matchError);
+          } else if (matchData?.recognized && matchData.barcode !== 'UNKNOWN') {
+            console.log('✅ Товар найден в базе:', matchData.barcode);
+            toast.success(`✅ Товар найден: ${matchData.productName}`);
+            
+            onProductFound({
+              barcode: matchData.barcode,
+              name: matchData.productName,
+              category: matchData.category,
+              frontPhoto,
+              barcodePhoto
+            });
+            onClose();
+            return;
+          }
+        } catch (checkError) {
+          console.warn('⚠️ Ошибка проверки товара в базе, продолжаем с AI распознаванием:', checkError);
         }
         
-        console.log('ℹ️ Товар не найден, переходим к AI распознаванию');
+        console.log('ℹ️ Товар не найден в базе, переходим к AI распознаванию');
       }
 
       // Шаг 2: AI распознавание если товар не найден
@@ -123,6 +129,8 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
         .getPublicUrl(`temporary/${barcodeFileName}`);
 
       // Вызываем edge function для распознавания
+      toast.info('🤖 AI анализирует фотографии...');
+      
       const { data: scanData, error: scanError } = await supabase.functions.invoke(
         'scan-product-photos',
         {
@@ -134,8 +142,8 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       );
 
       if (scanError) {
-        console.error('Ошибка AI распознавания:', scanError);
-        throw new Error('Ошибка распознавания');
+        console.error('❌ Ошибка AI распознавания:', scanError);
+        throw new Error(`Не удалось распознать товар: ${scanError.message || 'неизвестная ошибка'}`);
       }
 
       console.log('✅ AI распознавание завершено:', scanData);
@@ -161,8 +169,9 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       onClose();
       
     } catch (error: any) {
-      console.error('Ошибка распознавания:', error);
-      toast.error(`❌ Ошибка: ${error.message}`);
+      console.error('❌ Критическая ошибка распознавания:', error);
+      const errorMessage = error.message || 'Не удалось распознать товар';
+      toast.error(`❌ ${errorMessage}. Попробуйте сделать более чёткие фотографии.`);
     } finally {
       setIsProcessing(false);
     }

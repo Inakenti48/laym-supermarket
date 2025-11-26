@@ -77,8 +77,14 @@ export const PendingProductsTab = () => {
           .range(from, to);
 
         if (error) {
-          console.error('Ошибка загрузки товаров:', error);
-          throw error;
+          console.error('❌ Ошибка загрузки товаров:', error);
+          toast.info('⏳ Загрузка занимает больше времени, пожалуйста подождите...');
+          // Не выбрасываем ошибку, даём возможность повторить
+          if (isMounted) {
+            setPendingProducts([]);
+            setTotalCount(0);
+          }
+          return;
         }
 
         if (!isMounted) return;
@@ -111,10 +117,10 @@ export const PendingProductsTab = () => {
           setPendingProducts([]);
         }
       } catch (error: any) {
-        console.error('Ошибка при загрузке товаров:', error);
+        console.error('❌ Критическая ошибка загрузки:', error);
         if (isMounted) {
-          setPendingProducts([]);
-          toast.error('Ошибка при загрузке товаров', { position: 'top-center' });
+          toast.info('⏳ Загрузка данных... Пожалуйста, подождите немного');
+          // Не сбрасываем товары, чтобы пользователь видел что загрузка идёт
         }
       } finally {
         if (isMounted) {

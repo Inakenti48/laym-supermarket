@@ -971,9 +971,8 @@ export const InventoryTab = () => {
           setPhotos([]);
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
-        } else {
-          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с автозаполненной категорией)
-          console.log('📋 Цен нет, добавляем в очередь с категорией:', finalCategory);
+          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ ТОЛЬКО В ОЧЕРЕДЬ (с автозаполненной категорией)
+          console.log('📋 Цен нет, добавляем ТОЛЬКО в очередь с категорией:', finalCategory);
           
           const newPendingProduct: PendingProduct = {
             id: `pending-${Date.now()}-${Math.random()}`,
@@ -991,9 +990,46 @@ export const InventoryTab = () => {
             barcodePhoto: barcodeData.barcodePhoto,
           };
           
+          // Добавляем в локальную очередь для мгновенного отображения
           setPendingProducts(prev => [...prev, newPendingProduct]);
-          toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`, { position: 'top-center' });
-          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь с категорией`);
+          
+          // И параллельно записываем в очередь в базе (vremenno_product_foto)
+          try {
+            const { error: queueError } = await supabase
+              .from('vremenno_product_foto')
+              .insert({
+                barcode: sanitizedBarcode,
+                product_name: barcodeData.name,
+                category: finalCategory || null,
+                supplier: finalSupplier || null,
+                unit: finalUnit || 'шт',
+                purchase_price: null,
+                retail_price: null,
+                quantity: 1,
+                expiry_date: null,
+                payment_type: 'full',
+                paid_amount: 0,
+                debt_amount: 0,
+                image_url: allPhotos[0] || null,
+                storage_path: allPhotos[0] ? `product-photos/${sanitizedBarcode}-${Date.now()}` : '',
+                front_photo: barcodeData.frontPhoto || null,
+                barcode_photo: barcodeData.barcodePhoto || null,
+                front_photo_storage_path: barcodeData.frontPhoto ? `product-photos/${sanitizedBarcode}-front-${Date.now()}` : null,
+                barcode_photo_storage_path: barcodeData.barcodePhoto ? `product-photos/${sanitizedBarcode}-barcode-${Date.now()}` : null,
+                created_by: currentUserId,
+              });
+
+            if (queueError) {
+              console.error('❌ Ошибка добавления в очередь (dual, без цен):', queueError);
+            } else {
+              console.log('✅ Товар без цен добавлен в очередь vremenno_product_foto');
+            }
+          } catch (queueEx: any) {
+            console.error('❌ Критическая ошибка при добавлении в очередь (dual, без цен):', queueEx);
+          }
+          
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь без цен`, { position: 'top-center' });
+          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь без цен`);
         }
         
       } catch (error: any) {

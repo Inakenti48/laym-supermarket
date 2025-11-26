@@ -69,9 +69,10 @@ export const PendingProductsTab = () => {
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
+        // Для первой загрузки считаем точное количество, дальше используем быстрый режим
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*', { count: 'exact' })
+          .select('*', { count: forceLoad ? 'exact' : 'planned' })
           .order('created_at', { ascending: true })
           .range(from, to);
 

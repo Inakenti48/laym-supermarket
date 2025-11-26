@@ -824,6 +824,12 @@ export const InventoryTab = () => {
         let finalSupplier = '';
         let finalCategory = barcodeData.category || '';
         
+        // Автоматически определяем категорию на основе названия если не заполнена
+        if (!finalCategory && barcodeData.name) {
+          finalCategory = determineCategoryFromName(barcodeData.name);
+          console.log(`🏷️ Категория автоматически определена: "${finalCategory}" для товара "${barcodeData.name}"`);
+        }
+        
         // Проверяем, есть ли цены в данных из AI-сканирования (из CSV базы)
         if (barcodeData.purchasePrice && barcodeData.retailPrice) {
           console.log('✅ Цены получены из CSV базы:', { purchasePrice: barcodeData.purchasePrice, retailPrice: barcodeData.retailPrice });
@@ -831,17 +837,12 @@ export const InventoryTab = () => {
           finalRetailPrice = barcodeData.retailPrice.toString();
           hasPrices = true;
           
-          // Автоматически определяем категорию на основе названия если не заполнена
-          if (!finalCategory && barcodeData.name) {
-            finalCategory = determineCategoryFromName(barcodeData.name);
-          }
-          
           setCurrentProduct(prev => ({
             ...prev,
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1'
+            quantity: '1'
           }));
           toast.success(`💡 Цены загружены из базы: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         } else if (existing) {
@@ -858,7 +859,7 @@ export const InventoryTab = () => {
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1',
+            quantity: '1',
             unit: finalUnit,
             supplier: finalSupplier
           }));
@@ -871,9 +872,10 @@ export const InventoryTab = () => {
           
           setCurrentProduct(prev => ({
             ...prev,
+            category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1'
+            quantity: '1'
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         }
@@ -927,14 +929,14 @@ export const InventoryTab = () => {
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - обновлен`);
             }
           } else {
-            // Товар не существует - создаем новый
+            // Товар не существует - создаем новый с количеством 1
             const productData = {
               barcode: sanitizedBarcode,
               name: barcodeData.name,
               category: finalCategory,
               purchase_price: parseFloat(finalPurchasePrice),
               sale_price: parseFloat(finalRetailPrice),
-              quantity: 1,
+              quantity: 1, // Всегда 1 при первом добавлении
               unit: finalUnit,
               supplier: finalSupplier || null,
               expiry_date: null,
@@ -970,17 +972,17 @@ export const InventoryTab = () => {
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
         } else {
-          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с заполненной категорией)
-          console.log('📋 Цен нет, добавляем в очередь с категорией...');
+          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с автозаполненной категорией)
+          console.log('📋 Цен нет, добавляем в очередь с категорией:', finalCategory);
           
           const newPendingProduct: PendingProduct = {
             id: `pending-${Date.now()}-${Math.random()}`,
             barcode: sanitizedBarcode,
             name: barcodeData.name,
-            category: finalCategory,
+            category: finalCategory, // Категория уже автоматически определена выше
             purchasePrice: '',
             retailPrice: '',
-            quantity: '1',
+            quantity: '1', // Всегда 1
             unit: finalUnit,
             expiryDate: '',
             supplier: finalSupplier,
@@ -991,13 +993,8 @@ export const InventoryTab = () => {
           
           setPendingProducts(prev => [...prev, newPendingProduct]);
           toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`, { position: 'top-center' });
-          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь`);
+          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь с категорией`);
         }
-        
-        // Не закрываем сканер автоматически - пользователь сам закроет
-        // Показываем успешное сообщение
-        toast.success(`✅ Форма заполнена! Проверьте поля ниже и нажмите "Добавить товар"`, { position: 'top-center' });
-        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - форма заполнена`);
         
       } catch (error: any) {
         console.error('❌ Ошибка handleScan:', error);

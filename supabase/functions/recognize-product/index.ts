@@ -222,7 +222,7 @@ ${productsToUse.map((p: any) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',  // Более быстрая модель
+        model: 'google/gemini-3-pro-preview',  // Самая быстрая и точная модель
         messages: [
           { role: 'system', content: systemPrompt },
           {

@@ -44,6 +44,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [showExistingProductDialog, setShowExistingProductDialog] = useState(false);
   const [existingProductData, setExistingProductData] = useState<any>(null);
   const [pendingRecognitionData, setPendingRecognitionData] = useState<any>(null);
+  const [addedProductsCount, setAddedProductsCount] = useState(0);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -599,6 +600,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         barcodePhoto: tempBarcodePhoto
       });
       
+      // Увеличиваем счетчик добавленных товаров
+      setAddedProductsCount(prev => prev + 1);
+      
       // СРАЗУ очищаем фотографии и готовим камеру для следующего товара
       // НЕ ЖДЕМ окончания обработки формы
       setDualPhotoStep('none');
@@ -645,6 +649,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       autoAddToProducts: true,
       existingProductId: existingProductData.id
     });
+
+    // Увеличиваем счетчик добавленных товаров
+    setAddedProductsCount(prev => prev + 1);
 
     // Очищаем состояние
     setShowExistingProductDialog(false);
@@ -753,6 +760,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             <div className="flex items-center gap-2">
               <Camera className="h-5 w-5 text-primary" />
               <h3 className="text-base font-semibold">AI-распознавание товаров</h3>
+              {addedProductsCount > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded-full">
+                  +{addedProductsCount}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-muted-foreground">

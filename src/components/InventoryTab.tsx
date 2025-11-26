@@ -619,12 +619,15 @@ export const InventoryTab = () => {
           console.log('✅ Всего товаров:', count);
         }
         
-        // Загружаем ТОЛЬКО метаданные БЕЗ тяжелых base64 полей
+        // Загружаем партиями по 50 товаров БЕЗ тяжелых base64 (оптимизация для 10к+)
+        const from = (page - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+        
         const { data, error } = await supabase
           .from('vremenno_product_foto')
           .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, created_at, storage_path, front_photo_storage_path, barcode_photo_storage_path')
           .order('created_at', { ascending: false })
-          .limit(100);
+          .range(from, to);
         
         if (error) {
           console.error('❌ Ошибка загрузки очереди:', error);
@@ -667,7 +670,7 @@ export const InventoryTab = () => {
             };
           });
           setPendingProducts(loaded);
-          console.log(`✅ Загружено ${loaded.length} товаров`);
+          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page}/${Math.ceil((count || 0) / ITEMS_PER_PAGE)})`);
         } else {
           setPendingProducts([]);
           console.log('📦 Очередь пуста');
@@ -677,7 +680,7 @@ export const InventoryTab = () => {
         toast.error('Не удалось загрузить очередь товаров');
       }
     };
-    loadPendingProducts(1);
+    loadPendingProducts(queuePage);
 
     const suppliersChannel = supabase
       .channel('suppliers_changes_inventory')

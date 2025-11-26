@@ -69,10 +69,22 @@ export const PendingProductsTab = () => {
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
-        // Быстрый запрос с приблизительным подсчётом (estimated) вместо точного (exact)
+        // Быстрый запрос БЕЗ загрузки тяжёлых изображений (только метаданные)
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*', { count: 'estimated' })
+          .select(`
+            id,
+            barcode,
+            product_name,
+            category,
+            purchase_price,
+            retail_price,
+            quantity,
+            expiry_date,
+            supplier,
+            unit,
+            created_at
+          `, { count: 'estimated' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
@@ -99,12 +111,13 @@ export const PendingProductsTab = () => {
             purchasePrice: item.purchase_price?.toString() || '',
             retailPrice: item.retail_price?.toString() || '',
             quantity: item.quantity?.toString() || '',
-            unit: 'шт',
+            unit: item.unit || 'шт',
             expiryDate: item.expiry_date || '',
             supplier: item.supplier || '',
-            frontPhoto: item.front_photo || undefined,
-            barcodePhoto: item.barcode_photo || undefined,
-            photos: item.image_url ? [item.image_url] : [],
+            // Изображения не загружаются для быстродействия
+            frontPhoto: undefined,
+            barcodePhoto: undefined,
+            photos: [],
           }));
           setPendingProducts(products);
         } else {

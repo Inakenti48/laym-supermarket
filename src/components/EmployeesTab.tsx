@@ -147,6 +147,8 @@ export const EmployeesTab = () => {
 
     try {
       if (editingId) {
+        const newLogin = customLogin || generateLogin();
+        
         const { error } = await supabase
           .from('employees')
           .update({
@@ -155,17 +157,30 @@ export const EmployeesTab = () => {
             work_conditions: workConditions,
             schedule,
             hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
-            login: customLogin || generateLogin()
+            login: newLogin
           })
           .eq('id', editingId);
 
         if (error) throw error;
+        
+        // Обновляем данные в employees_auth
+        const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
+        const index = employeesAuth.findIndex((e: any) => e.id === editingId);
+        if (index !== -1) {
+          employeesAuth[index] = { 
+            ...employeesAuth[index], 
+            login: newLogin, 
+            name 
+          };
+          localStorage.setItem('employees_auth', JSON.stringify(employeesAuth));
+        }
+        
         toast.success('Сотрудник обновлён');
       } else {
         const login = customLogin || generateLogin();
         const password = Math.random().toString(36).slice(-8); // Генерируем пароль
         
-        const { error } = await supabase
+        const { data: newEmployee, error } = await supabase
           .from('employees')
           .insert({
             name,
@@ -175,13 +190,20 @@ export const EmployeesTab = () => {
             hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
             login,
             created_by: null
-          });
+          })
+          .select()
+          .single();
 
         if (error) throw error;
         
         // Сохраняем пароль в localStorage для входа сотрудников
         const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
-        employeesAuth.push({ login, password, name });
+        employeesAuth.push({ 
+          id: newEmployee.id, 
+          login, 
+          password, 
+          name 
+        });
         localStorage.setItem('employees_auth', JSON.stringify(employeesAuth));
         
         toast.success(`Сотрудник добавлен!\nЛогин: ${login}\nПароль: ${password}`, { duration: 10000 });

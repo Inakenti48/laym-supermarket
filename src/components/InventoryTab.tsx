@@ -216,90 +216,66 @@ export const InventoryTab = () => {
 
         if (hasBothPrices && hasQuantity) {
           // Если обе цены и количество заполнены - сохраняем в products (UPSERT)
-          try {
-            const { data: existing, error: selectError } = await supabase
-              .from('products')
-              .select('quantity, purchase_price, sale_price')
-              .eq('barcode', currentProduct.barcode)
-              .maybeSingle();
+          const { data: existing, error: selectError } = await supabase
+            .from('products')
+            .select('quantity, purchase_price, sale_price')
+            .eq('barcode', currentProduct.barcode)
+            .maybeSingle();
 
-            if (selectError) {
-              console.error('❌ Ошибка проверки товара:', selectError);
-              // Не блокируем процесс, пробуем сделать upsert
-            }
-
-            if (existing) {
-              // Товар существует - обновляем количество и цены
-              const { error: updateError } = await supabase
-                .from('products')
-                .update({
-                  quantity: existing.quantity + quantity,
-                  purchase_price: purchasePrice,
-                  sale_price: retailPrice,
-                  supplier: currentProduct.supplier || null,
-                  expiry_date: currentProduct.expiryDate || null,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('barcode', currentProduct.barcode);
-
-              if (updateError) {
-                console.error('❌ Ошибка обновления:', updateError);
-                return;
-              }
-
-              toast.success(`✅ Товар "${currentProduct.name}" обновлен! Количество: ${existing.quantity} + ${quantity} = ${existing.quantity + quantity}`);
-            } else {
-              // Товара нет - создаем новый с обработкой дубликатов
-              const { error: insertError } = await supabase
-                .from('products')
-                .insert({
-                  barcode: currentProduct.barcode,
-                  name: currentProduct.name,
-                  category,
-                  supplier: currentProduct.supplier || null,
-                  unit: currentProduct.unit,
-                  purchase_price: purchasePrice,
-                  sale_price: retailPrice,
-                  quantity: quantity,
-                  expiry_date: currentProduct.expiryDate || null,
-                  payment_type: 'full',
-                  paid_amount: purchasePrice * quantity,
-                  debt_amount: 0,
-                  created_by: currentUserId,
-                });
-
-              // Если ошибка дубликата - пробуем обновить
-              if (insertError?.code === '23505') {
-                console.log('⚠️ Товар уже существует, обновляем количество...');
-                const { data: existingProduct } = await supabase
-                  .from('products')
-                  .select('quantity')
-                  .eq('barcode', currentProduct.barcode)
-                  .maybeSingle();
-                
-                if (existingProduct) {
-                  await supabase
-                    .from('products')
-                    .update({
-                      quantity: existingProduct.quantity + quantity,
-                      purchase_price: purchasePrice,
-                      sale_price: retailPrice,
-                      updated_at: new Date().toISOString(),
-                    })
-                    .eq('barcode', currentProduct.barcode);
-                  
-                  toast.success(`✅ Товар "${currentProduct.name}" обновлен!`);
-                }
-              } else if (insertError) {
-                console.error('❌ Ошибка создания:', insertError);
-                return;
-              } else {
-                toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
-              }
-            }
-          } catch (err: any) {
-            console.error('❌ Критическая ошибка автосохранения:', err);
+          if (selectError) {
+            console.error('❌ Ошибка проверки товара:', selectError);
+            toast.error('❌ Ошибка сохранения товара');
             return;
+          }
+
+          if (existing) {
+            // Товар существует - обновляем количество и цены
+            const { error: updateError } = await supabase
+              .from('products')
+              .update({
+                quantity: existing.quantity + quantity,
+                purchase_price: purchasePrice,
+                sale_price: retailPrice,
+                supplier: currentProduct.supplier || null,
+                expiry_date: currentProduct.expiryDate || null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('barcode', currentProduct.barcode);
+
+            if (updateError) {
+              console.error('❌ Ошибка обновления:', updateError);
+              toast.error('❌ Ошибка сохранения товара');
+              return;
+            }
+
+            toast.success(`✅ Товар "${currentProduct.name}" обновлен! Количество: ${existing.quantity} + ${quantity} = ${existing.quantity + quantity}`);
+          } else {
+            // Товара нет - создаем новый
+            const { error: insertError } = await supabase
+              .from('products')
+              .insert({
+                barcode: currentProduct.barcode,
+                name: currentProduct.name,
+                category,
+                supplier: currentProduct.supplier || null,
+                unit: currentProduct.unit,
+                purchase_price: purchasePrice,
+                sale_price: retailPrice,
+                quantity: quantity,
+                expiry_date: currentProduct.expiryDate || null,
+                payment_type: 'full',
+                paid_amount: purchasePrice * quantity,
+                debt_amount: 0,
+                created_by: currentUserId,
+              });
+
+            if (insertError) {
+              console.error('❌ Ошибка создания:', insertError);
+              toast.error('❌ Ошибка сохранения товара');
+              return;
+            }
+
+            toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
           }
 
           // Сохраняем фото если есть
@@ -602,50 +578,42 @@ export const InventoryTab = () => {
     };
     loadSuppliers();
 
-    // Загрузка pending products из Supabase (БЕЗ base64 изображений для скорости)
+    // Загрузка pending products из Supabase
     const loadPendingProducts = async (page: number = 1) => {
       try {
-        console.log('🔄 Загрузка очереди, страница:', page);
-        
-        // Подсчет через легкий запрос
+        // Сначала получаем общее количество
         const { count, error: countError } = await supabase
           .from('vremenno_product_foto')
-          .select('id', { count: 'exact', head: true });
+          .select('*', { count: 'exact', head: true });
         
         if (countError) {
-          console.error('❌ Ошибка подсчета:', countError);
+          console.error('❌ Ошибка подсчета товаров:', countError);
         } else {
           setQueueTotal(count || 0);
-          console.log('✅ Всего товаров:', count);
         }
         
-        // Загружаем партиями по 50 товаров С base64 изображениями для отображения
+        // Загружаем товары с пагинацией
         const from = (page - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
         
         const { data, error } = await supabase
           .from('vremenno_product_foto')
-          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, created_at, image_url, front_photo, barcode_photo')
+          .select('*')
           .order('created_at', { ascending: false })
           .range(from, to);
         
         if (error) {
           console.error('❌ Ошибка загрузки очереди:', error);
-          toast.error(`Ошибка загрузки очереди: ${error.message}`);
+          toast.error('Ошибка загрузки очереди товаров');
           return;
         }
         
         if (data && data.length > 0) {
           const loaded: PendingProduct[] = data.map(item => {
-            // Используем base64 изображения напрямую
             const photos = [];
-            const frontPhotoUrl = item.front_photo || '';
-            const barcodePhotoUrl = item.barcode_photo || '';
-            const mainPhotoUrl = item.image_url || '';
-              
-            if (frontPhotoUrl) photos.push(frontPhotoUrl);
-            if (barcodePhotoUrl) photos.push(barcodePhotoUrl);
-            if (photos.length === 0 && mainPhotoUrl) photos.push(mainPhotoUrl);
+            if (item.front_photo) photos.push(item.front_photo);
+            if (item.barcode_photo) photos.push(item.barcode_photo);
+            if (photos.length === 0 && item.image_url) photos.push(item.image_url);
             
             return {
               id: item.id,
@@ -659,19 +627,19 @@ export const InventoryTab = () => {
               supplier: item.supplier || '',
               expiryDate: item.expiry_date || '',
               photos: photos,
-              frontPhoto: frontPhotoUrl || mainPhotoUrl || '',
-              barcodePhoto: barcodePhotoUrl || '',
+              frontPhoto: item.front_photo || item.image_url || '',
+              barcodePhoto: item.barcode_photo || '',
             };
           });
           setPendingProducts(loaded);
-          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page}/${Math.ceil((count || 0) / ITEMS_PER_PAGE)})`);
+          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page})`);
         } else {
           setPendingProducts([]);
           console.log('📦 Очередь пуста');
         }
       } catch (err) {
-        console.error('❌ Критическая ошибка загрузки:', err);
-        toast.error('Не удалось загрузить очередь товаров');
+        console.error('❌ КРИТИЧЕСКАЯ ошибка загрузки очереди:', err);
+        toast.error('Критическая ошибка загрузки очереди');
       }
     };
     loadPendingProducts(queuePage);
@@ -746,16 +714,11 @@ export const InventoryTab = () => {
     };
   }, []);
 
-  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string; purchasePrice?: number; retailPrice?: number } | string) => {
+  const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
     
-    // КРИТИЧНО: Автоматическое добавление к существующему товару (только для admin/inventory)
+    // КРИТИЧНО: Автоматическое добавление к существующему товару
     if (barcodeData.autoAddToProducts && barcodeData.existingProductId) {
-      // Проверяем права доступа
-      if (!canSaveSingle) {
-        toast.error('❌ У этого устройства нет прав на прямое сохранение товаров', { position: 'top-center' });
-        return;
-      }
       try {
         console.log('🚀 Автоматическое добавление к существующему товару:', barcodeData.existingProductId);
         
@@ -828,14 +791,14 @@ export const InventoryTab = () => {
           toast.warning('⚠️ Название не распознано, заполните его вручную', { position: 'top-center' });
         }
         
-        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ (название, штрихкод, категория из AI)
+        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
         console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name, category: barcodeData.category });
         setCurrentProduct(prev => ({
           ...prev,
           barcode: sanitizedBarcode || prev.barcode,
           name: barcodeData.name || prev.name,
           category: barcodeData.category || prev.category,
-          quantity: '1' // Всегда устанавливаем 1 для нового товара
+          quantity: prev.quantity || '1' // Устанавливаем количество по умолчанию
         }));
         
         // 2. Собираем все фотографии (до 2 штук) и добавляем в поле "фото"
@@ -860,29 +823,15 @@ export const InventoryTab = () => {
         let finalUnit = 'шт';
         let finalSupplier = '';
         let finalCategory = barcodeData.category || '';
-        
-        // Автоматически определяем категорию на основе названия если не заполнена
-        if (!finalCategory && barcodeData.name) {
-          finalCategory = determineCategoryFromName(barcodeData.name);
-          console.log(`🏷️ Категория автоматически определена: "${finalCategory}" для товара "${barcodeData.name}"`);
+
+        // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
+        if (!sanitizedBarcode) {
+          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.', { position: 'top-center' });
+          addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
+          return;
         }
         
-        // Проверяем, есть ли цены в данных из AI-сканирования (из CSV базы)
-        if (barcodeData.purchasePrice && barcodeData.retailPrice) {
-          console.log('✅ Цены получены из CSV базы:', { purchasePrice: barcodeData.purchasePrice, retailPrice: barcodeData.retailPrice });
-          finalPurchasePrice = barcodeData.purchasePrice.toString();
-          finalRetailPrice = barcodeData.retailPrice.toString();
-          hasPrices = true;
-          
-          setCurrentProduct(prev => ({
-            ...prev,
-            category: finalCategory,
-            purchasePrice: finalPurchasePrice,
-            retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1' // Устанавливаем 1 только если не заполнено
-          }));
-          toast.success(`💡 Цены загружены из базы: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
-        } else if (existing) {
+        if (existing) {
           // Автозаполняем из основной базы
           finalPurchasePrice = existing.purchasePrice.toString();
           finalRetailPrice = existing.retailPrice.toString();
@@ -896,7 +845,7 @@ export const InventoryTab = () => {
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1', // Устанавливаем 1 только если не заполнено
+            quantity: prev.quantity || '1',
             unit: finalUnit,
             supplier: finalSupplier
           }));
@@ -909,19 +858,11 @@ export const InventoryTab = () => {
           
           setCurrentProduct(prev => ({
             ...prev,
-            category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: prev.quantity || '1' // Устанавливаем 1 только если не заполнено
+            quantity: prev.quantity || '1'
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
-        }
-
-        // Если штрихкода нет, дальше в базу не лезем – форма уже заполнена выше
-        if (!sanitizedBarcode) {
-          toast.info('✅ Форма заполнена по распознанным данным. Введите штрихкод и цены при необходимости.', { position: 'top-center' });
-          addLog(`AI-сканирование (без штрихкода): ${barcodeData.name || ''}`);
-          return;
         }
         
         // 4. Сохраняем фотографии в product_images для истории
@@ -930,34 +871,8 @@ export const InventoryTab = () => {
           await saveProductImage(sanitizedBarcode, barcodeData.name, photoUrl, currentUserId);
         }
         
-        // 5. ЕСЛИ ОБОИ ЦЕНЫ ЕСТЬ - ПРОВЕРЯЕМ ПРАВА И СОХРАНЯЕМ
+        // 5. ЕСЛИ ОБОИ ЦЕНЫ ЕСТЬ - СОХРАНЯЕМ СРАЗУ В БАЗУ (UPSERT)
         if (hasPrices && finalPurchasePrice && finalRetailPrice) {
-          // Проверяем права доступа на прямое сохранение
-          if (!canSaveSingle) {
-            console.log('⚠️ Устройство не имеет прав на прямое сохранение, добавляем в очередь');
-            toast.warning('⚠️ Товар добавлен в очередь. Только admin/inventory могут сохранять напрямую.', { position: 'top-center' });
-            
-            // Добавляем в очередь вместо прямого сохранения
-            const newPending: PendingProduct = {
-              id: Date.now().toString(),
-              barcode: sanitizedBarcode,
-              name: barcodeData.name,
-              category: finalCategory,
-              purchasePrice: finalPurchasePrice,
-              retailPrice: finalRetailPrice,
-              quantity: '1',
-              unit: finalUnit,
-              supplier: finalSupplier,
-              photos: allPhotos,
-              frontPhoto: barcodeData.frontPhoto,
-              barcodePhoto: barcodeData.barcodePhoto,
-            };
-            
-            setPendingProducts(prev => [...prev, newPending]);
-            addLog(`В очередь (AI): ${barcodeData.name} (${sanitizedBarcode})`);
-            return;
-          }
-          
           console.log('💾 Обе цены есть, проверяем существующий товар...');
           
           // Проверяем существующий товар
@@ -968,8 +883,8 @@ export const InventoryTab = () => {
             .maybeSingle();
           
           if (selectError) {
-            console.error('❌ Ошибка проверки товара в базе, продолжаем как с новым товаром:', selectError);
-            // Не показываем красную ошибку пользователю и не прерываем сохранение
+            console.error('❌ Ошибка проверки:', selectError);
+            toast.error('❌ Ошибка проверки товара в базе', { position: 'top-center' });
           } else if (existing) {
             // Товар существует - обновляем количество
             const { error: updateError } = await supabase
@@ -992,14 +907,14 @@ export const InventoryTab = () => {
               addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - обновлен`);
             }
           } else {
-            // Товар не существует - создаем новый с количеством 1
+            // Товар не существует - создаем новый
             const productData = {
               barcode: sanitizedBarcode,
               name: barcodeData.name,
               category: finalCategory,
               purchase_price: parseFloat(finalPurchasePrice),
               sale_price: parseFloat(finalRetailPrice),
-              quantity: 1, // Всегда 1 при первом добавлении
+              quantity: 1,
               unit: finalUnit,
               supplier: finalSupplier || null,
               expiry_date: null,
@@ -1010,30 +925,7 @@ export const InventoryTab = () => {
               .from('products')
               .insert(productData);
 
-            // Обработка дубликата - если товар уже есть, просто обновляем
-            if (insertError?.code === '23505') {
-              console.log('⚠️ Товар уже существует, обновляем количество...');
-              const { data: duplicateProduct } = await supabase
-                .from('products')
-                .select('quantity')
-                .eq('barcode', sanitizedBarcode)
-                .maybeSingle();
-              
-              if (duplicateProduct) {
-                await supabase
-                  .from('products')
-                  .update({
-                    quantity: duplicateProduct.quantity + 1,
-                    purchase_price: parseFloat(finalPurchasePrice),
-                    sale_price: parseFloat(finalRetailPrice),
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq('barcode', sanitizedBarcode);
-                
-                toast.success(`✅ "${barcodeData.name}" количество обновлено!`, { position: 'top-center' });
-                addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - количество обновлено`);
-              }
-            } else if (insertError) {
+            if (insertError) {
               console.error('❌ Ошибка создания товара:', insertError);
               toast.error('❌ Ошибка создания товара в базе', { position: 'top-center' });
             } else {
@@ -1057,23 +949,18 @@ export const InventoryTab = () => {
           setPhotos([]);
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
-          // 6. ЕСЛИ ЦЕН НЕТ - ПРОВЕРЯЕМ ПРАВА И ДОБАВЛЯЕМ В ОЧЕРЕДЬ
-          console.log('📋 Цен нет, добавляем в очередь с категорией:', finalCategory);
-          
-          // Проверяем права доступа на добавление в очередь
-          if (!canSaveQueue) {
-            toast.error('❌ У этого устройства нет прав на добавление товаров в очередь', { position: 'top-center' });
-            return;
-          }
+        } else {
+          // 6. ЕСЛИ ЦЕН НЕТ - ДОБАВЛЯЕМ В ОЧЕРЕДЬ (с заполненной категорией)
+          console.log('📋 Цен нет, добавляем в очередь с категорией...');
           
           const newPendingProduct: PendingProduct = {
             id: `pending-${Date.now()}-${Math.random()}`,
             barcode: sanitizedBarcode,
             name: barcodeData.name,
-            category: finalCategory, // Категория уже автоматически определена выше
+            category: finalCategory,
             purchasePrice: '',
             retailPrice: '',
-            quantity: '1', // Всегда 1
+            quantity: '1',
             unit: finalUnit,
             expiryDate: '',
             supplier: finalSupplier,
@@ -1082,47 +969,15 @@ export const InventoryTab = () => {
             barcodePhoto: barcodeData.barcodePhoto,
           };
           
-          // Добавляем в локальную очередь для мгновенного отображения
           setPendingProducts(prev => [...prev, newPendingProduct]);
-          
-          // И параллельно записываем в очередь в базе (vremenno_product_foto)
-          try {
-            const { error: queueError } = await supabase
-              .from('vremenno_product_foto')
-              .insert({
-                barcode: sanitizedBarcode,
-                product_name: barcodeData.name,
-                category: finalCategory || null,
-                supplier: finalSupplier || null,
-                unit: finalUnit || 'шт',
-                purchase_price: null,
-                retail_price: null,
-                quantity: 1,
-                expiry_date: null,
-                payment_type: 'full',
-                paid_amount: 0,
-                debt_amount: 0,
-                image_url: allPhotos[0] || null,
-                storage_path: allPhotos[0] ? `product-photos/${sanitizedBarcode}-${Date.now()}` : '',
-                front_photo: barcodeData.frontPhoto || null,
-                barcode_photo: barcodeData.barcodePhoto || null,
-                front_photo_storage_path: barcodeData.frontPhoto ? `product-photos/${sanitizedBarcode}-front-${Date.now()}` : null,
-                barcode_photo_storage_path: barcodeData.barcodePhoto ? `product-photos/${sanitizedBarcode}-barcode-${Date.now()}` : null,
-                created_by: currentUserId,
-              });
-
-            if (queueError) {
-              console.error('❌ Ошибка добавления в очередь (dual, без цен):', queueError);
-            } else {
-              console.log('✅ Товар без цен добавлен в очередь vremenno_product_foto');
-            }
-          } catch (queueEx: any) {
-            console.error('❌ Критическая ошибка при добавлении в очередь (dual, без цен):', queueEx);
-          }
-          
-          toast.success(`✅ "${barcodeData.name}" добавлен в очередь без цен`, { position: 'top-center' });
-          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь без цен`);
+          toast.success(`✅ "${barcodeData.name}" добавлен в очередь с категорией "${finalCategory}"`, { position: 'top-center' });
+          addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - в очередь`);
         }
+        
+        // Не закрываем сканер автоматически - пользователь сам закроет
+        // Показываем успешное сообщение
+        toast.success(`✅ Форма заполнена! Проверьте поля ниже и нажмите "Добавить товар"`, { position: 'top-center' });
+        addLog(`AI-сканирование: ${barcodeData.name} (${sanitizedBarcode}) - форма заполнена`);
         
       } catch (error: any) {
         console.error('❌ Ошибка handleScan:', error);
@@ -1240,9 +1095,9 @@ export const InventoryTab = () => {
       id: `pending-${Date.now()}-${Math.random()}`,
       barcode: sanitizedBarcode,
       name: barcodeData.name || '',
-      category: barcodeData.category || determineCategoryFromName(barcodeData.name || ''),
-      purchasePrice: barcodeData.purchasePrice?.toString() || '', // Цены из CSV если есть
-      retailPrice: barcodeData.retailPrice?.toString() || '',     // Цены из CSV если есть
+      category: barcodeData.category || '',
+      purchasePrice: '',
+      retailPrice: '',
       quantity: barcodeData.quantity?.toString() || '1',
       unit: 'шт',
       expiryDate: '',
@@ -1252,8 +1107,8 @@ export const InventoryTab = () => {
       barcodePhoto: (tempBarcodePhoto || barcodeData.capturedImage) || undefined,
     };
 
-    // Если есть штрихкод и нет цен, ищем в основной базе для автозаполнения
-    if (sanitizedBarcode && !newPendingProduct.purchasePrice && !newPendingProduct.retailPrice) {
+    // Если есть штрихкод, ищем в базе для автозаполнения
+    if (sanitizedBarcode) {
       const existing = await findProductByBarcode(sanitizedBarcode);
       if (existing) {
         newPendingProduct.category = existing.category;
@@ -1394,10 +1249,7 @@ export const InventoryTab = () => {
       try {
         const purchasePrice = parseFloat(productWithUpdates.purchasePrice);
         const retailPrice = parseFloat(productWithUpdates.retailPrice);
-        // Если количество 0, устанавливаем 1
-        const quantity = productWithUpdates.quantity && parseFloat(productWithUpdates.quantity) > 0 
-          ? parseFloat(productWithUpdates.quantity) 
-          : 1;
+        const quantity = productWithUpdates.quantity ? parseFloat(productWithUpdates.quantity) : 1;
         
         const { error: saveError } = await supabase
           .from('products')
@@ -1758,37 +1610,14 @@ export const InventoryTab = () => {
               created_by: currentUserId,
             });
 
-          // Обработка дубликата - если товар уже есть, просто обновляем
-          if (saveError?.code === '23505') {
-            console.log('⚠️ Товар уже существует при добавлении, обновляем количество...');
-            const { data: duplicateProduct } = await supabase
-              .from('products')
-              .select('quantity')
-              .eq('barcode', currentProduct.barcode)
-              .maybeSingle();
-            
-            if (duplicateProduct) {
-              await supabase
-                .from('products')
-                .update({
-                  quantity: duplicateProduct.quantity + quantity,
-                  purchase_price: purchasePrice,
-                  sale_price: retailPrice,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('barcode', currentProduct.barcode);
-              
-              console.log('✅ Количество товара обновлено');
-              toast.success(`✅ Товар "${currentProduct.name}" количество обновлено!`);
-            }
-          } else if (saveError) {
+          if (saveError) {
             console.error('❌ Ошибка сохранения в products:', saveError);
             toast.error(`❌ Ошибка сохранения: ${saveError.message}`);
             return;
-          } else {
-            console.log('✅ Новый товар сохранен');
-            toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
           }
+          
+          console.log('✅ Новый товар сохранен');
+          toast.success(`✅ Товар "${currentProduct.name}" добавлен в базу!`);
         }
 
         // Сохраняем фото если есть
@@ -1903,13 +1732,6 @@ export const InventoryTab = () => {
             onProductFound={handleScan}
             mode={aiScanMode}
             hasIncompleteProducts={pendingProducts.some(p => !p.barcode || !p.name)}
-            onClose={() => {
-              setShowAIScanner(false);
-              setAiScanMode('product');
-              setPhotoStep('none');
-              setTempFrontPhoto('');
-              setTempBarcodePhoto('');
-            }}
           />
           <Button
             onClick={() => {

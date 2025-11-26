@@ -16,7 +16,7 @@ export const PendingProductsTab = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const ITEMS_PER_PAGE = 50; // Оптимизировано для 10к+ товаров без base64
+  const ITEMS_PER_PAGE = 50;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   // Обработчик добавления нового поставщика
@@ -58,91 +58,47 @@ export const PendingProductsTab = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchPendingProducts = async () => {
-      if (!isMounted) return;
-
+    const fetchPendingProducts = async (forceLoad = false) => {
       setIsLoading(true);
-
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
-        console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
-
-        // Оптимизированный запрос БЕЗ тяжелых base64 полей (для 10к+ товаров)
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, unit, payment_type, paid_amount, debt_amount, created_at, storage_path, front_photo_storage_path, barcode_photo_storage_path', { count: 'estimated' })
+          .select('*', { count: 'exact' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
-        if (error) {
-          console.error('❌ Ошибка загрузки товаров:', error);
-          // Тихо игнорируем ошибку таймаута, продолжаем пытаться загрузить
-          // Не показываем уведомление пользователю
-          
-          // Повторяем попытку через 3 секунды
-          setTimeout(() => {
-            if (isMounted) {
-              console.log('🔄 Повторная попытка загрузки очереди товаров...');
-              fetchPendingProducts();
-            }
-          }, 3000);
-          return;
-        }
-
+        if (error) throw error;
         if (!isMounted) return;
 
-        console.log(`Получено товаров для страницы ${currentPage}: ${data?.length || 0}`);
+        setTotalCount(count || 0);
         
-        // Обновляем общее количество только если получили значение
-        if (count !== null && count !== undefined) {
-          setTotalCount(count);
-        }
-
         if (data && data.length > 0) {
-          const products = data.map((item: any) => {
-            // Используем storage URL вместо base64
-            const photos = [];
-            const frontPhotoUrl = item.front_photo_storage_path 
-              ? supabase.storage.from('product-photos').getPublicUrl(item.front_photo_storage_path).data.publicUrl
-              : '';
-            const barcodePhotoUrl = item.barcode_photo_storage_path
-              ? supabase.storage.from('product-photos').getPublicUrl(item.barcode_photo_storage_path).data.publicUrl
-              : '';
-            const mainPhotoUrl = item.storage_path
-              ? supabase.storage.from('product-photos').getPublicUrl(item.storage_path).data.publicUrl
-              : '';
-              
-            if (frontPhotoUrl) photos.push(frontPhotoUrl);
-            if (barcodePhotoUrl) photos.push(barcodePhotoUrl);
-            if (photos.length === 0 && mainPhotoUrl) photos.push(mainPhotoUrl);
-
-            return {
-              id: item.id,
-              barcode: item.barcode || '',
-              name: item.product_name || '',
-              category: item.category || '',
-              purchasePrice: item.purchase_price?.toString() || '',
-              retailPrice: item.retail_price?.toString() || '',
-              quantity: item.quantity?.toString() || '',
-              unit: item.unit || 'шт',
-              expiryDate: item.expiry_date || '',
-              supplier: item.supplier || '',
-              frontPhoto: frontPhotoUrl || undefined,
-              barcodePhoto: barcodePhotoUrl || undefined,
-              photos: photos,
-            };
-          });
+          const products = data.map((item: any) => ({
+            id: item.id,
+            barcode: item.barcode || '',
+            name: item.product_name || '',
+            category: item.category || '',
+            purchasePrice: item.purchase_price?.toString() || '',
+            retailPrice: item.retail_price?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            unit: 'шт',
+            expiryDate: item.expiry_date || '',
+            supplier: item.supplier || '',
+            frontPhoto: item.front_photo || undefined,
+            barcodePhoto: item.barcode_photo || undefined,
+            photos: item.image_url ? [item.image_url] : [],
+          }));
           setPendingProducts(products);
         } else {
           setPendingProducts([]);
         }
       } catch (error: any) {
-        console.error('❌ Критическая ошибка загрузки:', error);
         if (isMounted) {
-          toast.info('⏳ Загрузка данных... Пожалуйста, подождите немного');
-          // Не сбрасываем товары, чтобы пользователь видел что загрузка идёт
+          setPendingProducts([]);
+          setTotalCount(0);
         }
       } finally {
         if (isMounted) {
@@ -152,7 +108,7 @@ export const PendingProductsTab = () => {
     };
 
     // Мгновенная загрузка без задержек
-    fetchPendingProducts();
+    fetchPendingProducts(true);
 
     const channel = supabase
       .channel('pending_products_changes')
@@ -328,7 +284,7 @@ export const PendingProductsTab = () => {
 
       if (error) {
         console.error('Ошибка загрузки очереди:', error);
-        toast.info('⏳ Загрузка очереди занимает больше времени, попробуйте еще раз чуть позже', { id: 'transfer' });
+        toast.error('Ошибка при загрузке товаров', { id: 'transfer' });
         return;
       }
 
@@ -594,12 +550,7 @@ export const PendingProductsTab = () => {
         </div>
 
         <div className="p-6">
-          {isLoading ? (
-            <div className="text-center text-muted-foreground py-12">
-              <div className="h-16 w-16 mx-auto mb-4 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <p className="text-base font-medium">Загрузка товаров...</p>
-            </div>
-          ) : pendingProducts.length === 0 ? (
+          {pendingProducts.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
               <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-base font-medium">Очередь пуста</p>

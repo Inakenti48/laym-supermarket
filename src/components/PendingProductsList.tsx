@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, Save, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
@@ -22,10 +22,6 @@ interface PendingProductsListProps {
   onSaveAll: () => void;
   onClearAll: () => void;
   onSupplierAdded: (supplier: Supplier) => void;
-  currentPage?: number;
-  totalPages?: number;
-  totalCount?: number;
-  onPageChange?: (page: number) => void;
 }
 
 interface ExtendedPendingProduct extends PendingProduct {
@@ -41,10 +37,6 @@ export const PendingProductsList = ({
   onSaveAll,
   onClearAll,
   onSupplierAdded,
-  currentPage = 1,
-  totalPages = 1,
-  totalCount = 0,
-  onPageChange,
 }: PendingProductsListProps) => {
   const [currentEditingIndex, setCurrentEditingIndex] = React.useState<number>(0);
 
@@ -67,14 +59,7 @@ export const PendingProductsList = ({
             <Package className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-base">Очередь товаров</h3>
           </div>
-          <div className="flex items-center gap-2">
-            {totalCount > 0 && (
-              <span className="text-xs text-muted-foreground">
-                Всего: {totalCount}
-              </span>
-            )}
-            <span className="text-sm text-muted-foreground font-medium">{products.length}</span>
-          </div>
+          <span className="text-sm text-muted-foreground font-medium">{products.length}</span>
         </div>
         <div className="flex gap-3">
           <Button
@@ -95,34 +80,9 @@ export const PendingProductsList = ({
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-        
-        {/* Пагинация для больших очередей */}
-        {totalPages > 1 && onPageChange && (
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <Button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              variant="outline"
-              size="sm"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm text-muted-foreground px-2">
-              Страница {currentPage} из {totalPages}
-            </span>
-            <Button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-              variant="outline"
-              size="sm"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
       </div>
 
-      <div className="p-6 max-h-[600px] overflow-y-auto">
+      <div className="p-6 max-h-96 overflow-y-auto">
         {products.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
             <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />

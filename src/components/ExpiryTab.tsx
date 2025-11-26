@@ -1,20 +1,17 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Package, Check, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Package, Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { getExpiringProducts, removeExpiredProduct } from '@/lib/storage';
 import { logSystemAction } from '@/lib/supabaseAuth';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
 import { useProductsSync } from '@/hooks/useProductsSync';
-import { supabase } from '@/integrations/supabase/client';
 
 export const ExpiryTab = () => {
   const [expiringProducts, setExpiringProducts] = useState<StoredProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addQuantity, setAddQuantity] = useState<{[key: string]: number}>({});
 
   const loadProducts = async () => {
     const products = await getExpiringProducts(3);
@@ -60,32 +57,6 @@ export const ExpiryTab = () => {
     }
   };
 
-  const handleAddProduct = async (product: StoredProduct) => {
-    try {
-      const quantityToAdd = addQuantity[product.id || ''] || 1;
-      
-      const { error } = await supabase
-        .from('products')
-        .update({ quantity: product.quantity + quantityToAdd })
-        .eq('barcode', product.barcode);
-      
-      if (error) throw error;
-      
-      const logMessage = `Пополнен товар "${product.name}" (${product.barcode}): +${quantityToAdd} шт (всего: ${product.quantity + quantityToAdd})`;
-      await logSystemAction(logMessage);
-      toast.success(`Добавлено ${quantityToAdd} шт товара "${product.name}"`);
-      
-      // Сбрасываем количество
-      setAddQuantity(prev => ({ ...prev, [product.id || '']: 1 }));
-      
-      // Обновляем список
-      await loadProducts();
-    } catch (error) {
-      toast.error('Не удалось добавить товар');
-      console.error(error);
-    }
-  };
-
   if (loading) {
     return (
       <Card className="p-4 sm:p-6">
@@ -123,64 +94,34 @@ export const ExpiryTab = () => {
             
             return (
               <div key={product.id} className="p-3 sm:p-4 bg-muted/50 rounded-lg border-l-4 border-warning">
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-lg mb-2">{product.name}</h4>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Штрихкод:</span>
-                          <p className="font-mono font-semibold">{product.barcode}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Категория:</span>
-                          <p className="font-medium">{product.category}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">На складе:</span>
-                          <p className="font-semibold">{product.quantity} шт</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Годен до:</span>
-                          <p className="font-medium">{expiryDate}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <Badge variant={getExpiryBadgeVariant(daysLeft)} className="text-sm">
-                      {daysLeft === 0 ? 'Истекает сегодня!' : daysLeft === 1 ? 'Истекает завтра' : `Истекает через ${daysLeft} дн.`}
-                    </Badge>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-base">{product.name}</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <span className="font-medium">Категория:</span> {product.category}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Штрихкод:</span> {product.barcode}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Количество:</span> {product.quantity} шт
+                    </p>
                   </div>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
-                    <div className="flex items-center gap-2 flex-1">
-                      <Input
-                        type="number"
-                        min="1"
-                        value={addQuantity[product.id || ''] || 1}
-                        onChange={(e) => setAddQuantity(prev => ({ 
-                          ...prev, 
-                          [product.id || '']: parseInt(e.target.value) || 1 
-                        }))}
-                        className="w-20"
-                      />
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => handleAddProduct(product)}
-                        className="flex-1 sm:flex-none"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Добавить товар
-                      </Button>
-                    </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge variant={getExpiryBadgeVariant(daysLeft)}>
+                      {daysLeft === 0 ? 'Сегодня' : daysLeft === 1 ? 'Завтра' : `${daysLeft} дней`}
+                    </Badge>
+                    <p className="text-sm text-muted-foreground">
+                      Годен до: {expiryDate}
+                    </p>
                     <Button
                       size="sm"
-                      variant="destructive"
+                      variant="outline"
                       onClick={() => handleRemoveExpired(product)}
-                      className="flex-1 sm:flex-none"
+                      className="mt-2"
                     >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Убрать с прилавки
+                      <Check className="h-4 w-4 mr-1" />
+                      Сделано
                     </Button>
                   </div>
                 </div>

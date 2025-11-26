@@ -1,5 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import { authClient, checkSessionExpiry, updateLastActivity, clearSession } from '@/lib/authClient';
 import { User, Session } from '@supabase/supabase-js';
 
 export type AppRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
@@ -25,17 +24,9 @@ export const getUserRole = async (userId: string): Promise<AppRole | null> => {
 
 // Получаем текущего пользователя с ролью
 export const getCurrentAuthUser = async (): Promise<AuthUser | null> => {
-  // Проверяем, не истекла ли сессия (24 часа)
-  if (!checkSessionExpiry()) {
-    return null;
-  }
-
-  const { data: { session }, error } = await authClient.auth.getSession();
+  const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) return null;
-
-  // Обновляем время последней активности
-  updateLastActivity();
 
   const role = await getUserRole(session.user.id);
   
@@ -48,7 +39,7 @@ export const getCurrentAuthUser = async (): Promise<AuthUser | null> => {
 
 // Вход
 export const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-  const { error } = await authClient.auth.signInWithPassword({
+  const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
@@ -56,9 +47,6 @@ export const signIn = async (email: string, password: string): Promise<{ success
   if (error) {
     return { success: false, error: error.message };
   }
-
-  // Устанавливаем время начала сессии
-  updateLastActivity();
 
   // Логируем вход
   await logSystemAction('Вход в систему');
@@ -118,19 +106,13 @@ export const signUp = async (
 // Выход
 export const signOut = async (): Promise<void> => {
   await logSystemAction('Выход из системы');
-  clearSession();
-  await authClient.auth.signOut();
+  await supabase.auth.signOut();
 };
 
 // Безопасное получение текущего пользователя с обработкой ошибок
 export const getSafeUser = async (): Promise<{ user: User | null; error: string | null }> => {
   try {
-    // Проверяем, не истекла ли сессия
-    if (!checkSessionExpiry()) {
-      return { user: null, error: 'Сессия истекла' };
-    }
-
-    const { data: { user }, error } = await authClient.auth.getUser();
+    const { data: { user }, error } = await supabase.auth.getUser();
     
     if (error) {
       console.error('❌ Ошибка получения пользователя:', {
@@ -144,9 +126,6 @@ export const getSafeUser = async (): Promise<{ user: User | null; error: string 
       console.warn('⚠️ Пользователь не авторизован');
       return { user: null, error: 'Пользователь не авторизован' };
     }
-
-    // Обновляем время последней активности
-    updateLastActivity();
     
     return { user, error: null };
   } catch (error: any) {

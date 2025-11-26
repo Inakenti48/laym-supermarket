@@ -36,8 +36,8 @@ export const EmployeeLoginScreen = ({ onLogin }: Props) => {
         .maybeSingle();
 
       if (data) {
-        toast.success(`Добро пожаловать, ${data.name}!`);
         onLogin(data.id, data.name);
+        toast.success(`Добро пожаловать, ${data.name}!`);
       } else {
         toast.error('Сотрудник не найден');
       }

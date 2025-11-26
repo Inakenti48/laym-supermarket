@@ -66,31 +66,19 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
-    // Быстрая проверка сессии
-    const checkSession = async () => {
-      const session = await getCurrentSession();
-      
+    // Быстрая проверка сессии - неблокирующая
+    getCurrentSession().then(session => {
       if (session) {
-        // Создаем фейковый User объект
-        const fakeUser = {
-          id: session.userId,
-          role: session.role
-        } as any;
-        
-        setUser(fakeUser);
+        setUser({ id: session.userId, role: session.role } as any);
         setUserRole(session.role as AppRole);
         
-        // Устанавливаем начальный таб для этой роли
         const availableTabs = allTabsData.filter(tab => tab.roles.includes(session.role));
         if (availableTabs.length > 0) {
           setActiveTab(availableTabs[0].id);
         }
       }
-      
       setLoading(false);
-    };
-    
-    checkSession();
+    }).catch(() => setLoading(false));
   }, []);
 
   // Обновляем activeTab только при первом входе через handleLogin

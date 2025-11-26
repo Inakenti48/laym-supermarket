@@ -31,11 +31,11 @@ export const DashboardTab = () => {
 
   useEffect(() => {
     const calculateStats = async () => {
-      // ОПТИМИЗАЦИЯ: Получаем данные напрямую из Supabase с агрегацией
+      // ОПТИМИЗАЦИЯ: Получаем данные с лимитом для быстрой загрузки
       const { data: products } = await supabase
         .from('products')
         .select('quantity, purchase_price, sale_price, expiry_date, paid_amount')
-        .limit(1000);
+        .limit(500);
       
       if (!products) return;
       
@@ -103,14 +103,14 @@ export const DashboardTab = () => {
     calculateStats();
     loadRecentReturns();
     
-    // Обновление каждые 30 секунд
+    // Обновление каждые 60 секунд (было 30)
     const interval = setInterval(() => {
       calculateStats();
       loadRecentReturns();
-    }, 30000);
+    }, 60000);
     
     return () => clearInterval(interval);
-  }, [refreshTrigger]); // Добавляем refreshTrigger как зависимость
+  }, [refreshTrigger]);
 
   const statCards = [
     {

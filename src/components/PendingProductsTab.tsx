@@ -59,11 +59,15 @@ export const PendingProductsTab = () => {
     let isMounted = true;
 
     const fetchPendingProducts = async (forceLoad = false) => {
+      if (!isMounted) return;
+      
       setIsLoading(true);
-      setPendingProducts([]); // Очищаем список при смене страницы
+      
       try {
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
+
+        console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
@@ -71,9 +75,15 @@ export const PendingProductsTab = () => {
           .order('created_at', { ascending: true })
           .range(from, to);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Ошибка загрузки товаров:', error);
+          throw error;
+        }
+
         if (!isMounted) return;
 
+        console.log(`Получено товаров: ${data?.length || 0} из ${count || 0}`);
+        
         setTotalCount(count || 0);
         
         if (data && data.length > 0) {
@@ -97,9 +107,10 @@ export const PendingProductsTab = () => {
           setPendingProducts([]);
         }
       } catch (error: any) {
+        console.error('Ошибка при загрузке товаров:', error);
         if (isMounted) {
           setPendingProducts([]);
-          setTotalCount(0);
+          toast.error('Ошибка при загрузке товаров', { position: 'top-center' });
         }
       } finally {
         if (isMounted) {

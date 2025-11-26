@@ -16,7 +16,7 @@ export const PendingProductsTab = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const ITEMS_PER_PAGE = 50;
+  const ITEMS_PER_PAGE = 30; // Уменьшено с 50 до 30 для быстрой загрузки с фото
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   // Обработчик добавления нового поставщика
@@ -69,22 +69,10 @@ export const PendingProductsTab = () => {
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
-        // Быстрый запрос БЕЗ загрузки тяжёлых изображений (только метаданные)
+        // Оптимизированный запрос с фото (30 товаров для баланса скорости/функциональности)
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select(`
-            id,
-            barcode,
-            product_name,
-            category,
-            purchase_price,
-            retail_price,
-            quantity,
-            expiry_date,
-            supplier,
-            unit,
-            created_at
-          `, { count: 'estimated' })
+          .select('*', { count: 'estimated' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
@@ -114,10 +102,9 @@ export const PendingProductsTab = () => {
             unit: item.unit || 'шт',
             expiryDate: item.expiry_date || '',
             supplier: item.supplier || '',
-            // Изображения не загружаются для быстродействия
-            frontPhoto: undefined,
-            barcodePhoto: undefined,
-            photos: [],
+            frontPhoto: item.front_photo || undefined,
+            barcodePhoto: item.barcode_photo || undefined,
+            photos: item.image_url ? [item.image_url] : [],
           }));
           setPendingProducts(products);
         } else {

@@ -79,11 +79,7 @@ export const PendingProductsTab = () => {
         if (error) {
           console.error('❌ Ошибка загрузки товаров:', error);
           toast.info('⏳ Загрузка занимает больше времени, пожалуйста подождите...');
-          // Не выбрасываем ошибку, даём возможность повторить
-          if (isMounted) {
-            setPendingProducts([]);
-            setTotalCount(0);
-          }
+          // Не выбрасываем ошибку и НЕ очищаем список — пользователь продолжает видеть товары
           return;
         }
 

@@ -619,13 +619,13 @@ export const InventoryTab = () => {
           console.log('✅ Всего товаров:', count);
         }
         
-        // Загружаем партиями по 50 товаров БЕЗ тяжелых base64 (оптимизация для 10к+)
+        // Загружаем партиями по 50 товаров С base64 изображениями для отображения
         const from = (page - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
         
         const { data, error } = await supabase
           .from('vremenno_product_foto')
-          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, created_at, storage_path, front_photo_storage_path, barcode_photo_storage_path')
+          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, created_at, image_url, front_photo, barcode_photo')
           .order('created_at', { ascending: false })
           .range(from, to);
         
@@ -637,17 +637,11 @@ export const InventoryTab = () => {
         
         if (data && data.length > 0) {
           const loaded: PendingProduct[] = data.map(item => {
-            // Используем пути к storage вместо base64
+            // Используем base64 изображения напрямую
             const photos = [];
-            const frontPhotoUrl = item.front_photo_storage_path 
-              ? supabase.storage.from('product-photos').getPublicUrl(item.front_photo_storage_path).data.publicUrl
-              : '';
-            const barcodePhotoUrl = item.barcode_photo_storage_path
-              ? supabase.storage.from('product-photos').getPublicUrl(item.barcode_photo_storage_path).data.publicUrl
-              : '';
-            const mainPhotoUrl = item.storage_path
-              ? supabase.storage.from('product-photos').getPublicUrl(item.storage_path).data.publicUrl
-              : '';
+            const frontPhotoUrl = item.front_photo || '';
+            const barcodePhotoUrl = item.barcode_photo || '';
+            const mainPhotoUrl = item.image_url || '';
               
             if (frontPhotoUrl) photos.push(frontPhotoUrl);
             if (barcodePhotoUrl) photos.push(barcodePhotoUrl);

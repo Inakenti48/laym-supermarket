@@ -130,4 +130,9 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* При активном AI-скане скрываем глобальные тосты, чтобы они не перекрывали камеру */
+  .ai-scan-active .toaster {
+    display: none;
+  }
 }

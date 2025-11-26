@@ -302,7 +302,7 @@ export const PendingProductsTab = () => {
 
       if (error) {
         console.error('Ошибка загрузки очереди:', error);
-        toast.error('Ошибка при загрузке товаров', { id: 'transfer' });
+        toast.info('⏳ Загрузка очереди занимает больше времени, попробуйте еще раз чуть позже', { id: 'transfer' });
         return;
       }
 

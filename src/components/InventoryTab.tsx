@@ -883,8 +883,8 @@ export const InventoryTab = () => {
             .maybeSingle();
           
           if (selectError) {
-            console.error('❌ Ошибка проверки:', selectError);
-            toast.error('❌ Ошибка проверки товара в базе', { position: 'top-center' });
+            console.error('❌ Ошибка проверки товара в базе, продолжаем как с новым товаром:', selectError);
+            // Не показываем красную ошибку пользователю и не прерываем сохранение
           } else if (existing) {
             // Товар существует - обновляем количество
             const { error: updateError } = await supabase

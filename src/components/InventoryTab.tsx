@@ -605,6 +605,8 @@ export const InventoryTab = () => {
     // Загрузка pending products из Supabase
     const loadPendingProducts = async (page: number = 1) => {
       try {
+        console.log('🔄 Загрузка очереди, страница:', page);
+        
         // Сначала получаем общее количество
         const { count, error: countError } = await supabase
           .from('vremenno_product_foto')
@@ -612,13 +614,16 @@ export const InventoryTab = () => {
         
         if (countError) {
           console.error('❌ Ошибка подсчета товаров:', countError);
+          console.error('❌ Детали ошибки:', JSON.stringify(countError, null, 2));
         } else {
           setQueueTotal(count || 0);
+          console.log('✅ Всего товаров в очереди:', count);
         }
         
         // Загружаем товары с пагинацией
         const from = (page - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
+        console.log('📦 Запрос диапазона:', from, '-', to);
         
         const { data, error } = await supabase
           .from('vremenno_product_foto')
@@ -628,7 +633,10 @@ export const InventoryTab = () => {
         
         if (error) {
           console.error('❌ Ошибка загрузки очереди:', error);
-          toast.error('Ошибка загрузки очереди товаров');
+          console.error('❌ Детали ошибки:', JSON.stringify(error, null, 2));
+          console.error('❌ Код ошибки:', error.code);
+          console.error('❌ Сообщение:', error.message);
+          toast.error(`Ошибка загрузки очереди: ${error.message}`);
           return;
         }
         

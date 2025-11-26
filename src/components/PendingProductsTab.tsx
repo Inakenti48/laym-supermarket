@@ -69,23 +69,10 @@ export const PendingProductsTab = () => {
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
-        // Лёгкий отдельный запрос только для подсчёта количества (без данных и картинок)
-        if (currentPage === 1) {
-          const { count, error: countError } = await supabase
-            .from('vremenno_product_foto')
-            .select('id', { count: 'exact', head: true });
-
-          if (countError) {
-            console.error('Ошибка подсчёта товаров:', countError);
-          } else {
-            setTotalCount(count || 0);
-          }
-        }
-
-        // Отдельный быстрый запрос только для текущей страницы
-        const { data, error } = await supabase
+        // Быстрый запрос с приблизительным подсчётом (estimated) вместо точного (exact)
+        const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*')
+          .select('*', { count: 'estimated' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
@@ -97,6 +84,11 @@ export const PendingProductsTab = () => {
         if (!isMounted) return;
 
         console.log(`Получено товаров для страницы ${currentPage}: ${data?.length || 0}`);
+        
+        // Обновляем общее количество только если получили значение
+        if (count !== null && count !== undefined) {
+          setTotalCount(count);
+        }
 
         if (data && data.length > 0) {
           const products = data.map((item: any) => ({

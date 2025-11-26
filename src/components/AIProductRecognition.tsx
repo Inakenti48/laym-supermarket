@@ -594,91 +594,145 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       barcode: tempBarcodePhoto.length
     });
     
-    setIsProcessing(true);
-    setNotification('🔍 AI сканирование фотографий...');
-    toast.info('🔍 Отправляем фотографии на распознавание...', { position: 'top-center' });
+    // Сохраняем фотографии локально перед очисткой
+    const savedFrontPhoto = tempFrontPhoto;
+    const savedBarcodePhoto = tempBarcodePhoto;
     
-    try {
-      // Сжимаем изображения перед отправкой
-      console.log('📦 Сжатие изображений...');
-      const compressedFront = await compressForAI(tempFrontPhoto);
-      const compressedBarcode = await compressForAI(tempBarcodePhoto);
-      
-      console.log('📦 После сжатия:', {
-        front: compressedFront.length,
-        barcode: compressedBarcode.length
-      });
-      
-      // КРИТИЧНО: Вызываем ТОЛЬКО scan-product-photos для режима dual
-      console.log('📷 Вызов scan-product-photos edge function...');
-      const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
-        body: { 
-          frontPhoto: compressedFront,
-          barcodePhoto: compressedBarcode
-        }
-      });
-      
-      console.log('📦 Ответ от scan-product-photos:', { scanData, scanError });
-
-      if (scanError) {
-        console.error('❌ Ошибка AI-сканирования:', scanError);
-        setNotification('❌ Ошибка сканирования');
-        setTimeout(() => setNotification(''), 1500);
-        toast.error('Ошибка при AI-сканировании фотографий', { position: 'top-center' });
-        setIsProcessing(false);
-        return;
-      }
-
-      console.log('✅ Результат AI-сканирования:', scanData);
-
-      // Извлекаем данные из ответа
-      const scannedBarcode = scanData?.barcode || '';
-      const scannedName = scanData?.name || '';
-      const scannedCategory = scanData?.category || '';
-
-      console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName, scannedCategory });
-
-      if (scannedBarcode || scannedName) {
-        console.log('✅ Передача данных родителю с обеими фотографиями');
-        
-        // Передаем данные родителю с обеими фотографиями
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-        
-        // Показываем что именно распознано
-        if (scannedBarcode && scannedName) {
-          toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`, { position: 'top-center' });
-        } else if (scannedBarcode) {
-          toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { position: 'top-center' });
-        } else if (scannedName) {
-          toast.success(`📦 Название распознано: ${scannedName}`, { position: 'top-center' });
-        }
-        
-        setNotification('✅ Форма заполнена!');
-        
-        // НЕ сбрасываем состояние автоматически - пользователь закроет сканер сам
-        // setDualPhotoStep('none');
-        // setTempFrontPhoto('');
-        // setTempBarcodePhoto('');
-      } else {
-        console.log('⚠️ Ничего не распознано');
-        setNotification('❌ Ничего не распознано');
-        setTimeout(() => setNotification(''), 1500);
-        toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.', { position: 'top-center' });
-      }
-    } catch (err: any) {
-      console.error('Ошибка при AI-сканировании:', err);
-      setNotification('❌ Ошибка');
-      setTimeout(() => setNotification(''), 1500);
-      toast.error('Ошибка при AI-сканировании товара', { position: 'top-center' });
-    }
+    // Сразу очищаем состояние, чтобы можно было сканировать следующий товар
+    setTempFrontPhoto('');
+    setTempBarcodePhoto('');
+    setDualPhotoStep('none');
     
-    setIsProcessing(false);
+    // Показываем, что распознавание началось
+    toast.info('🔍 Товар отправлен на распознавание. Можете сканировать следующий!', { 
+      position: 'top-center',
+      id: 'ai-scan-start',
+      duration: 3000
+    });
+    
+    // Запускаем распознавание в фоне (не блокируя UI)
+    (async () => {
+      // Автоповтор до 3 раз при пустом результате или ошибке
+      const maxRetries = 3;
+      let attempt = 0;
+      let success = false;
+      
+      while (attempt < maxRetries && !success) {
+        attempt++;
+        
+        try {
+          toast.info(`🔍 Распознавание... (попытка ${attempt}/${maxRetries})`, { 
+            position: 'top-center',
+            id: 'ai-scan-progress'
+          });
+          
+          // Сжимаем изображения перед отправкой
+          console.log(`📦 Попытка ${attempt}: Сжатие изображений...`);
+          const compressedFront = await compressForAI(savedFrontPhoto);
+          const compressedBarcode = await compressForAI(savedBarcodePhoto);
+          
+          console.log(`📦 Попытка ${attempt}: После сжатия:`, {
+            front: compressedFront.length,
+            barcode: compressedBarcode.length
+          });
+          
+          // КРИТИЧНО: Вызываем ТОЛЬКО scan-product-photos для режима dual
+          console.log(`📷 Попытка ${attempt}: Вызов scan-product-photos edge function...`);
+          const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
+            body: { 
+              frontPhoto: compressedFront,
+              barcodePhoto: compressedBarcode
+            }
+          });
+          
+          console.log(`📦 Попытка ${attempt}: Ответ от scan-product-photos:`, { scanData, scanError });
+
+          if (scanError) {
+            console.error(`❌ Попытка ${attempt}: Ошибка AI-сканирования:`, scanError);
+            
+            if (attempt >= maxRetries) {
+              toast.error('❌ Не удалось распознать товар после 3 попыток. Попробуйте сделать более четкие фото.', { 
+                position: 'top-center',
+                id: 'ai-scan-progress'
+              });
+              break;
+            }
+            
+            // Ждем 1 секунду перед повтором
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+
+          console.log(`✅ Попытка ${attempt}: Результат AI-сканирования:`, scanData);
+
+          // Извлекаем данные из ответа
+          const scannedBarcode = scanData?.barcode || '';
+          const scannedName = scanData?.name || '';
+          const scannedCategory = scanData?.category || '';
+
+          console.log(`📊 Попытка ${attempt}: Извлеченные данные:`, { scannedBarcode, scannedName, scannedCategory });
+
+          if (scannedBarcode || scannedName) {
+            console.log('✅ Товар распознан успешно!');
+            success = true;
+            
+            // Передаем данные родителю с обеими фотографиями
+            onProductFound({
+              barcode: scannedBarcode,
+              name: scannedName,
+              category: scannedCategory,
+              frontPhoto: savedFrontPhoto,
+              barcodePhoto: savedBarcodePhoto
+            });
+            
+            // Показываем что именно распознано
+            if (scannedBarcode && scannedName) {
+              toast.success(`✅ Распознано!\n📦 ${scannedName}\n🏷️ ${scannedBarcode}`, { 
+                position: 'top-center',
+                id: 'ai-scan-progress',
+                duration: 4000
+              });
+            } else if (scannedBarcode) {
+              toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { 
+                position: 'top-center',
+                id: 'ai-scan-progress'
+              });
+            } else if (scannedName) {
+              toast.success(`✅ Название распознано: ${scannedName}`, { 
+                position: 'top-center',
+                id: 'ai-scan-progress'
+              });
+            }
+          } else {
+            console.log(`⚠️ Попытка ${attempt}: Пустой результат распознавания`);
+            
+            if (attempt >= maxRetries) {
+              toast.warning(`⚠️ Не удалось распознать товар после ${maxRetries} попыток. Попробуйте сделать более четкие фото штрихкода и лицевой стороны.`, { 
+                position: 'top-center',
+                id: 'ai-scan-progress'
+              });
+              break;
+            }
+            
+            // Ждем 1 секунду перед повтором
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (err: any) {
+          console.error(`❌ Попытка ${attempt}: Ошибка при AI-сканировании:`, err);
+          
+          if (attempt >= maxRetries) {
+            toast.error(`❌ Ошибка при AI-сканировании после ${maxRetries} попыток. Проверьте соединение и попробуйте снова.`, { 
+              position: 'top-center',
+              id: 'ai-scan-progress'
+            });
+            break;
+          }
+          
+          // Ждем 1 секунду перед повтором
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    })();
   };
 
   const handleConfirmExistingProduct = async () => {

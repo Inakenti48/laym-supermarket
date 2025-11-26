@@ -455,7 +455,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         return;
       }
       
-      // КРИТИЧНО: Режим двух фото - ТОЛЬКО захват, БЕЗ распознавания
+      // КРИТИЧНО: Режим двух фото - захват и АВТОМАТИЧЕСКОЕ распознавание после второго фото
       if (mode === 'dual') {
         console.log('📷 Режим dual: захват фото');
         
@@ -464,24 +464,33 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           console.log('📸 Захвачена лицевая сторона (фото 1/2)');
           setTempFrontPhoto(image);
           setDualPhotoStep('barcode');
-          setNotification('✅ Фото 1/2 - лицевая');
+          setNotification('✅ Фото 1/2');
           toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод', { position: 'top-center' });
           setTimeout(() => setNotification(''), 1500);
+          setIsProcessing(false);
+          return; // Ждем второе фото
         } else if (!tempBarcodePhoto) {
-          // Шаг 2: Захватываем ШТРИХКОД
+          // Шаг 2: Захватываем ШТРИХКОД и СРАЗУ запускаем распознавание
           console.log('📸 Захвачен штрихкод (фото 2/2)');
           setTempBarcodePhoto(image);
           setDualPhotoStep('ready');
-          setNotification('✅ Фото 2/2 - штрихкод');
-          toast.success('📸 Обе фотографии готовы! Нажмите ✅ для распознавания', { position: 'top-center' });
-          setTimeout(() => setNotification(''), 1500);
+          setNotification('✅ Фото 2/2');
+          toast.success('📸 Обе фотографии захвачены! Запускаю распознавание...', { position: 'top-center' });
+          
+          // АВТОМАТИЧЕСКИ запускаем распознавание после захвата второго фото
+          setTimeout(() => {
+            handleAIScan();
+          }, 500);
+          
+          setIsProcessing(false);
+          return;
         } else {
           // Если оба фото уже есть, игнорируем дополнительные нажатия
-          console.log('⚠️ Обе фотографии уже захвачены, игнорируем нажатие');
-          toast.warning('Обе фотографии уже захвачены. Нажмите кнопку распознавания.', { position: 'top-center' });
+          console.log('⚠️ Обе фотографии уже захвачены, идет распознавание...');
+          toast.warning('Распознавание уже запущено, подождите...', { position: 'top-center' });
+          setIsProcessing(false);
+          return;
         }
-        setIsProcessing(false);
-        return; // ВАЖНО: выходим БЕЗ распознавания
       }
       
       // Если режим распознавания срока годности
@@ -582,9 +591,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   // Удалили автоматическое сканирование - только ручной захват
 
   const handleAIScan = async () => {
-    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
-      console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
+    if (!tempFrontPhoto || !tempBarcodePhoto) {
+      console.log('⚠️ handleAIScan заблокирован: нужны обе фотографии');
       toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
+      return;
+    }
+    
+    if (isProcessing) {
+      console.log('⚠️ handleAIScan заблокирован: уже идет обработка');
       return;
     }
     

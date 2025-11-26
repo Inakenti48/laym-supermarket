@@ -638,7 +638,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         console.error('❌ Ошибка AI-сканирования:', scanError);
         setNotification('❌ Ошибка сканирования');
         setTimeout(() => setNotification(''), 1500);
-        toast.error('Ошибка при AI-сканировании фотографий', { position: 'top-center' });
         setIsProcessing(false);
         return;
       }
@@ -675,10 +674,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         setNotification('✅ Форма заполнена!');
         
-        // НЕ сбрасываем состояние автоматически - пользователь закроет сканер сам
-        // setDualPhotoStep('none');
-        // setTempFrontPhoto('');
-        // setTempBarcodePhoto('');
+        // Очищаем фотографии для следующего товара, но сканер остается открытым
+        setDualPhotoStep('none');
+        setTempFrontPhoto('');
+        setTempBarcodePhoto('');
       } else {
         console.log('⚠️ Ничего не распознано');
         setNotification('❌ Ничего не распознано');
@@ -689,7 +688,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       console.error('Ошибка при AI-сканировании:', err);
       setNotification('❌ Ошибка');
       setTimeout(() => setNotification(''), 1500);
-      toast.error('Ошибка при AI-сканировании товара', { position: 'top-center' });
     }
     
     setIsProcessing(false);

@@ -791,14 +791,14 @@ export const InventoryTab = () => {
           toast.warning('⚠️ Название не распознано, заполните его вручную', { position: 'top-center' });
         }
         
-        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ
+        // 1. ЗАПОЛНЯЕМ ПОЛЯ ФОРМЫ ВНИЗУ (название, штрихкод, категория из AI)
         console.log('✍️ Заполняем форму внизу:', { barcode: sanitizedBarcode, name: barcodeData.name, category: barcodeData.category });
         setCurrentProduct(prev => ({
           ...prev,
           barcode: sanitizedBarcode || prev.barcode,
           name: barcodeData.name || prev.name,
           category: barcodeData.category || prev.category,
-          quantity: prev.quantity || '1' // Устанавливаем количество по умолчанию
+          quantity: '1' // Всегда устанавливаем 1 для нового товара
         }));
         
         // 2. Собираем все фотографии (до 2 штук) и добавляем в поле "фото"
@@ -842,7 +842,7 @@ export const InventoryTab = () => {
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: '1'
+            quantity: prev.quantity || '1' // Устанавливаем 1 только если не заполнено
           }));
           toast.success(`💡 Цены загружены из базы: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         } else if (existing) {
@@ -859,7 +859,7 @@ export const InventoryTab = () => {
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: '1',
+            quantity: prev.quantity || '1', // Устанавливаем 1 только если не заполнено
             unit: finalUnit,
             supplier: finalSupplier
           }));
@@ -875,7 +875,7 @@ export const InventoryTab = () => {
             category: finalCategory,
             purchasePrice: finalPurchasePrice,
             retailPrice: finalRetailPrice,
-            quantity: '1'
+            quantity: prev.quantity || '1' // Устанавливаем 1 только если не заполнено
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         }

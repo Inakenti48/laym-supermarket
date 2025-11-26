@@ -66,19 +66,43 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
-    // Быстрая проверка сессии - неблокирующая
-    getCurrentSession().then(session => {
-      if (session) {
+    let isMounted = true;
+
+    const ensureLoadedTimeout = setTimeout(() => {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }, 5000);
+
+    (async () => {
+      try {
+        // Быстрая проверка сессии с таймаутом, чтобы не висеть на экране "Загрузка..."
+        const session = await Promise.race<Awaited<ReturnType<typeof getCurrentSession>> | null>([
+          getCurrentSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
+
+        if (!isMounted || !session) return;
+
         setUser({ id: session.userId, role: session.role } as any);
         setUserRole(session.role as AppRole);
-        
-        const availableTabs = allTabsData.filter(tab => tab.roles.includes(session.role));
+
+        const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
         if (availableTabs.length > 0) {
           setActiveTab(availableTabs[0].id);
         }
+      } finally {
+        if (isMounted) {
+          clearTimeout(ensureLoadedTimeout);
+          setLoading(false);
+        }
       }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    })();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(ensureLoadedTimeout);
+    };
   }, []);
 
   // Обновляем activeTab только при первом входе через handleLogin

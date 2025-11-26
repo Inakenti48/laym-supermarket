@@ -867,7 +867,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           {/* Кнопки управления - поверх всех уведомлений */}
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[60] space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000000] space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
               {mode === 'dual' && (
                 <div className="mb-2 text-center space-y-1">
                   {!tempFrontPhoto && !tempBarcodePhoto && (

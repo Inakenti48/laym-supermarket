@@ -634,56 +634,47 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       console.log('📦 Ответ от scan-product-photos:', { scanData, scanError });
 
-      if (scanError) {
-        console.error('❌ Ошибка AI-сканирования:', scanError);
-        setNotification('❌ Ошибка сканирования');
-        setTimeout(() => setNotification(''), 1500);
-        setIsProcessing(false);
-        return;
-      }
-
-      console.log('✅ Результат AI-сканирования:', scanData);
-
-      // Извлекаем данные из ответа
+      // Извлекаем данные из ответа (даже при ошибке пробуем получить что-то)
       const scannedBarcode = scanData?.barcode || '';
       const scannedName = scanData?.name || '';
       const scannedCategory = scanData?.category || '';
 
-      console.log('📊 Извлеченные данные:', { scannedBarcode, scannedName, scannedCategory });
+      console.log('📊 Данные из AI:', { scannedBarcode, scannedName, scannedCategory, hasError: !!scanError });
 
-      if (scannedBarcode || scannedName) {
-        console.log('✅ Передача данных родителю с обеими фотографиями');
-        
-        // Передаем данные родителю с обеими фотографиями
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-        
-        // Показываем что именно распознано
-        if (scannedBarcode && scannedName) {
-          toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`, { position: 'top-center' });
-        } else if (scannedBarcode) {
-          toast.success(`✅ Штрихкод распознан: ${scannedBarcode}`, { position: 'top-center' });
-        } else if (scannedName) {
-          toast.success(`📦 Название распознано: ${scannedName}`, { position: 'top-center' });
-        }
-        
-        setNotification('✅ Форма заполнена!');
-        
-        // Очищаем фотографии для следующего товара, но сканер остается открытым
-        setDualPhotoStep('none');
-        setTempFrontPhoto('');
-        setTempBarcodePhoto('');
+      // КРИТИЧНО: Всегда передаем товар с фотографиями, даже если AI не смог распознать
+      // Пользователь заполнит данные вручную
+      console.log('✅ Передача товара с фотографиями в форму');
+      
+      onProductFound({
+        barcode: scannedBarcode,
+        name: scannedName,
+        category: scannedCategory,
+        frontPhoto: tempFrontPhoto,
+        barcodePhoto: tempBarcodePhoto
+      });
+      
+      // Показываем результат
+      if (scanError) {
+        setNotification('⚠️ В очередь');
+        toast.info('⚠️ AI не смог распознать. Заполните данные вручную', { position: 'top-center' });
+      } else if (scannedBarcode && scannedName) {
+        setNotification('✅ Распознано!');
+        toast.success(`✅ Штрихкод: ${scannedBarcode}\n📦 Название: ${scannedName}`, { position: 'top-center' });
+      } else if (scannedBarcode) {
+        setNotification('✅ Штрихкод!');
+        toast.success(`✅ Штрихкод: ${scannedBarcode}. Заполните название`, { position: 'top-center' });
+      } else if (scannedName) {
+        setNotification('✅ Название!');
+        toast.success(`📦 Название: ${scannedName}. Заполните штрихкод`, { position: 'top-center' });
       } else {
-        console.log('⚠️ Ничего не распознано');
-        setNotification('❌ Ничего не распознано');
-        setTimeout(() => setNotification(''), 1500);
-        toast.warning('⚠️ Не удалось распознать штрихкод или название. Попробуйте снова.', { position: 'top-center' });
+        setNotification('⚠️ В очередь');
+        toast.info('📸 Фото сохранены. Заполните данные вручную', { position: 'top-center' });
       }
+      
+      // Очищаем фотографии для следующего товара
+      setDualPhotoStep('none');
+      setTempFrontPhoto('');
+      setTempBarcodePhoto('');
     } catch (err: any) {
       console.error('Ошибка при AI-сканировании:', err);
       setNotification('❌ Ошибка');

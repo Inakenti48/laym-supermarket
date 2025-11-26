@@ -16,7 +16,7 @@ export const PendingProductsTab = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const ITEMS_PER_PAGE = 30; // Уменьшено с 50 до 30 для быстрой загрузки с фото
+  const ITEMS_PER_PAGE = 50; // Оптимизировано для 10к+ товаров без base64
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   // Обработчик добавления нового поставщика
@@ -69,10 +69,10 @@ export const PendingProductsTab = () => {
 
         console.log(`Загрузка товаров: страница ${currentPage}, диапазон ${from}-${to}`);
 
-        // Оптимизированный запрос с фото (30 товаров для баланса скорости/функциональности)
+        // Оптимизированный запрос БЕЗ тяжелых base64 полей (для 10к+ товаров)
         const { data, count, error } = await supabase
           .from('vremenno_product_foto')
-          .select('*', { count: 'estimated' })
+          .select('id, barcode, product_name, category, purchase_price, retail_price, quantity, supplier, expiry_date, unit, payment_type, paid_amount, debt_amount, created_at, storage_path, front_photo_storage_path, barcode_photo_storage_path', { count: 'estimated' })
           .order('created_at', { ascending: true })
           .range(from, to);
 
@@ -101,21 +101,39 @@ export const PendingProductsTab = () => {
         }
 
         if (data && data.length > 0) {
-          const products = data.map((item: any) => ({
-            id: item.id,
-            barcode: item.barcode || '',
-            name: item.product_name || '',
-            category: item.category || '',
-            purchasePrice: item.purchase_price?.toString() || '',
-            retailPrice: item.retail_price?.toString() || '',
-            quantity: item.quantity?.toString() || '',
-            unit: item.unit || 'шт',
-            expiryDate: item.expiry_date || '',
-            supplier: item.supplier || '',
-            frontPhoto: item.front_photo || undefined,
-            barcodePhoto: item.barcode_photo || undefined,
-            photos: item.image_url ? [item.image_url] : [],
-          }));
+          const products = data.map((item: any) => {
+            // Используем storage URL вместо base64
+            const photos = [];
+            const frontPhotoUrl = item.front_photo_storage_path 
+              ? supabase.storage.from('product-photos').getPublicUrl(item.front_photo_storage_path).data.publicUrl
+              : '';
+            const barcodePhotoUrl = item.barcode_photo_storage_path
+              ? supabase.storage.from('product-photos').getPublicUrl(item.barcode_photo_storage_path).data.publicUrl
+              : '';
+            const mainPhotoUrl = item.storage_path
+              ? supabase.storage.from('product-photos').getPublicUrl(item.storage_path).data.publicUrl
+              : '';
+              
+            if (frontPhotoUrl) photos.push(frontPhotoUrl);
+            if (barcodePhotoUrl) photos.push(barcodePhotoUrl);
+            if (photos.length === 0 && mainPhotoUrl) photos.push(mainPhotoUrl);
+
+            return {
+              id: item.id,
+              barcode: item.barcode || '',
+              name: item.product_name || '',
+              category: item.category || '',
+              purchasePrice: item.purchase_price?.toString() || '',
+              retailPrice: item.retail_price?.toString() || '',
+              quantity: item.quantity?.toString() || '',
+              unit: item.unit || 'шт',
+              expiryDate: item.expiry_date || '',
+              supplier: item.supplier || '',
+              frontPhoto: frontPhotoUrl || undefined,
+              barcodePhoto: barcodePhotoUrl || undefined,
+              photos: photos,
+            };
+          });
           setPendingProducts(products);
         } else {
           setPendingProducts([]);

@@ -28,6 +28,7 @@ import { retryOperation } from '@/lib/retryUtils';
 
 import { getCurrentLoginUser } from '@/lib/loginAuth';
 import { findProductInDatabase } from '@/lib/productsDatabase';
+import { findPricesByBarcode } from '@/lib/csvPriceLoader';
 
 export const InventoryTab = () => {
   const [userRole, setUserRole] = useState<string>('');
@@ -818,6 +819,13 @@ export const InventoryTab = () => {
           console.log('💡 Поиск в базе данных товаров:', databaseProduct);
         }
         
+        // Если не нашли в загруженной базе, ищем цены в CSV
+        let csvPrices = null;
+        if (!existingProduct && !databaseProduct) {
+          csvPrices = await findPricesByBarcode(sanitizedBarcode);
+          console.log('💡 Поиск цен в CSV базе:', csvPrices);
+        }
+        
         let hasPrices = false;
         let finalPurchasePrice = '';
         let finalRetailPrice = '';
@@ -864,6 +872,20 @@ export const InventoryTab = () => {
             quantity: prev.quantity || '1'
           }));
           toast.success(`💡 Цены найдены в базе: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
+        } else if (csvPrices) {
+          // Автозаполняем цены из CSV базы данных
+          console.log('✅ Заполняем цены из CSV базы:', csvPrices);
+          finalPurchasePrice = csvPrices.purchase_price.toString();
+          finalRetailPrice = csvPrices.sale_price.toString();
+          hasPrices = true;
+          
+          setCurrentProduct(prev => ({
+            ...prev,
+            purchasePrice: finalPurchasePrice,
+            retailPrice: finalRetailPrice,
+            quantity: prev.quantity || '1'
+          }));
+          toast.success(`💡 Цены найдены в CSV: закуп ${finalPurchasePrice} ₽, розница ${finalRetailPrice} ₽`, { position: 'top-center' });
         }
         
         // 4. Сохраняем фотографии в product_images для истории

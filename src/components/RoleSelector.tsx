@@ -1,9 +1,11 @@
-import { Users, KeyRound } from 'lucide-react';
+import { Users, KeyRound, Flame } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useState } from 'react';
+import { initFirebaseUsers } from '@/lib/firebase';
+import { toast } from 'sonner';
 
 interface RoleSelectorProps {
   onSelectRole: (login: string) => void;
@@ -12,12 +14,28 @@ interface RoleSelectorProps {
 
 export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProps) => {
   const [login, setLogin] = useState('');
+  const [initLoading, setInitLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (login.length === 4 && /^\d{4}$/.test(login)) {
       onSelectRole(login);
     }
+  };
+
+  const handleInitFirebase = async () => {
+    setInitLoading(true);
+    try {
+      const result = await initFirebaseUsers();
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+      } else {
+        toast.error(`❌ ${result.message}`);
+      }
+    } catch (error: any) {
+      toast.error(`❌ Ошибка: ${error.message}`);
+    }
+    setInitLoading(false);
   };
 
   return (
@@ -62,7 +80,7 @@ export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProp
           </CardContent>
         </Card>
 
-        <div className="mt-8 flex justify-center">
+        <div className="mt-8 space-y-3">
           <Button 
             onClick={onEmployeeLogin} 
             variant="outline"
@@ -71,6 +89,17 @@ export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProp
           >
             <Users className="h-5 w-5 mr-2" />
             Вход для сотрудников
+          </Button>
+          
+          <Button 
+            onClick={handleInitFirebase}
+            disabled={initLoading}
+            variant="ghost"
+            size="sm"
+            className="w-full text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+          >
+            <Flame className="h-4 w-4 mr-2" />
+            {initLoading ? 'Создание...' : 'Инициализировать Firebase'}
           </Button>
         </div>
       </div>

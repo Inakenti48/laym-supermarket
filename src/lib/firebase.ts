@@ -139,10 +139,9 @@ export const logoutFirebase = async (): Promise<void> => {
 export const initFirebaseUsers = async (): Promise<{ success: boolean; message: string }> => {
   const defaultUsers: Omit<FirebaseUser, 'id'>[] = [
     { login: '8080', role: 'admin', name: 'Администратор' },
-    { login: '1111', role: 'admin', name: 'Админ' },
-    { login: '2222', role: 'cashier', name: 'Кассир 1' },
-    { login: '3333', role: 'cashier2', name: 'Кассир 2' },
-    { login: '4444', role: 'inventory', name: 'Товаровед' },
+    { login: '1020', role: 'cashier', name: 'Кассир 1' },
+    { login: '2030', role: 'cashier2', name: 'Кассир 2' },
+    { login: '3040', role: 'inventory', name: 'Склад' },
   ];
   
   try {

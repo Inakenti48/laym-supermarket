@@ -88,11 +88,21 @@ const Index = () => {
     checkSession();
   }, []);
 
-  // Вход через Lovable Cloud
+  // Локальные логины (фоллбэк если Cloud недоступен)
+  const localLogins: Record<string, { role: AppRole; name: string }> = {
+    '8080': { role: 'admin', name: 'Администратор' },
+    '1111': { role: 'admin', name: 'Админ' },
+    '2222': { role: 'cashier', name: 'Кассир 1' },
+    '3333': { role: 'cashier2', name: 'Кассир 2' },
+    '4444': { role: 'inventory', name: 'Товаровед' },
+  };
+
+  // Вход через Lovable Cloud с фоллбэком на локальные логины
   const handleLogin = async (login: string) => {
     setLoading(true);
     
     try {
+      // Пробуем Cloud
       const result = await loginByUsername(login);
       
       if (result.success && result.role) {
@@ -107,7 +117,6 @@ const Index = () => {
         setSession(newSession);
         setUserRole(result.role as AppRole);
         
-        // Определяем начальный таб по роли
         const roleToTab: Record<string, Tab> = {
           'admin': 'dashboard',
           'cashier': 'cashier',
@@ -116,12 +125,66 @@ const Index = () => {
         };
         setActiveTab(roleToTab[result.role] || 'dashboard');
         
-        toast.success(`Добро пожаловать!`);
-      } else {
-        toast.error(result.error || 'Неверный логин');
+        toast.success(`Добро пожаловать! (Cloud)`);
+        setLoading(false);
+        return;
       }
+      
+      // Если Cloud вернул ошибку таймаута - пробуем локально
+      if (result.error?.includes('не отвечает') || result.error?.includes('timeout')) {
+        console.log('⚠️ Cloud недоступен, пробуем локальный вход');
+        
+        if (localLogins[login]) {
+          const localData = localLogins[login];
+          const newSession: AppSession = {
+            userId: `local-${login}`,
+            role: localData.role,
+            login: login,
+            loginTime: Date.now(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          };
+          
+          setSession(newSession);
+          setUserRole(localData.role);
+          
+          const roleToTab: Record<string, Tab> = {
+            'admin': 'dashboard',
+            'cashier': 'cashier',
+            'cashier2': 'cashier2',
+            'inventory': 'inventory'
+          };
+          setActiveTab(roleToTab[localData.role] || 'dashboard');
+          
+          toast.success(`${localData.name} (локально)`);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      toast.error(result.error || 'Неверный логин');
     } catch (error) {
       console.error('Ошибка входа:', error);
+      
+      // При ошибке сети - пробуем локально
+      if (localLogins[login]) {
+        const localData = localLogins[login];
+        const newSession: AppSession = {
+          userId: `local-${login}`,
+          role: localData.role,
+          login: login,
+          loginTime: Date.now(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        };
+        
+        setSession(newSession);
+        setUserRole(localData.role);
+        setActiveTab(localData.role === 'admin' ? 'dashboard' : localData.role === 'cashier' ? 'cashier' : localData.role === 'cashier2' ? 'cashier2' : 'inventory');
+        
+        toast.success(`${localData.name} (локально, Cloud недоступен)`);
+        setLoading(false);
+        return;
+      }
+      
       toast.error('Ошибка входа');
     }
     

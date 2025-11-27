@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, TrendingUp, Loader2
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, Loader2
 } from 'lucide-react';
 import { DatabaseBackupButton } from '@/components/DatabaseBackupButton';
 import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
@@ -24,7 +24,6 @@ const EmployeesTab = lazy(() => import('@/components/EmployeesTab').then(m => ({
 const EmployeeWorkTab = lazy(() => import('@/components/EmployeeWorkTab').then(m => ({ default: m.EmployeeWorkTab })));
 const CancellationsTab = lazy(() => import('@/components/CancellationsTab').then(m => ({ default: m.CancellationsTab })));
 const PendingProductsTab = lazy(() => import('@/components/PendingProductsTab').then(m => ({ default: m.PendingProductsTab })));
-const WBAnalyticsTab = lazy(() => import('@/components/WBAnalyticsTab').then(m => ({ default: m.WBAnalyticsTab })));
 
 // Компонент загрузки
 const TabLoader = () => (
@@ -33,7 +32,7 @@ const TabLoader = () => (
   </div>
 );
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'employees' | 'employee-work' | 'cancellations' | 'wb-analytics';
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'employees' | 'employee-work' | 'cancellations';
 
 // Данные табов вынесены за компонент для оптимизации
 const ALL_TABS_DATA = [
@@ -48,7 +47,6 @@ const ALL_TABS_DATA = [
   { id: 'diagnostics' as Tab, label: 'Настройки', icon: Settings, roles: ['admin'] },
   { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
   { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
-  { id: 'wb-analytics' as Tab, label: 'WB', icon: TrendingUp, roles: ['admin'] },
   { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
 ];
 
@@ -200,7 +198,6 @@ const Index = () => {
               {activeTab === 'logs' && <LogsTab />}
               {activeTab === 'employees' && <EmployeesTab />}
               {activeTab === 'cancellations' && <CancellationsTab />}
-              {activeTab === 'wb-analytics' && <WBAnalyticsTab />}
             </>
           )}
         </Suspense>

@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { AppRole } from '@/lib/supabaseAuth';
 import { loginByUsername, getCurrentSession, logoutUser, AppSession } from '@/lib/loginAuth';
+import { loginWithFirebase, getFirebaseSession, logoutFirebase, checkFirebaseConnection, FirebaseSession } from '@/lib/firebase';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'wb-analytics';
 
@@ -88,7 +89,7 @@ const Index = () => {
     checkSession();
   }, []);
 
-  // Локальные логины (фоллбэк если Cloud недоступен)
+  // Локальные логины (фоллбэк если Firebase и Cloud недоступны)
   const localLogins: Record<string, { role: AppRole; name: string }> = {
     '8080': { role: 'admin', name: 'Администратор' },
     '1111': { role: 'admin', name: 'Админ' },
@@ -97,75 +98,76 @@ const Index = () => {
     '4444': { role: 'inventory', name: 'Товаровед' },
   };
 
-  // Вход через Lovable Cloud с фоллбэком на локальные логины
+  const roleToTab: Record<string, Tab> = {
+    'admin': 'dashboard',
+    'cashier': 'cashier',
+    'cashier2': 'cashier2',
+    'inventory': 'inventory'
+  };
+
+  // Вход: Firebase -> Cloud -> Локально
   const handleLogin = async (login: string) => {
     setLoading(true);
     
     try {
-      // Пробуем Cloud
-      const result = await loginByUsername(login);
+      // 1. Пробуем Firebase (основной)
+      console.log('🔥 Пробуем Firebase...');
+      const firebaseResult = await Promise.race([
+        loginWithFirebase(login),
+        new Promise<{ success: false; error: string }>((resolve) => 
+          setTimeout(() => resolve({ success: false, error: 'Firebase timeout' }), 5000)
+        )
+      ]);
       
-      if (result.success && result.role) {
+      if (firebaseResult.success && firebaseResult.role) {
         const newSession: AppSession = {
-          userId: result.userId!,
-          role: result.role,
-          login: result.login!,
+          userId: firebaseResult.userId!,
+          role: firebaseResult.role,
+          login: login,
           loginTime: Date.now(),
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         };
         
         setSession(newSession);
-        setUserRole(result.role as AppRole);
+        setUserRole(firebaseResult.role as AppRole);
+        setActiveTab(roleToTab[firebaseResult.role] || 'dashboard');
         
-        const roleToTab: Record<string, Tab> = {
-          'admin': 'dashboard',
-          'cashier': 'cashier',
-          'cashier2': 'cashier2',
-          'inventory': 'inventory'
+        toast.success(`Добро пожаловать! (Firebase)`);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('⚠️ Firebase недоступен или пользователь не найден, пробуем Cloud...');
+      
+      // 2. Пробуем Cloud (запасной)
+      const cloudResult = await Promise.race([
+        loginByUsername(login),
+        new Promise<{ success: false; error: string }>((resolve) => 
+          setTimeout(() => resolve({ success: false, error: 'Cloud timeout' }), 5000)
+        )
+      ]);
+      
+      if (cloudResult.success && cloudResult.role) {
+        const newSession: AppSession = {
+          userId: cloudResult.userId!,
+          role: cloudResult.role,
+          login: cloudResult.login!,
+          loginTime: Date.now(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         };
-        setActiveTab(roleToTab[result.role] || 'dashboard');
+        
+        setSession(newSession);
+        setUserRole(cloudResult.role as AppRole);
+        setActiveTab(roleToTab[cloudResult.role] || 'dashboard');
         
         toast.success(`Добро пожаловать! (Cloud)`);
         setLoading(false);
         return;
       }
       
-      // Если Cloud вернул ошибку таймаута - пробуем локально
-      if (result.error?.includes('не отвечает') || result.error?.includes('timeout')) {
-        console.log('⚠️ Cloud недоступен, пробуем локальный вход');
-        
-        if (localLogins[login]) {
-          const localData = localLogins[login];
-          const newSession: AppSession = {
-            userId: `local-${login}`,
-            role: localData.role,
-            login: login,
-            loginTime: Date.now(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          };
-          
-          setSession(newSession);
-          setUserRole(localData.role);
-          
-          const roleToTab: Record<string, Tab> = {
-            'admin': 'dashboard',
-            'cashier': 'cashier',
-            'cashier2': 'cashier2',
-            'inventory': 'inventory'
-          };
-          setActiveTab(roleToTab[localData.role] || 'dashboard');
-          
-          toast.success(`${localData.name} (локально)`);
-          setLoading(false);
-          return;
-        }
-      }
+      console.log('⚠️ Cloud недоступен, пробуем локально...');
       
-      toast.error(result.error || 'Неверный логин');
-    } catch (error) {
-      console.error('Ошибка входа:', error);
-      
-      // При ошибке сети - пробуем локально
+      // 3. Локальный вход (последний резерв)
       if (localLogins[login]) {
         const localData = localLogins[login];
         const newSession: AppSession = {
@@ -178,9 +180,33 @@ const Index = () => {
         
         setSession(newSession);
         setUserRole(localData.role);
-        setActiveTab(localData.role === 'admin' ? 'dashboard' : localData.role === 'cashier' ? 'cashier' : localData.role === 'cashier2' ? 'cashier2' : 'inventory');
+        setActiveTab(roleToTab[localData.role] || 'dashboard');
         
-        toast.success(`${localData.name} (локально, Cloud недоступен)`);
+        toast.success(`${localData.name} (локально)`);
+        setLoading(false);
+        return;
+      }
+      
+      toast.error('Неверный логин');
+    } catch (error) {
+      console.error('Ошибка входа:', error);
+      
+      // При критической ошибке - локально
+      if (localLogins[login]) {
+        const localData = localLogins[login];
+        const newSession: AppSession = {
+          userId: `local-${login}`,
+          role: localData.role,
+          login: login,
+          loginTime: Date.now(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        };
+        
+        setSession(newSession);
+        setUserRole(localData.role);
+        setActiveTab(roleToTab[localData.role] || 'dashboard');
+        
+        toast.success(`${localData.name} (локально, сервисы недоступны)`);
         setLoading(false);
         return;
       }
@@ -191,7 +217,12 @@ const Index = () => {
     setLoading(false);
   };
   const handleLogout = async () => {
-    await logoutUser();
+    // Выходим из всех систем
+    await Promise.all([
+      logoutFirebase(),
+      logoutUser()
+    ]).catch(console.error);
+    
     setSession(null);
     setUserRole(null);
     setEmployeeId(null);

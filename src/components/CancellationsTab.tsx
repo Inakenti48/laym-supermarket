@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
+import { findProductByBarcode, updateProductQuantity } from '@/lib/storage';
 
 interface CancellationItem {
   name: string;
@@ -80,20 +81,11 @@ export const CancellationsTab = () => {
 
       if (updateError) throw updateError;
 
-      // Возвращаем товары в базу (увеличиваем количество)
-      const { data: product, error: productError } = await supabase
-        .from('products')
-        .select('quantity')
-        .eq('barcode', barcode)
-        .single();
+      // Возвращаем товары в базу Firebase (увеличиваем количество)
+      const product = await findProductByBarcode(barcode);
 
-      if (!productError && product) {
-        const { error: quantityError } = await supabase
-          .from('products')
-          .update({ quantity: product.quantity + quantity })
-          .eq('barcode', barcode);
-
-        if (quantityError) throw quantityError;
+      if (product) {
+        await updateProductQuantity(barcode, quantity);
       }
 
       // Добавляем лог

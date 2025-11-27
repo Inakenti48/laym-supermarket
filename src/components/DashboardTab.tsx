@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -17,31 +18,25 @@ export const DashboardTab = () => {
   const [connectionError, setConnectionError] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   
+  // Firebase realtime синхронизация товаров
+  const { products: firebaseProducts, loading: firebaseLoading } = useFirebaseProducts();
+  
   // Realtime синхронизация товаров
   useProductsSync(() => {
     // При изменении товаров перезагружаем статистику
     setRefreshTrigger(prev => prev + 1);
   });
 
-  // Realtime подписка на изменения в продуктах и возвратах
+  // Перезагрузка при изменении Firebase товаров
+  useEffect(() => {
+    if (!firebaseLoading) {
+      setRefreshTrigger(prev => prev + 1);
+    }
+  }, [firebaseProducts.length, firebaseLoading]);
+
+  // Realtime подписка на изменения в возвратах (оставляем Supabase)
   useEffect(() => {
     console.log('🔔 Setting up realtime subscriptions...');
-    
-    const productsChannel = supabase
-      .channel('dashboard-products-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products'
-        },
-        (payload) => {
-          console.log('📦 Products change detected:', payload);
-          setRefreshTrigger(prev => prev + 1);
-        }
-      )
-      .subscribe();
 
     const returnsChannel = supabase
       .channel('dashboard-returns-changes')
@@ -61,7 +56,6 @@ export const DashboardTab = () => {
 
     return () => {
       console.log('🔕 Cleaning up realtime subscriptions...');
-      supabase.removeChannel(productsChannel);
       supabase.removeChannel(returnsChannel);
     };
   }, []);
@@ -82,22 +76,15 @@ export const DashboardTab = () => {
         setIsLoading(true);
         setConnectionError(false);
 
-        // ОПТИМИЗАЦИЯ: Получаем данные с лимитом для быстрой загрузки
-        const { data: products, error } = await supabase
-          .from('products')
-          .select('quantity, purchase_price, sale_price, expiry_date, paid_amount')
-          .limit(500);
+        // Используем Firebase товары из хука
+        const products = firebaseProducts;
         
-        if (error) {
-          throw error;
-        }
-
-        if (!products) {
-          throw new Error('No products data received');
+        if (firebaseLoading) {
+          return; // Ждём загрузки
         }
       
       const totalProducts = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
-      const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.quantity || 0)), 0);
+      const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchasePrice || 0) * (p.quantity || 0)), 0);
 
       // Подсчет товаров с низким остатком (менее 10 шт)
       const lowStockCount = products.filter(p => (p.quantity || 0) < 10).length;
@@ -106,8 +93,8 @@ export const DashboardTab = () => {
       const threeDaysFromNow = new Date();
       threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
       const expiringCount = products.filter(p => {
-        if (!p.expiry_date) return false;
-        const expiryDate = new Date(p.expiry_date);
+        if (!p.expiryDate) return false;
+        const expiryDate = new Date(p.expiryDate);
         return expiryDate <= threeDaysFromNow;
       }).length;
 
@@ -125,9 +112,9 @@ export const DashboardTab = () => {
 
       // Подсчет выручки из проданных товаров
       const totalRevenue = products.reduce((sum, p) => {
-        const paidAmount = p.paid_amount || 0;
-        const purchasePrice = p.purchase_price || 1;
-        const retailPrice = p.sale_price || 0;
+        const paidAmount = p.paidAmount || 0;
+        const purchasePrice = p.purchasePrice || 1;
+        const retailPrice = p.retailPrice || 0;
         return sum + (retailPrice * (paidAmount / purchasePrice));
       }, 0);
 

@@ -1,13 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getAllFirebaseProducts } from "./firebaseProducts";
 
 export const exportAllDatabaseData = async () => {
   try {
     toast.info("Начинаем экспорт данных...");
 
-    // Fetch all data from all tables
-    const [productsRes, suppliersRes, employeesRes, salesRes, cancellationsRes, logsRes, profilesRes, userRolesRes] = await Promise.all([
-      supabase.from('products').select('*'),
+    // Получаем товары из Firebase
+    const firebaseProducts = await getAllFirebaseProducts();
+
+    // Остальные данные из Supabase
+    const [suppliersRes, employeesRes, salesRes, cancellationsRes, logsRes, profilesRes, userRolesRes] = await Promise.all([
       supabase.from('suppliers').select('*'),
       supabase.from('employees').select('*'),
       supabase.from('sales').select('*'),
@@ -19,7 +22,11 @@ export const exportAllDatabaseData = async () => {
 
     const backupData = {
       exportDate: new Date().toISOString(),
-      products: productsRes.data || [],
+      dataSource: {
+        products: 'Firebase',
+        other: 'Supabase'
+      },
+      products: firebaseProducts,
       suppliers: suppliersRes.data || [],
       employees: employeesRes.data || [],
       sales: salesRes.data || [],
@@ -28,7 +35,7 @@ export const exportAllDatabaseData = async () => {
       profiles: profilesRes.data || [],
       user_roles: userRolesRes.data || [],
       metadata: {
-        totalProducts: (productsRes.data || []).length,
+        totalProducts: firebaseProducts.length,
         totalSuppliers: (suppliersRes.data || []).length,
         totalEmployees: (employeesRes.data || []).length,
         totalSales: (salesRes.data || []).length,
@@ -49,7 +56,7 @@ export const exportAllDatabaseData = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success(`Экспорт завершен! Всего записей: ${backupData.metadata.totalProducts} товаров, ${backupData.metadata.totalSuppliers} поставщиков`);
+    toast.success(`Экспорт завершен! Всего записей: ${backupData.metadata.totalProducts} товаров (Firebase), ${backupData.metadata.totalSuppliers} поставщиков`);
     
     return backupData;
   } catch (error) {
@@ -61,41 +68,14 @@ export const exportAllDatabaseData = async () => {
 
 export const exportDatabaseAsSQL = async () => {
   try {
-    toast.info("Создаем SQL дамп...");
+    toast.info("Создаем SQL дамп (только Supabase данные)...");
 
-    const { data: products } = await supabase.from('products').select('*');
+    // Товары теперь в Firebase, поэтому не экспортируем их как SQL
     const { data: suppliers } = await supabase.from('suppliers').select('*');
     const { data: employees } = await supabase.from('employees').select('*');
 
-    let sqlDump = `-- Database Backup - ${new Date().toISOString()}\n\n`;
-
-    // Products
-    if (products && products.length > 0) {
-      sqlDump += `-- Products (${products.length} records)\n`;
-      products.forEach(p => {
-        const values = [
-          `'${p.id}'`,
-          `'${p.barcode}'`,
-          `'${p.name?.replace(/'/g, "''")}'`,
-          `'${p.category}'`,
-          p.purchase_price,
-          p.sale_price,
-          p.quantity,
-          p.expiry_date ? `'${p.expiry_date}'` : 'NULL',
-          `'${p.unit}'`,
-          p.supplier ? `'${p.supplier.replace(/'/g, "''")}'` : 'NULL',
-          p.paid_amount,
-          p.debt_amount,
-          `'${p.payment_type}'`,
-          `'${JSON.stringify(p.price_history || []).replace(/'/g, "''")}'`,
-          p.created_by ? `'${p.created_by}'` : 'NULL',
-          `'${p.created_at}'`,
-          `'${p.updated_at}'`
-        ].join(', ');
-        sqlDump += `INSERT INTO products (id, barcode, name, category, purchase_price, sale_price, quantity, expiry_date, unit, supplier, paid_amount, debt_amount, payment_type, price_history, created_by, created_at, updated_at) VALUES (${values});\n`;
-      });
-      sqlDump += '\n';
-    }
+    let sqlDump = `-- Database Backup - ${new Date().toISOString()}\n`;
+    sqlDump += `-- NOTE: Products are stored in Firebase, not included in SQL dump\n\n`;
 
     // Suppliers
     if (suppliers && suppliers.length > 0) {
@@ -150,7 +130,7 @@ export const exportDatabaseAsSQL = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success('SQL дамп создан успешно!');
+    toast.success('SQL дамп создан успешно! (Товары в Firebase)');
   } catch (error) {
     console.error('Error creating SQL dump:', error);
     toast.error('Ошибка при создании SQL дампа');

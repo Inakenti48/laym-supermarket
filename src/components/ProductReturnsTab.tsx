@@ -11,6 +11,7 @@ import { ArrowLeft, Printer, Plus } from 'lucide-react';
 import { printReceiptBrowser } from '@/lib/printer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
+import { getAllProducts, updateProductById, deleteProduct } from '@/lib/storage';
 
 interface ProductReturn {
   id: string;
@@ -106,16 +107,9 @@ export const ProductReturnsTab = () => {
 
       if (error) throw error;
 
-      // Находим товар по названию и удаляем из базы
-      const { data: product, error: findError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('name', formData.productName)
-        .maybeSingle();
-
-      if (findError) {
-        console.error('Error finding product:', findError);
-      }
+      // Находим товар по названию в Firebase и удаляем/уменьшаем
+      const allProducts = await getAllProducts();
+      const product = allProducts.find(p => p.name === formData.productName);
 
       if (product) {
         const returnQty = parseInt(formData.quantity);
@@ -123,27 +117,15 @@ export const ProductReturnsTab = () => {
 
         if (newQuantity <= 0) {
           // Удаляем товар полностью
-          const { error: deleteError } = await supabase
-            .from('products')
-            .delete()
-            .eq('id', product.id);
-
-          if (deleteError) {
-            console.error('Error deleting product:', deleteError);
-          } else {
-            console.log('✅ Товар полностью удален из базы');
+          const deleted = await deleteProduct(product.barcode);
+          if (deleted) {
+            console.log('✅ Товар полностью удален из Firebase');
           }
         } else {
           // Уменьшаем количество
-          const { error: updateError } = await supabase
-            .from('products')
-            .update({ quantity: newQuantity })
-            .eq('id', product.id);
-
-          if (updateError) {
-            console.error('Error updating product:', updateError);
-          } else {
-            console.log('✅ Количество товара уменьшено');
+          const updated = await updateProductById(product.id, { quantity: newQuantity });
+          if (updated) {
+            console.log('✅ Количество товара уменьшено в Firebase');
           }
         }
       }

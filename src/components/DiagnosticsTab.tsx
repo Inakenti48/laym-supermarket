@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Settings, Monitor } from 'lucide-react';
+import { Settings, Monitor, Flame } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { getCurrentSession } from '@/lib/firebase';
+import { initFirebaseUsers } from '@/lib/firebase';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -36,15 +37,15 @@ export const DiagnosticsTab = () => {
 
   // Получаем роль пользователя при загрузке
   useEffect(() => {
-    const loadUserRole = async () => {
-      const user = await getCurrentLoginUser();
-      if (user) {
-        setUserRole(user.role);
-        setCurrentUserId(user.id);
-        setCurrentUserLogin(user.login);
+    const loadUserRole = () => {
+      const session = getCurrentSession();
+      if (session) {
+        setUserRole(session.role);
+        setCurrentUserId(session.userId);
+        setCurrentUserLogin(session.login);
         
         // Если админ или складская - автоматически даем все права
-        if (user.role === 'admin' || user.role === 'inventory') {
+        if (session.role === 'admin' || session.role === 'inventory') {
           setCanSaveSingle(true);
           setCanSaveQueue(true);
           localStorage.setItem('can_save_single', 'true');
@@ -54,6 +55,24 @@ export const DiagnosticsTab = () => {
     };
     loadUserRole();
   }, []);
+
+  // Инициализация Firebase пользователей
+  const [firebaseLoading, setFirebaseLoading] = useState(false);
+  
+  const handleInitFirebase = async () => {
+    setFirebaseLoading(true);
+    try {
+      const result = await initFirebaseUsers();
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+      } else {
+        toast.error(`❌ ${result.message}`);
+      }
+    } catch (error: any) {
+      toast.error(`❌ Ошибка: ${error.message}`);
+    }
+    setFirebaseLoading(false);
+  };
 
   // Загружаем все устройства для админа
   useEffect(() => {
@@ -187,6 +206,32 @@ export const DiagnosticsTab = () => {
             </div>
           </div>
         </div>
+
+        {/* Firebase инициализация */}
+        {userRole === 'admin' && (
+          <div className="mb-6 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Flame className="h-4 w-4 text-orange-500" />
+                  Firebase
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Создать пользователей в Firebase (один раз)
+                </p>
+              </div>
+              <Button
+                onClick={handleInitFirebase}
+                disabled={firebaseLoading}
+                variant="outline"
+                size="sm"
+                className="border-orange-500/50 hover:bg-orange-500/10"
+              >
+                {firebaseLoading ? 'Создание...' : 'Инициализировать'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Выбор устройства */}
         <div className="space-y-2 mb-6">

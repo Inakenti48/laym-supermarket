@@ -24,7 +24,7 @@ export interface AppSession {
   login: string;
   loginTime: number;
   expiresAt: string;
-  source?: 'firebase' | 'local';
+  source?: 'firebase';
 }
 
 export interface FirebaseUser {
@@ -35,15 +35,6 @@ export interface FirebaseUser {
   createdAt?: Timestamp;
 }
 
-// Локальные пользователи (всегда работают)
-const LOCAL_USERS: Record<string, { role: AppRole; name: string }> = {
-  '8080': { role: 'admin', name: 'Администратор' },
-  '1111': { role: 'admin', name: 'Админ' },
-  '2222': { role: 'cashier', name: 'Кассир 1' },
-  '3333': { role: 'cashier2', name: 'Кассир 2' },
-  '4444': { role: 'inventory', name: 'Товаровед' },
-};
-
 // Хэширование для сравнения логинов
 async function hashLogin(text: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -53,7 +44,7 @@ async function hashLogin(text: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
 }
 
-// Вход через Firebase с локальным фоллбэком
+// Вход через Firebase (только Firebase, без локального фоллбэка)
 export const loginWithFirebase = async (login: string): Promise<{
   success: boolean;
   session?: AppSession;
@@ -63,80 +54,46 @@ export const loginWithFirebase = async (login: string): Promise<{
   try {
     const loginHash = await hashLogin(login);
     
-    // Пробуем Firebase с таймаутом 5 сек
-    const firebasePromise = (async () => {
-      const usersRef = collection(firebaseDb, 'user_logins');
-      const snapshot = await getDocs(usersRef);
+    const usersRef = collection(firebaseDb, 'user_logins');
+    const snapshot = await getDocs(usersRef);
+    
+    for (const docSnap of snapshot.docs) {
+      const userData = docSnap.data() as FirebaseUser;
+      const userLoginHash = await hashLogin(userData.login);
       
-      for (const docSnap of snapshot.docs) {
-        const userData = docSnap.data() as FirebaseUser;
-        const userLoginHash = await hashLogin(userData.login);
+      if (userLoginHash === loginHash) {
+        // Удаляем старые сессии
+        const sessionsRef = collection(firebaseDb, 'user_sessions');
+        const oldSessionsQuery = query(sessionsRef, where('userId', '==', docSnap.id));
+        const oldSessions = await getDocs(oldSessionsQuery);
         
-        if (userLoginHash === loginHash) {
-          // Удаляем старые сессии
-          const sessionsRef = collection(firebaseDb, 'user_sessions');
-          const oldSessionsQuery = query(sessionsRef, where('userId', '==', docSnap.id));
-          const oldSessions = await getDocs(oldSessionsQuery);
-          
-          for (const oldSession of oldSessions.docs) {
-            await deleteDoc(doc(firebaseDb, 'user_sessions', oldSession.id));
-          }
-          
-          // Создаём новую сессию
-          const sessionId = crypto.randomUUID();
-          const session: AppSession = {
-            userId: docSnap.id,
-            role: userData.role,
-            login: userData.login,
-            loginTime: Date.now(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            source: 'firebase'
-          };
-          
-          await setDoc(doc(firebaseDb, 'user_sessions', sessionId), session);
-          localStorage.setItem('app_session', JSON.stringify({ ...session, sessionId }));
-          
-          return { success: true, session, userName: userData.name };
+        for (const oldSession of oldSessions.docs) {
+          await deleteDoc(doc(firebaseDb, 'user_sessions', oldSession.id));
         }
+        
+        // Создаём новую сессию
+        const sessionId = crypto.randomUUID();
+        const session: AppSession = {
+          userId: docSnap.id,
+          role: userData.role,
+          login: userData.login,
+          loginTime: Date.now(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          source: 'firebase'
+        };
+        
+        await setDoc(doc(firebaseDb, 'user_sessions', sessionId), session);
+        localStorage.setItem('app_session', JSON.stringify({ ...session, sessionId }));
+        
+        return { success: true, session, userName: userData.name };
       }
-      
-      return { success: false, error: 'not_found' };
-    })();
-    
-    const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => 
-      setTimeout(() => resolve({ success: false, error: 'firebase_timeout' }), 5000)
-    );
-    
-    const firebaseResult = await Promise.race([firebasePromise, timeoutPromise]);
-    
-    if (firebaseResult.success) {
-      return firebaseResult;
     }
     
-    console.log('⚠️ Firebase недоступен или пользователь не найден, используем локальный вход');
-    
-  } catch (error) {
-    console.warn('⚠️ Ошибка Firebase:', error);
+    return { success: false, error: 'Неверный логин' };
+  } catch (error: any) {
+    console.error('❌ Ошибка Firebase:', error);
+    return { success: false, error: 'Ошибка подключения к Firebase' };
   }
-  
-  // Локальный вход
-  if (LOCAL_USERS[login]) {
-    const localData = LOCAL_USERS[login];
-    const session: AppSession = {
-      userId: `local-${login}`,
-      role: localData.role,
-      login: login,
-      loginTime: Date.now(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      source: 'local'
-    };
-    
-    localStorage.setItem('app_session', JSON.stringify(session));
-    
-    return { success: true, session, userName: localData.name };
-  }
-  
-  return { success: false, error: 'Неверный логин' };
 };
 
 // Получение текущей сессии

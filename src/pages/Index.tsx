@@ -1,159 +1,133 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, TrendingUp
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, TrendingUp, Loader2
 } from 'lucide-react';
-import { DashboardTab } from '@/components/DashboardTab';
 import { DatabaseBackupButton } from '@/components/DatabaseBackupButton';
-import { CashierTab } from '@/components/CashierTab';
-import { InventoryTab } from '@/components/InventoryTab';
-import { SuppliersTab } from '@/components/SuppliersTab';
-import { ReportsTab } from '@/components/ReportsTab';
-import { LogsTab } from '@/components/LogsTab';
-import { ExpiryTab } from '@/components/ExpiryTab';
-import { DiagnosticsTab } from '@/components/DiagnosticsTab';
-import { EmployeesTab } from '@/components/EmployeesTab';
-import { EmployeeWorkTab } from '@/components/EmployeeWorkTab';
 import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
-import { CancellationsTab } from '@/components/CancellationsTab';
-import { PendingProductsTab } from '@/components/PendingProductsTab';
 import { RoleSelector } from '@/components/RoleSelector';
-import { WBAnalyticsTab } from '@/components/WBAnalyticsTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loginWithFirebase, logoutFirebase, getCurrentSession, AppRole, AppSession } from '@/lib/firebase';
 
-type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'wb-analytics';
+// Ленивая загрузка компонентов для быстрого старта
+const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
+const CashierTab = lazy(() => import('@/components/CashierTab').then(m => ({ default: m.CashierTab })));
+const InventoryTab = lazy(() => import('@/components/InventoryTab').then(m => ({ default: m.InventoryTab })));
+const SuppliersTab = lazy(() => import('@/components/SuppliersTab').then(m => ({ default: m.SuppliersTab })));
+const ReportsTab = lazy(() => import('@/components/ReportsTab').then(m => ({ default: m.ReportsTab })));
+const LogsTab = lazy(() => import('@/components/LogsTab').then(m => ({ default: m.LogsTab })));
+const ExpiryTab = lazy(() => import('@/components/ExpiryTab').then(m => ({ default: m.ExpiryTab })));
+const DiagnosticsTab = lazy(() => import('@/components/DiagnosticsTab').then(m => ({ default: m.DiagnosticsTab })));
+const EmployeesTab = lazy(() => import('@/components/EmployeesTab').then(m => ({ default: m.EmployeesTab })));
+const EmployeeWorkTab = lazy(() => import('@/components/EmployeeWorkTab').then(m => ({ default: m.EmployeeWorkTab })));
+const CancellationsTab = lazy(() => import('@/components/CancellationsTab').then(m => ({ default: m.CancellationsTab })));
+const PendingProductsTab = lazy(() => import('@/components/PendingProductsTab').then(m => ({ default: m.PendingProductsTab })));
+const WBAnalyticsTab = lazy(() => import('@/components/WBAnalyticsTab').then(m => ({ default: m.WBAnalyticsTab })));
+
+// Компонент загрузки
+const TabLoader = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
+type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'employees' | 'employee-work' | 'cancellations' | 'wb-analytics';
+
+// Данные табов вынесены за компонент для оптимизации
+const ALL_TABS_DATA = [
+  { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
+  { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
+  { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+  { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
+  { id: 'pending-products' as Tab, label: 'Очередь', icon: Upload, roles: ['admin', 'inventory'] },
+  { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
+  { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
+  { id: 'expiry' as Tab, label: 'Сроки', icon: AlertTriangle, roles: ['admin'] },
+  { id: 'diagnostics' as Tab, label: 'Настройки', icon: Settings, roles: ['admin'] },
+  { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
+  { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
+  { id: 'wb-analytics' as Tab, label: 'WB', icon: TrendingUp, roles: ['admin'] },
+  { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
+];
+
+const ROLE_TO_TAB: Record<string, Tab> = {
+  'admin': 'dashboard',
+  'cashier': 'cashier',
+  'cashier2': 'cashier2',
+  'inventory': 'inventory'
+};
 
 const Index = () => {
-  const [session, setSession] = useState<AppSession | null>(null);
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<AppSession | null>(() => getCurrentSession());
+  const [userRole, setUserRole] = useState<AppRole | null>(() => getCurrentSession()?.role || null);
+  const [loading, setLoading] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
-  const [employeeName, setEmployeeName] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const s = getCurrentSession();
+    return s ? (ROLE_TO_TAB[s.role] || 'dashboard') : 'dashboard';
+  });
 
-  // Все доступные табы
-  const allTabsData = [
-    { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
-    { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
-    { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
-    { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
-    { id: 'pending-products' as Tab, label: 'Очередь товара', icon: Upload, roles: ['admin', 'inventory'] },
-    { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
-    { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
-    { id: 'expiry' as Tab, label: 'Срок годности', icon: AlertTriangle, roles: ['admin'] },
-    { id: 'diagnostics' as Tab, label: 'Диагностика', icon: Settings, roles: ['admin'] },
-    { id: 'employees' as Tab, label: 'Сотрудники', icon: Users, roles: ['admin'] },
-    { id: 'cancellations' as Tab, label: 'Отмены', icon: XCircle, roles: ['admin'] },
-    { id: 'wb-analytics' as Tab, label: 'WB Аналитика', icon: TrendingUp, roles: ['admin'] },
-    { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
-  ];
-
-  // Фильтруем табы в зависимости от роли
-  const getTabsByRole = (): Array<{ id: Tab; label: string; icon: any; roles: string[] }> => {
+  // Мемоизация табов
+  const tabs = useMemo(() => {
     if (!userRole) return [];
-    return allTabsData.filter(tab => tab.roles.includes(userRole));
-  };
+    return ALL_TABS_DATA.filter(tab => tab.roles.includes(userRole));
+  }, [userRole]);
 
-  const tabs = getTabsByRole();
-  
-  // Начальный таб будет установлен в useEffect
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-
-  useEffect(() => {
-    // Проверяем сохранённую сессию
-    const checkSession = () => {
-      try {
-        const existingSession = getCurrentSession();
-        
-        if (existingSession) {
-          setSession(existingSession);
-          setUserRole(existingSession.role);
-
-          const availableTabs = allTabsData.filter((tab) => tab.roles.includes(existingSession.role));
-          if (availableTabs.length > 0) {
-            setActiveTab(availableTabs[0].id);
-          }
-        }
-      } catch (e) {
-        console.error('Ошибка проверки сессии:', e);
-      }
-      
-      setLoading(false);
-    };
-    
-    checkSession();
-  }, []);
-
-  const roleToTab: Record<string, Tab> = {
-    'admin': 'dashboard',
-    'cashier': 'cashier',
-    'cashier2': 'cashier2',
-    'inventory': 'inventory'
-  };
-
-  // Вход: Firebase -> Локально (встроено в loginWithFirebase)
-  const handleLogin = async (login: string) => {
+  // Быстрый вход
+  const handleLogin = useCallback(async (login: string) => {
     setLoading(true);
     
-    try {
-      const result = await loginWithFirebase(login);
-      
-      if (result.success && result.session) {
-        setSession(result.session);
-        setUserRole(result.session.role);
-        setActiveTab(roleToTab[result.session.role] || 'dashboard');
-        
-        const source = result.session.source === 'firebase' ? 'Firebase' : 'локально';
-        toast.success(`${result.userName || 'Добро пожаловать!'} (${source})`);
-      } else {
-        toast.error(result.error || 'Неверный логин');
-      }
-    } catch (error) {
-      console.error('Ошибка входа:', error);
-      toast.error('Ошибка входа');
+    const result = await loginWithFirebase(login);
+    
+    if (result.success && result.session) {
+      setSession(result.session);
+      setUserRole(result.session.role);
+      setActiveTab(ROLE_TO_TAB[result.session.role] || 'dashboard');
+      toast.success(`${result.userName || 'Добро пожаловать!'}`);
+    } else {
+      toast.error(result.error || 'Неверный логин');
     }
     
     setLoading(false);
-  };
+  }, []);
 
-  const handleLogout = async () => {
-    await logoutFirebase();
+  // Быстрый выход
+  const handleLogout = useCallback(async () => {
     setSession(null);
     setUserRole(null);
     setEmployeeId(null);
-    setEmployeeName(null);
     setShowEmployeeLogin(false);
-    toast.info('Вы вышли из системы');
-  };
+    logoutFirebase(); // Фоновое выполнение
+    toast.info('Выход');
+  }, []);
 
-  const handleEmployeeLogin = (id: string, name: string) => {
+  const handleEmployeeLogin = useCallback((id: string, name: string) => {
     setEmployeeId(id);
-    setEmployeeName(name);
     setShowEmployeeLogin(false);
     setActiveTab('employee-work');
-  };
+  }, []);
 
-  const handleBack = () => {
-    if (activeTab !== 'dashboard') {
+  const handleBack = useCallback(() => {
+    if (activeTab !== 'dashboard' && userRole === 'admin') {
       setActiveTab('dashboard');
     } else {
       handleLogout();
     }
-  };
+  }, [activeTab, userRole, handleLogout]);
 
-
-  // Показываем экран входа если не авторизован
+  // Экран загрузки
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Загрузка...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
+  // Экран входа
   if (!session && !employeeId) {
     if (showEmployeeLogin) {
       return <EmployeeLoginScreen onLogin={handleEmployeeLogin} />;
@@ -165,85 +139,71 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
-        <div className="container mx-auto px-2 sm:px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Package className="h-6 w-6 sm:h-8 sm:w-8 text-primary flex-shrink-0" />
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-bold truncate">
-                <span className="md:hidden">1С Аналог</span>
-                <span className="hidden md:inline">Система Учета Товаров</span>
-              </h1>
-              <p className="text-xs text-muted-foreground hidden md:block">Управление складом и продажами</p>
-            </div>
+        <div className="container mx-auto px-2 sm:px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Package className="h-6 w-6 text-primary flex-shrink-0" />
+            <h1 className="text-base font-bold truncate">Учет товаров</h1>
           </div>
           
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <DatabaseBackupButton />
-            <Button variant="ghost" size="icon" onClick={handleBack} title="Назад" className="h-8 w-8 sm:h-10 sm:w-10">
-              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Button variant="ghost" size="icon" onClick={handleBack} className="h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleLogout} title="Выход" className="h-8 w-8 sm:h-10 sm:w-10">
-              <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="h-8 w-8">
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <nav className="border-b bg-card">
-        <div className="container mx-auto px-4">
-          <div className="flex overflow-x-auto">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
-                    activeTab === tab.id
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+      {/* Navigation */}
+      <nav className="border-b bg-card overflow-x-auto">
+        <div className="container mx-auto px-2 flex">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-2.5 border-b-2 text-sm transition-colors whitespace-nowrap',
+                  activeTab === tab.id
+                    ? 'border-primary text-primary font-medium'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 space-y-4">
-        {employeeId ? (
-          <EmployeeWorkTab employeeId={employeeId} />
-        ) : (
-          <>
-            {activeTab === 'dashboard' && <DashboardTab />}
-            {activeTab === 'cashier' && <CashierTab cashierRole="cashier" />}
-            {activeTab === 'cashier2' && <CashierTab cashierRole="cashier2" />}
-            {activeTab === 'inventory' && <InventoryTab />}
-            {activeTab === 'pending-products' && <PendingProductsTab />}
-            {activeTab === 'suppliers' && <SuppliersTab />}
-            {activeTab === 'reports' && <ReportsTab />}
-            {activeTab === 'expiry' && <ExpiryTab />}
-            {activeTab === 'diagnostics' && <DiagnosticsTab />}
-            {activeTab === 'logs' && <LogsTab />}
-            {activeTab === 'employees' && <EmployeesTab />}
-            {activeTab === 'cancellations' && <CancellationsTab />}
-            {activeTab === 'wb-analytics' && <WBAnalyticsTab />}
-            {!['dashboard', 'cashier', 'cashier2', 'inventory', 'pending-products', 'suppliers', 'reports', 'expiry', 'diagnostics', 'logs', 'employees', 'cancellations', 'wb-analytics'].includes(activeTab) && (
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold mb-2">Раздел в разработке</h2>
-                <p className="text-muted-foreground">
-                  Функционал "{tabs.find(t => t.id === activeTab)?.label}" будет добавлен в следующих обновлениях
-                </p>
-              </div>
-            )}
-          </>
-        )}
+      {/* Content */}
+      <main className="container mx-auto px-2 sm:px-4 py-4">
+        <Suspense fallback={<TabLoader />}>
+          {employeeId ? (
+            <EmployeeWorkTab employeeId={employeeId} />
+          ) : (
+            <>
+              {activeTab === 'dashboard' && <DashboardTab />}
+              {activeTab === 'cashier' && <CashierTab cashierRole="cashier" />}
+              {activeTab === 'cashier2' && <CashierTab cashierRole="cashier2" />}
+              {activeTab === 'inventory' && <InventoryTab />}
+              {activeTab === 'pending-products' && <PendingProductsTab />}
+              {activeTab === 'suppliers' && <SuppliersTab />}
+              {activeTab === 'reports' && <ReportsTab />}
+              {activeTab === 'expiry' && <ExpiryTab />}
+              {activeTab === 'diagnostics' && <DiagnosticsTab />}
+              {activeTab === 'logs' && <LogsTab />}
+              {activeTab === 'employees' && <EmployeesTab />}
+              {activeTab === 'cancellations' && <CancellationsTab />}
+              {activeTab === 'wb-analytics' && <WBAnalyticsTab />}
+            </>
+          )}
+        </Suspense>
       </main>
     </div>
   );

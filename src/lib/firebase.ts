@@ -1,7 +1,15 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
 
-// Firebase configuration
+/**
+ * Firebase configuration for authentication
+ * 
+ * ЛОГИНЫ ДЛЯ ВХОДА:
+ * - 8080 — Администратор (admin)
+ * - 1020 — Кассир 1 (cashier)
+ * - 2030 — Кассир 2 (cashier2)
+ * - 3040 — Склад (inventory)
+ */
 const firebaseConfig = {
   apiKey: "AIzaSyD08oNtISN8Rtc_hOOH9DxHTTUSiUsKbdE",
   authDomain: "laym-c9f65.firebaseapp.com",

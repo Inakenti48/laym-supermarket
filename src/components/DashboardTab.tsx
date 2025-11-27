@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,16 +8,63 @@ import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [recentReturns, setRecentReturns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   
   // Realtime синхронизация товаров
   useProductsSync(() => {
     // При изменении товаров перезагружаем статистику
     setRefreshTrigger(prev => prev + 1);
   });
+
+  // Realtime подписка на изменения в продуктах и возвратах
+  useEffect(() => {
+    console.log('🔔 Setting up realtime subscriptions...');
+    
+    const productsChannel = supabase
+      .channel('dashboard-products-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        (payload) => {
+          console.log('📦 Products change detected:', payload);
+          setRefreshTrigger(prev => prev + 1);
+        }
+      )
+      .subscribe();
+
+    const returnsChannel = supabase
+      .channel('dashboard-returns-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'product_returns'
+        },
+        (payload) => {
+          console.log('↩️ Returns change detected:', payload);
+          setRefreshTrigger(prev => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔕 Cleaning up realtime subscriptions...');
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(returnsChannel);
+    };
+  }, []);
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -30,14 +77,24 @@ export const DashboardTab = () => {
   });
 
   useEffect(() => {
-    const calculateStats = async () => {
-      // ОПТИМИЗАЦИЯ: Получаем данные с лимитом для быстрой загрузки
-      const { data: products } = await supabase
-        .from('products')
-        .select('quantity, purchase_price, sale_price, expiry_date, paid_amount')
-        .limit(500);
-      
-      if (!products) return;
+    const calculateStats = async (retryCount = 0) => {
+      try {
+        setIsLoading(true);
+        setConnectionError(false);
+
+        // ОПТИМИЗАЦИЯ: Получаем данные с лимитом для быстрой загрузки
+        const { data: products, error } = await supabase
+          .from('products')
+          .select('quantity, purchase_price, sale_price, expiry_date, paid_amount')
+          .limit(500);
+        
+        if (error) {
+          throw error;
+        }
+
+        if (!products) {
+          throw new Error('No products data received');
+        }
       
       const totalProducts = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
       const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.quantity || 0)), 0);
@@ -74,18 +131,43 @@ export const DashboardTab = () => {
         return sum + (retailPrice * (paidAmount / purchasePrice));
       }, 0);
 
-      setStats({
-        totalRevenue,
-        totalProducts,
-        totalPurchaseCost,
-        salesToday,
-        activeEmployees,
-        lowStockCount,
-        expiringCount,
-      });
+        setStats({
+          totalRevenue,
+          totalProducts,
+          totalPurchaseCost,
+          salesToday,
+          activeEmployees,
+          lowStockCount,
+          expiringCount,
+        });
+
+        setLastUpdate(new Date());
+        setConnectionError(false);
+      } catch (error: any) {
+        console.error('❌ Error loading stats:', error);
+        
+        // Retry logic - попробуем до 3 раз с задержкой
+        if (retryCount < 3) {
+          console.log(`🔄 Retry ${retryCount + 1}/3 after 2 seconds...`);
+          setTimeout(() => {
+            calculateStats(retryCount + 1);
+          }, 2000);
+          return;
+        }
+
+        setConnectionError(true);
+        
+        if (retryCount === 0) {
+          toast.error('Нет связи с сервером. Повторная попытка...', {
+            duration: 3000,
+          });
+        }
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    const loadRecentReturns = async () => {
+    const loadRecentReturns = async (retryCount = 0) => {
       try {
         const { data, error } = await supabase
           .from('product_returns')
@@ -95,22 +177,34 @@ export const DashboardTab = () => {
 
         if (error) throw error;
         setRecentReturns(data || []);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error loading returns:', error);
+        
+        // Retry для возвратов
+        if (retryCount < 3) {
+          setTimeout(() => {
+            loadRecentReturns(retryCount + 1);
+          }, 2000);
+        }
       }
     };
 
     calculateStats();
     loadRecentReturns();
     
-    // Обновление каждые 60 секунд (было 30)
+    // Обновление каждые 30 секунд для онлайн-статистики
     const interval = setInterval(() => {
       calculateStats();
       loadRecentReturns();
-    }, 60000);
+    }, 30000);
     
     return () => clearInterval(interval);
   }, [refreshTrigger]);
+
+  const handleManualRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+    toast.info('Обновление данных...');
+  };
 
   const statCards = [
     {
@@ -156,12 +250,48 @@ export const DashboardTab = () => {
           <p className="text-muted-foreground mt-2">
             Обзор ключевых показателей вашего бизнеса
           </p>
+          {lastUpdate && !connectionError && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <Wifi className="h-3 w-3 text-green-500" />
+              Обновлено: {lastUpdate.toLocaleTimeString('ru-RU')}
+            </p>
+          )}
         </div>
-        <Button onClick={handleExport} variant="outline" className="gap-2">
-          <Download className="h-4 w-4" />
-          Скачать резервную копию
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleManualRefresh} 
+            variant="outline" 
+            className="gap-2"
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Обновить
+          </Button>
+          <Button onClick={handleExport} variant="outline" className="gap-2">
+            <Download className="h-4 w-4" />
+            Резервная копия
+          </Button>
+        </div>
       </div>
+
+      {/* Сообщение об ошибке подключения */}
+      {connectionError && (
+        <Alert variant="destructive">
+          <WifiOff className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>Нет связи с сервером. Данные могут быть неактуальны.</span>
+            <Button 
+              onClick={handleManualRefresh} 
+              variant="outline" 
+              size="sm"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+              Повторить
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => {

@@ -900,13 +900,62 @@ export const InventoryTab = () => {
         const purchasePrice = hasPrices && finalPurchasePrice ? parseFloat(finalPurchasePrice) : 0;
         const retailPrice = hasPrices && finalRetailPrice ? parseFloat(finalRetailPrice) : 0;
         
-        // Если цен нет - НЕ сохраняем автоматически
+        // Если цен нет - добавляем в очередь для ручного заполнения
         if (purchasePrice === 0 || retailPrice === 0) {
-          console.log('⚠️ Цены не найдены - товар останется в форме для ручного ввода');
-          toast.info(`⚠️ Цены не найдены для "${barcodeData.name}". Заполните вручную и нажмите "Добавить товар"`, { 
+          console.log('⚠️ Цены не найдены - добавляем в очередь');
+          
+          const newPendingProduct: PendingProduct = {
+            id: `pending-${Date.now()}-${Math.random()}`,
+            barcode: sanitizedBarcode,
+            name: barcodeData.name || '',
+            category: finalCategory,
+            purchasePrice: '',
+            retailPrice: '',
+            quantity: '1',
+            unit: 'шт',
+            expiryDate: '',
+            supplier: finalSupplier,
+            photos: allPhotos,
+            frontPhoto: barcodeData.frontPhoto,
+            barcodePhoto: barcodeData.barcodePhoto,
+          };
+          
+          setPendingProducts(prev => [...prev, newPendingProduct]);
+          
+          // Сохраняем в временную таблицу для синхронизации между устройствами
+          try {
+            await supabase.from('vremenno_product_foto').insert({
+              barcode: sanitizedBarcode,
+              product_name: barcodeData.name || '',
+              image_url: barcodeData.frontPhoto || barcodeData.barcodePhoto || '',
+              storage_path: null
+            });
+          } catch (e) {
+            console.log('Ошибка сохранения в временную таблицу:', e);
+          }
+          
+          toast.info(`📦 Товар добавлен в очередь: ${barcodeData.name || sanitizedBarcode}`, { 
             position: 'top-center',
-            duration: 5000 
+            duration: 3000 
           });
+          
+          // Очищаем форму
+          setCurrentProduct({
+            barcode: '',
+            name: '',
+            category: '',
+            purchasePrice: '',
+            retailPrice: '',
+            quantity: '',
+            unit: 'шт',
+            expiryDate: '',
+            supplier: '',
+          });
+          setPhotos([]);
+          setTempFrontPhoto('');
+          setTempBarcodePhoto('');
+          
+          addLog(`AI-сканирование: ${barcodeData.name || sanitizedBarcode} - добавлен в очередь (без цен)`);
           return;
         }
         

@@ -206,3 +206,52 @@ export const getExpiringFirebaseProducts = async (days: number = 30): Promise<Fi
     return [];
   }
 };
+
+// Тестовое добавление товара для проверки подключения
+export const testFirebaseConnection = async (): Promise<{
+  success: boolean;
+  message: string;
+  product?: FirebaseProduct;
+}> => {
+  try {
+    const testProduct: FirebaseProduct = {
+      barcode: 'TEST-001',
+      name: 'Тестовый товар',
+      purchasePrice: 100,
+      salePrice: 150,
+      quantity: 10,
+      unit: 'шт',
+      category: 'Тест',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: 'system-test'
+    };
+
+    const saved = await saveFirebaseProduct(testProduct);
+    
+    if (saved) {
+      // Проверяем что товар сохранился
+      const retrieved = await getFirebaseProduct('TEST-001');
+      
+      if (retrieved) {
+        console.log('✅ Firebase подключение работает! Тестовый товар сохранён:', retrieved);
+        return {
+          success: true,
+          message: 'Firebase подключен успешно! Тестовый товар добавлен в коллекцию products.',
+          product: retrieved
+        };
+      }
+    }
+    
+    return {
+      success: false,
+      message: 'Не удалось сохранить тестовый товар'
+    };
+  } catch (error: any) {
+    console.error('❌ Ошибка тестирования Firebase:', error);
+    return {
+      success: false,
+      message: error.message || 'Ошибка подключения к Firebase'
+    };
+  }
+};

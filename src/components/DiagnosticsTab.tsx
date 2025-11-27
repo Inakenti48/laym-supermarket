@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Settings, Monitor, Flame } from 'lucide-react';
+import { Settings, Monitor, Flame, Database } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
+import { testFirebaseConnection } from '@/lib/firebaseProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +59,7 @@ export const DiagnosticsTab = () => {
 
   // Инициализация Firebase пользователей
   const [firebaseLoading, setFirebaseLoading] = useState(false);
+  const [firebaseTestLoading, setFirebaseTestLoading] = useState(false);
   
   const handleInitFirebase = async () => {
     setFirebaseLoading(true);
@@ -72,6 +74,22 @@ export const DiagnosticsTab = () => {
       toast.error(`❌ Ошибка: ${error.message}`);
     }
     setFirebaseLoading(false);
+  };
+
+  const handleTestFirebaseProducts = async () => {
+    setFirebaseTestLoading(true);
+    try {
+      const result = await testFirebaseConnection();
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+        console.log('Тестовый товар:', result.product);
+      } else {
+        toast.error(`❌ ${result.message}`);
+      }
+    } catch (error: any) {
+      toast.error(`❌ Ошибка: ${error.message}`);
+    }
+    setFirebaseTestLoading(false);
   };
 
   // Загружаем все устройства для админа
@@ -209,12 +227,12 @@ export const DiagnosticsTab = () => {
 
         {/* Firebase инициализация */}
         {userRole === 'admin' && (
-          <div className="mb-6 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+          <div className="mb-6 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <Flame className="h-4 w-4 text-orange-500" />
-                  Firebase
+                  Firebase Пользователи
                 </h4>
                 <p className="text-xs text-muted-foreground mt-1">
                   Создать пользователей в Firebase (один раз)
@@ -228,6 +246,26 @@ export const DiagnosticsTab = () => {
                 className="border-orange-500/50 hover:bg-orange-500/10"
               >
                 {firebaseLoading ? 'Создание...' : 'Инициализировать'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-orange-500/20">
+              <div>
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Database className="h-4 w-4 text-orange-500" />
+                  Firebase Товары
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Тест подключения к Firestore (добавит тестовый товар)
+                </p>
+              </div>
+              <Button
+                onClick={handleTestFirebaseProducts}
+                disabled={firebaseTestLoading}
+                variant="outline"
+                size="sm"
+                className="border-orange-500/50 hover:bg-orange-500/10"
+              >
+                {firebaseTestLoading ? 'Проверка...' : 'Тест товаров'}
               </Button>
             </div>
           </div>

@@ -24,8 +24,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
-import { AppRole, getUserRole } from '@/lib/supabaseAuth';
-import { loginByUsername, getCurrentSession, getCurrentLoginUser, getCurrentLoginUserSync, logoutUser } from '@/lib/loginAuth';
+import { AppRole } from '@/lib/supabaseAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'wb-analytics';
 
@@ -66,79 +65,66 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
+    // Проверяем локальную сессию из localStorage
+    const savedSession = localStorage.getItem('local_session');
+    
+    if (savedSession) {
       try {
-        // Быстрая проверка сессии с таймаутом
-        const session = await Promise.race<Awaited<ReturnType<typeof getCurrentSession>> | null>([
-          getCurrentSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-        ]);
+        const session = JSON.parse(savedSession);
+        setUser({ id: session.userId, role: session.role } as any);
+        setUserRole(session.role as AppRole);
 
-        if (!isMounted) return;
-
-        if (session) {
-          // Есть сессия - используем её
-          setUser({ id: session.userId, role: session.role } as any);
-          setUserRole(session.role as AppRole);
-
-          const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
-          if (availableTabs.length > 0) {
-            setActiveTab(availableTabs[0].id);
-          }
-        }
-
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Обновляем activeTab только при первом входе через handleLogin
-  const handleLogin = async (login: string) => {
-    try {
-      setLoading(true);
-      
-      const result = await loginByUsername(login);
-      
-      if (!result.success) {
-        toast.error(result.error || 'Ошибка входа');
-        return;
-      }
-
-      // Устанавливаем пользователя
-      if (result.userId && result.role) {
-        const fakeUser = {
-          id: result.userId,
-          role: result.role
-        } as any;
-        
-        setUser(fakeUser);
-        setUserRole(result.role as AppRole);
-        
-        // Устанавливаем первый доступный таб для роли
-        const availableTabs = allTabsData.filter(tab => tab.roles.includes(result.role));
+        const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
         if (availableTabs.length > 0) {
           setActiveTab(availableTabs[0].id);
         }
-        
-        toast.success('Вход выполнен');
+      } catch (e) {
+        localStorage.removeItem('local_session');
       }
-    } catch (error: any) {
-      toast.error('Ошибка входа');
-    } finally {
-      setLoading(false);
     }
+    
+    setLoading(false);
+  }, []);
+
+  // Локальные логины без сервера
+  const handleLogin = (login: string) => {
+    setLoading(true);
+    
+    // Локальные логины
+    const localLogins: Record<string, { role: AppRole; name: string; tab: Tab }> = {
+      '8080': { role: 'admin', name: 'Администратор', tab: 'dashboard' },
+      '1111': { role: 'admin', name: 'Админ', tab: 'dashboard' },
+      '2222': { role: 'cashier', name: 'Кассир 1', tab: 'cashier' },
+      '3333': { role: 'cashier2', name: 'Кассир 2', tab: 'cashier2' },
+      '4444': { role: 'inventory', name: 'Товаровед', tab: 'inventory' },
+    };
+
+    if (localLogins[login]) {
+      const loginData = localLogins[login];
+      const fakeUser = {
+        id: `local-user-${login}`,
+        role: loginData.role,
+      } as any;
+
+      // Сохраняем в localStorage для сессии
+      localStorage.setItem('local_session', JSON.stringify({
+        userId: fakeUser.id,
+        role: loginData.role,
+        name: loginData.name
+      }));
+
+      setUser(fakeUser);
+      setUserRole(loginData.role);
+      setActiveTab(loginData.tab);
+      toast.success(`Вход: ${loginData.name}`);
+    } else {
+      toast.error('Неверный логин');
+    }
+    
+    setLoading(false);
   };
-  const handleLogout = async () => {
-    logoutUser();
+  const handleLogout = () => {
+    localStorage.removeItem('local_session');
     setUser(null);
     setUserRole(null);
     setEmployeeId(null);

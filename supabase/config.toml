@@ -1,9 +1,7 @@
 project_id = "rfkfjfvlcushtejkgbmg"
 
 [auth]
-# JWT expiry settings - месяц для access token
 jwt_expiry = 2592000
-# Refresh token expiry - месяц
 refresh_token_rotation_enabled = true
 refresh_token_reuse_interval = 10
 
@@ -14,7 +12,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.cleanup-temporary-photos]
-verify_jwt = false  # Called by cron job, validated internally
+verify_jwt = false
 
 [functions.bulk-import-products]
 verify_jwt = true
@@ -27,3 +25,6 @@ verify_jwt = true
 
 [functions.wb-analytics]
 verify_jwt = true
+
+[functions.upload-to-imagekit]
+verify_jwt = false

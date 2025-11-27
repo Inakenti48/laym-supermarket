@@ -26,13 +26,6 @@ export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProp
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">Система Учета Товаров</h1>
           <p className="text-muted-foreground">Введите 4-значный логин для входа</p>
-          <div className="mt-4 p-4 bg-muted rounded-lg text-left text-sm space-y-1">
-            <p className="font-semibold mb-2">Доступные логины:</p>
-            <p>• 1111 - Администратор</p>
-            <p>• 2222 - Кассир 1</p>
-            <p>• 3333 - Кассир 2</p>
-            <p>• 4444 - Товаровед</p>
-          </div>
         </div>
         
         <Card>

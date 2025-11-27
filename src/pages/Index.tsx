@@ -105,29 +105,6 @@ const Index = () => {
   const handleLogin = async (login: string) => {
     try {
       setLoading(true);
-
-      // Локальные быстрые логины без сервера
-      const localLogins: Record<string, { role: AppRole; name: string; tab: Tab }> = {
-        '8080': { role: 'admin', name: 'Администратор', tab: 'dashboard' },
-        '1111': { role: 'admin', name: 'Админ', tab: 'dashboard' },
-        '2222': { role: 'cashier', name: 'Кассир 1', tab: 'cashier' },
-        '3333': { role: 'cashier2', name: 'Кассир 2', tab: 'cashier2' },
-        '4444': { role: 'inventory', name: 'Товаровед', tab: 'inventory' },
-      };
-
-      if (localLogins[login]) {
-        const loginData = localLogins[login];
-        const fakeUser = {
-          id: `00000000-0000-0000-0000-00000000${login}`,
-          role: loginData.role,
-        } as any;
-
-        setUser(fakeUser);
-        setUserRole(loginData.role);
-        setActiveTab(loginData.tab);
-        toast.success(`Вход: ${loginData.name}`);
-        return;
-      }
       
       const result = await loginByUsername(login);
       

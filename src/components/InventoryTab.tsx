@@ -35,7 +35,7 @@ export const InventoryTab = () => {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserLogin, setCurrentUserLogin] = useState<string>('');
   const isAdmin = userRole === 'admin';
-  const canUseAI = userRole === 'admin' || userRole === 'inventory';
+  const canUseAI = userRole === 'admin' || userRole === 'inventory' || userRole === 'cashier' || userRole !== '';
 
   // Получаем роль пользователя при загрузке
   useEffect(() => {

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
-import { testFirebaseConnection } from '@/lib/firebaseProducts';
+import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection } from '@/lib/firebaseProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +60,8 @@ export const DiagnosticsTab = () => {
   // Инициализация Firebase пользователей
   const [firebaseLoading, setFirebaseLoading] = useState(false);
   const [firebaseTestLoading, setFirebaseTestLoading] = useState(false);
+  const [initTestLoading, setInitTestLoading] = useState(false);
+  const [firebaseStatus, setFirebaseStatus] = useState(() => getFirebaseStatus());
   
   const handleInitFirebase = async () => {
     setFirebaseLoading(true);
@@ -81,15 +83,38 @@ export const DiagnosticsTab = () => {
     try {
       const result = await testFirebaseConnection();
       if (result.success) {
-        toast.success(`✅ ${result.message}`);
+        toast.success(`✅ ${result.message} (${result.mode})`);
         console.log('Тестовый товар:', result.product);
       } else {
         toast.error(`❌ ${result.message}`);
       }
+      setFirebaseStatus(getFirebaseStatus());
     } catch (error: any) {
       toast.error(`❌ Ошибка: ${error.message}`);
     }
     setFirebaseTestLoading(false);
+  };
+
+  const handleInitTestProducts = async () => {
+    setInitTestLoading(true);
+    try {
+      const result = await initializeWithTestProducts();
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+      } else {
+        toast.error(`❌ ${result.message}`);
+      }
+      setFirebaseStatus(getFirebaseStatus());
+    } catch (error: any) {
+      toast.error(`❌ Ошибка: ${error.message}`);
+    }
+    setInitTestLoading(false);
+  };
+
+  const handleRetryFirebase = () => {
+    retryFirebaseConnection();
+    setFirebaseStatus(getFirebaseStatus());
+    toast.info('🔄 Попытка переподключения к Firebase...');
   };
 
   // Загружаем все устройства для админа
@@ -228,6 +253,26 @@ export const DiagnosticsTab = () => {
         {/* Firebase инициализация */}
         {userRole === 'admin' && (
           <div className="mb-6 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-3">
+            {/* Статус Firebase */}
+            <div className="flex items-center justify-between pb-2 border-b border-orange-500/20">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${firebaseStatus.available ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                <span className="text-sm font-medium">
+                  Режим: {firebaseStatus.mode}
+                </span>
+              </div>
+              {!firebaseStatus.available && (
+                <Button
+                  onClick={handleRetryFirebase}
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                >
+                  Переподключить
+                </Button>
+              )}
+            </div>
+            
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-medium text-sm flex items-center gap-2">
@@ -252,10 +297,10 @@ export const DiagnosticsTab = () => {
               <div>
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <Database className="h-4 w-4 text-orange-500" />
-                  Firebase Товары
+                  Тест подключения
                 </h4>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Тест подключения к Firestore (добавит тестовый товар)
+                  Проверить подключение (добавит 1 тестовый товар)
                 </p>
               </div>
               <Button
@@ -265,7 +310,27 @@ export const DiagnosticsTab = () => {
                 size="sm"
                 className="border-orange-500/50 hover:bg-orange-500/10"
               >
-                {firebaseTestLoading ? 'Проверка...' : 'Тест товаров'}
+                {firebaseTestLoading ? 'Проверка...' : 'Тест'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-orange-500/20">
+              <div>
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Database className="h-4 w-4 text-green-500" />
+                  Тестовые товары
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Добавить 5 демо-товаров для тестирования
+                </p>
+              </div>
+              <Button
+                onClick={handleInitTestProducts}
+                disabled={initTestLoading}
+                variant="outline"
+                size="sm"
+                className="border-green-500/50 hover:bg-green-500/10"
+              >
+                {initTestLoading ? 'Добавление...' : 'Добавить демо'}
               </Button>
             </div>
           </div>

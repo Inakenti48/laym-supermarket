@@ -95,32 +95,34 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
       // Шаг 2: AI распознавание если товар не найден
       console.log('🤖 Запускаем AI распознавание...');
       
-      // Загружаем фото во временное хранилище
-      const frontBlob = await fetch(frontPhoto).then(r => r.blob());
-      const barcodeBlob = await fetch(barcodePhoto).then(r => r.blob());
+      // Загружаем фото в ImageKit через edge function
+      const [frontUploadResult, barcodeUploadResult] = await Promise.all([
+        supabase.functions.invoke('upload-to-imagekit', {
+          body: {
+            base64Image: frontPhoto,
+            fileName: `temp-front-${Date.now()}.jpg`,
+            folder: '/temporary'
+          }
+        }),
+        supabase.functions.invoke('upload-to-imagekit', {
+          body: {
+            base64Image: barcodePhoto,
+            fileName: `temp-barcode-${Date.now()}.jpg`,
+            folder: '/temporary'
+          }
+        })
+      ]);
       
-      const frontFileName = `temp-front-${Date.now()}.jpg`;
-      const barcodeFileName = `temp-barcode-${Date.now()}.jpg`;
-      
-      const { data: frontUpload, error: frontUploadError } = await supabase.storage
-        .from('product-photos')
-        .upload(`temporary/${frontFileName}`, frontBlob);
-      
-      const { data: barcodeUpload, error: barcodeUploadError } = await supabase.storage
-        .from('product-photos')
-        .upload(`temporary/${barcodeFileName}`, barcodeBlob);
-      
-      if (frontUploadError || barcodeUploadError) {
-        throw new Error('Ошибка загрузки фото');
+      if (frontUploadResult.error || barcodeUploadResult.error) {
+        throw new Error('Ошибка загрузки фото в ImageKit');
       }
       
-      const { data: { publicUrl: frontUrl } } = supabase.storage
-        .from('product-photos')
-        .getPublicUrl(`temporary/${frontFileName}`);
+      const frontUrl = frontUploadResult.data?.url;
+      const barcodeUrl = barcodeUploadResult.data?.url;
       
-      const { data: { publicUrl: barcodeUrl } } = supabase.storage
-        .from('product-photos')
-        .getPublicUrl(`temporary/${barcodeFileName}`);
+      if (!frontUrl || !barcodeUrl) {
+        throw new Error('Не удалось получить URL изображений');
+      }
 
       // Вызываем edge function для распознавания
       const { data: scanData, error: scanError } = await supabase.functions.invoke(

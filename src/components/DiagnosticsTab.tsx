@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Settings, Monitor, Flame, Database } from 'lucide-react';
+import { Settings, Monitor, Flame, Database, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
-import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection } from '@/lib/firebaseProducts';
+import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection, clearAllFirebaseProducts } from '@/lib/firebaseProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +61,7 @@ export const DiagnosticsTab = () => {
   const [firebaseLoading, setFirebaseLoading] = useState(false);
   const [firebaseTestLoading, setFirebaseTestLoading] = useState(false);
   const [initTestLoading, setInitTestLoading] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
   const [firebaseStatus, setFirebaseStatus] = useState(() => getFirebaseStatus());
   
   const handleInitFirebase = async () => {
@@ -115,6 +116,25 @@ export const DiagnosticsTab = () => {
     retryFirebaseConnection();
     setFirebaseStatus(getFirebaseStatus());
     toast.info('🔄 Попытка переподключения к Firebase...');
+  };
+
+  const handleClearAllProducts = async () => {
+    if (!confirm('⚠️ Удалить ВСЕ товары из Firebase и локальной базы? Это действие необратимо!')) {
+      return;
+    }
+    setClearLoading(true);
+    try {
+      const result = await clearAllFirebaseProducts();
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+      } else {
+        toast.error(`❌ Ошибка очистки`);
+      }
+      setFirebaseStatus(getFirebaseStatus());
+    } catch (error: any) {
+      toast.error(`❌ Ошибка: ${error.message}`);
+    }
+    setClearLoading(false);
   };
 
   // Загружаем все устройства для админа
@@ -331,6 +351,26 @@ export const DiagnosticsTab = () => {
                 className="border-green-500/50 hover:bg-green-500/10"
               >
                 {initTestLoading ? 'Добавление...' : 'Добавить демо'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-red-500/20">
+              <div>
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                  Очистить товары
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Удалить ВСЕ товары из базы данных
+                </p>
+              </div>
+              <Button
+                onClick={handleClearAllProducts}
+                disabled={clearLoading}
+                variant="outline"
+                size="sm"
+                className="border-red-500/50 hover:bg-red-500/10 text-red-600"
+              >
+                {clearLoading ? 'Удаление...' : 'Очистить'}
               </Button>
             </div>
           </div>

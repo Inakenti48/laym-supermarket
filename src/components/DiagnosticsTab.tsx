@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
-import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection, clearAllFirebaseProducts } from '@/lib/firebaseProducts';
+import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection, clearAllFirebaseProducts, enableFirebaseSync, disableFirebaseSync, isFirebaseEnabled } from '@/lib/firebaseProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -113,9 +113,22 @@ export const DiagnosticsTab = () => {
   };
 
   const handleRetryFirebase = () => {
+    enableFirebaseSync();
     retryFirebaseConnection();
     setFirebaseStatus(getFirebaseStatus());
     toast.info('🔄 Попытка переподключения к Firebase...');
+  };
+
+  const handleToggleFirebase = () => {
+    if (isFirebaseEnabled()) {
+      disableFirebaseSync();
+      toast.info('📦 Переключено на локальное хранилище');
+    } else {
+      enableFirebaseSync();
+      retryFirebaseConnection();
+      toast.info('🔥 Firebase синхронизация включена');
+    }
+    setFirebaseStatus(getFirebaseStatus());
   };
 
   const handleClearAllProducts = async () => {
@@ -281,16 +294,26 @@ export const DiagnosticsTab = () => {
                   Режим: {firebaseStatus.mode}
                 </span>
               </div>
-              {!firebaseStatus.available && (
+              <div className="flex gap-2">
                 <Button
-                  onClick={handleRetryFirebase}
-                  variant="ghost"
+                  onClick={handleToggleFirebase}
+                  variant="outline"
                   size="sm"
                   className="text-xs"
                 >
-                  Переподключить
+                  {firebaseStatus.available ? '📦 Переключить на локальное' : '🔥 Включить Firebase'}
                 </Button>
-              )}
+                {!firebaseStatus.available && (
+                  <Button
+                    onClick={handleRetryFirebase}
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    Переподключить
+                  </Button>
+                )}
+              </div>
             </div>
             
             <div className="flex items-center justify-between">

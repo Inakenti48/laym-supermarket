@@ -1,5 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
 import { retryOperation } from './retryUtils';
+import {
+  getAllFirebaseProducts,
+  findFirebaseProductByBarcode,
+  saveFirebaseProduct,
+  updateFirebaseProductQuantity,
+  removeFirebaseExpiredProduct,
+  getFirebaseExpiringProducts
+} from './firebaseProducts';
 
 export interface StoredProduct {
   id: string;
@@ -67,7 +75,7 @@ export const saveProductImage = async (
         // Обновляем существующую запись
         const updateData: any = {
           image_url: imageUrl,
-          storage_path: fileId, // Сохраняем fileId от ImageKit
+          storage_path: fileId,
           updated_at: new Date().toISOString()
         };
 
@@ -83,7 +91,7 @@ export const saveProductImage = async (
           barcode,
           product_name: productName,
           image_url: imageUrl,
-          storage_path: fileId // Сохраняем fileId от ImageKit
+          storage_path: fileId
         };
         
         if (userId) {
@@ -113,198 +121,26 @@ export const saveProductImage = async (
   });
 };
 
+// === FIREBASE ФУНКЦИИ ДЛЯ ТОВАРОВ ===
+
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching products:', error);
-    return [];
-  }
-  
-  return (data || []).map(p => ({
-    id: p.id,
-    barcode: p.barcode,
-    name: p.name,
-    category: p.category,
-    purchasePrice: Number(p.purchase_price),
-    retailPrice: Number(p.sale_price),
-    quantity: p.quantity,
-    unit: 'шт' as const,
-    expiryDate: p.expiry_date || undefined,
-    photos: [],
-    paymentType: p.payment_type as 'full' | 'partial' | 'debt',
-    paidAmount: Number(p.paid_amount),
-    debtAmount: Number(p.debt_amount),
-    addedBy: p.created_by || '',
-    supplier: p.supplier || undefined,
-    lastUpdated: p.updated_at,
-    priceHistory: (p.price_history as any) || []
-  }));
+  console.log('📦 Загрузка товаров из Firebase...');
+  return getAllFirebaseProducts();
 };
 
 export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
   if (!barcode) return null;
-  
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('barcode', barcode)
-    .maybeSingle();
-  
-  if (error || !data) return null;
-  
-  return {
-    id: data.id,
-    barcode: data.barcode,
-    name: data.name,
-    category: data.category,
-    purchasePrice: Number(data.purchase_price),
-    retailPrice: Number(data.sale_price),
-    quantity: data.quantity,
-    unit: 'шт' as const,
-    expiryDate: data.expiry_date || undefined,
-    photos: [],
-    paymentType: data.payment_type as 'full' | 'partial' | 'debt',
-    paidAmount: Number(data.paid_amount),
-    debtAmount: Number(data.debt_amount),
-    addedBy: data.created_by || '',
-    supplier: data.supplier || undefined,
-    lastUpdated: data.updated_at,
-    priceHistory: (data.price_history as any) || []
-  };
+  return findFirebaseProductByBarcode(barcode);
 };
 
-export const saveProduct = async (product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, userId: string): Promise<StoredProduct> => {
+export const saveProduct = async (
+  product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, 
+  userId: string
+): Promise<StoredProduct> => {
   return await retryOperation(
     async () => {
-      const now = new Date().toISOString();
-      const existing = product.barcode ? await findProductByBarcode(product.barcode) : null;
-      
-      if (existing) {
-        const priceChanged = 
-          existing.purchasePrice !== product.purchasePrice || 
-          existing.retailPrice !== product.retailPrice;
-        
-        const newPriceHistory = priceChanged
-          ? [
-              ...existing.priceHistory,
-              {
-                date: now,
-                purchasePrice: product.purchasePrice,
-                retailPrice: product.retailPrice,
-                changedBy: userId,
-              },
-            ]
-          : existing.priceHistory;
-        
-        const { data, error } = await supabase
-          .from('products')
-          .update({
-            name: product.name,
-            category: product.category,
-            purchase_price: product.purchasePrice,
-            sale_price: product.retailPrice,
-            quantity: existing.quantity + product.quantity,
-            unit: product.unit,
-            expiry_date: product.expiryDate || null,
-            payment_type: product.paymentType,
-            paid_amount: product.paidAmount,
-            debt_amount: product.debtAmount,
-            supplier: product.supplier || null,
-            price_history: newPriceHistory as any,
-            updated_at: now
-          })
-          .eq('barcode', product.barcode)
-          .select()
-          .single();
-        
-        if (error) throw error;
-        
-        return {
-          id: data.id,
-          barcode: data.barcode,
-          name: data.name,
-          category: data.category,
-          purchasePrice: Number(data.purchase_price),
-          retailPrice: Number(data.sale_price),
-          quantity: data.quantity,
-          unit: 'шт' as const,
-          expiryDate: data.expiry_date || undefined,
-          photos: [],
-          paymentType: data.payment_type as 'full' | 'partial' | 'debt',
-          paidAmount: Number(data.paid_amount),
-          debtAmount: Number(data.debt_amount),
-          addedBy: data.created_by || '',
-          supplier: data.supplier || undefined,
-          lastUpdated: data.updated_at,
-          priceHistory: (data.price_history as any) || []
-        };
-      } else {
-        console.log('💾 Создание нового товара - сохранение в Supabase...');
-        
-        const newPriceHistory = [
-          {
-            date: now,
-            purchasePrice: product.purchasePrice,
-            retailPrice: product.retailPrice,
-            changedBy: userId,
-          },
-        ];
-        
-        const productToInsert = {
-          barcode: product.barcode || `NO-BARCODE-${Date.now()}`,
-          name: product.name,
-          category: product.category,
-          purchase_price: product.purchasePrice,
-          sale_price: product.retailPrice,
-          quantity: product.quantity,
-          unit: product.unit,
-          expiry_date: product.expiryDate || null,
-          payment_type: product.paymentType,
-          paid_amount: product.paidAmount,
-          debt_amount: product.debtAmount,
-          supplier: product.supplier || null,
-          price_history: newPriceHistory as any,
-          created_by: userId
-        };
-        
-        console.log('☁️ Сохранение товара в Supabase...');
-        const { data, error } = await supabase
-          .from('products')
-          .insert(productToInsert)
-          .select()
-          .single();
-        
-        if (error) {
-          console.error('❌ Ошибка сохранения товара:', error);
-          throw error;
-        }
-        
-        console.log('✅ Товар успешно сохранен:', data.id);
-        
-        return {
-          id: data.id,
-          barcode: data.barcode,
-          name: data.name,
-          category: data.category,
-          purchasePrice: Number(data.purchase_price),
-          retailPrice: Number(data.sale_price),
-          quantity: data.quantity,
-          unit: 'шт' as const,
-          expiryDate: data.expiry_date || undefined,
-          photos: product.photos || [],
-          paymentType: data.payment_type as 'full' | 'partial' | 'debt',
-          paidAmount: Number(data.paid_amount),
-          debtAmount: Number(data.debt_amount),
-          addedBy: userId,
-          supplier: data.supplier || undefined,
-          lastUpdated: data.updated_at,
-          priceHistory: newPriceHistory
-        };
-      }
+      console.log('💾 Сохранение товара в Firebase...');
+      return saveFirebaseProduct(product, userId);
     },
     {
       maxAttempts: 5,
@@ -321,16 +157,7 @@ export const getAllProducts = async (): Promise<StoredProduct[]> => {
 };
 
 export const getExpiringProducts = async (daysBeforeExpiry: number = 3): Promise<StoredProduct[]> => {
-  const products = await getStoredProducts();
-  const now = new Date();
-  const targetDate = new Date();
-  targetDate.setDate(targetDate.getDate() + daysBeforeExpiry);
-  
-  return products.filter(product => {
-    if (!product.expiryDate || product.quantity <= 0) return false;
-    const expiryDate = new Date(product.expiryDate);
-    return expiryDate >= now && expiryDate <= targetDate;
-  });
+  return getFirebaseExpiringProducts(daysBeforeExpiry);
 };
 
 export const isProductExpired = (product: StoredProduct): boolean => {
@@ -341,47 +168,15 @@ export const isProductExpired = (product: StoredProduct): boolean => {
 };
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
-  const product = await findProductByBarcode(barcode);
-  
-  if (!product) {
-    throw new Error(`Товар с штрихкодом ${barcode} не найден`);
-  }
-  
-  const { error } = await supabase
-    .from('products')
-    .update({ 
-      quantity: product.quantity + quantityChange,
-      updated_at: new Date().toISOString()
-    })
-    .eq('barcode', barcode);
-  
-  if (error) throw error;
+  return updateFirebaseProductQuantity(barcode, quantityChange);
 };
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
-  const product = await findProductByBarcode(barcode);
-  
-  if (!product) {
-    return null;
-  }
-  
-  const { error } = await supabase
-    .from('products')
-    .update({ 
-      quantity: 0,
-      updated_at: new Date().toISOString()
-    })
-    .eq('barcode', barcode);
-  
-  if (error) {
-    console.error('Error removing expired product:', error);
-    return null;
-  }
-  
-  return product;
+  return removeFirebaseExpiredProduct(barcode);
 };
 
-// Система отмены товаров
+// === СИСТЕМА ОТМЕНЫ ТОВАРОВ (остаётся в Supabase) ===
+
 export interface CancellationRequest {
   id: string;
   items: Array<{ barcode: string; name: string; quantity: number; price: number }>;
@@ -410,7 +205,10 @@ export const getCancellationRequests = async (): Promise<CancellationRequest[]> 
   }));
 };
 
-export const createCancellationRequest = async (items: Array<{ barcode: string; name: string; quantity: number; price: number }>, cashier: string): Promise<CancellationRequest> => {
+export const createCancellationRequest = async (
+  items: Array<{ barcode: string; name: string; quantity: number; price: number }>, 
+  cashier: string
+): Promise<CancellationRequest> => {
   const now = new Date().toISOString();
   const newRequest: CancellationRequest = {
     id: '',
@@ -462,7 +260,6 @@ export const cleanupOldCancellations = async (): Promise<void> => {
 };
 
 export const exportAllData = async () => {
-  // Note: getSuppliers moved to suppliersDb.ts
   const { getSuppliers } = await import('./suppliersDb');
   
   const allData = {
@@ -470,7 +267,7 @@ export const exportAllData = async () => {
     cancellations: await getCancellationRequests(),
     suppliers: await getSuppliers(),
     exportDate: new Date().toISOString(),
-    version: '2.0'
+    version: '3.0-firebase'
   };
 
   const jsonString = JSON.stringify(allData, null, 2);
@@ -489,7 +286,7 @@ export const exportAllData = async () => {
 export const importAllData = async (jsonData: string) => {
   try {
     const data = JSON.parse(jsonData);
-    console.log('Import from backup not implemented for Supabase');
+    console.log('Import from backup not implemented for Firebase');
     return false;
   } catch (error) {
     console.error('Ошибка импорта данных:', error);

@@ -34,9 +34,29 @@ export const loginByUsername = async (login: string): Promise<{
 
     // Вызываем edge function - она сразу создает сессию!
     console.log('📡 Вызов функции...');
-    const { data, error } = await supabase.functions.invoke('login-by-username', {
-      body: { loginHash }
-    });
+
+    // Добавляем таймаут, чтобы не "висеть" при проблемах с сервером
+    const timeoutMs = 5000;
+    let data: any = null;
+    let error: any = null;
+
+    try {
+      const result = await Promise.race([
+        supabase.functions.invoke('login-by-username', {
+          body: { loginHash }
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), timeoutMs)
+        ),
+      ]);
+      ({ data, error } = result as { data: any; error: any });
+    } catch (e) {
+      if ((e as Error).message === 'timeout') {
+        console.error('⏱️ Таймаут при обращении к серверу входа');
+        return { success: false, error: 'Сервер не отвечает, попробуйте позже' };
+      }
+      throw e;
+    }
 
     console.log('📥 Ответ:', { data, error });
 

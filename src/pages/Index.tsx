@@ -87,18 +87,8 @@ const Index = () => {
           if (availableTabs.length > 0) {
             setActiveTab(availableTabs[0].id);
           }
-        } else {
-          // Нет сессии - автоматический вход как admin
-          console.log('🚀 Автоматический вход администратором');
-          const fakeUser = {
-            id: '00000000-0000-0000-0000-000000000001',
-            role: 'admin'
-          } as any;
-          
-          setUser(fakeUser);
-          setUserRole('admin' as AppRole);
-          setActiveTab('dashboard');
         }
+
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -115,12 +105,25 @@ const Index = () => {
   const handleLogin = async (login: string) => {
     try {
       setLoading(true);
+
+      // Локальный быстрый вход для администратора по коду 8080 без сервера
+      if (login === '8080') {
+        const fakeUser = {
+          id: '00000000-0000-0000-0000-000000000001',
+          role: 'admin',
+        } as any;
+
+        setUser(fakeUser);
+        setUserRole('admin');
+        setActiveTab('dashboard');
+        toast.success('Вход как администратор');
+        return;
+      }
       
       const result = await loginByUsername(login);
       
       if (!result.success) {
         toast.error(result.error || 'Ошибка входа');
-        setLoading(false);
         return;
       }
 
@@ -148,7 +151,6 @@ const Index = () => {
       setLoading(false);
     }
   };
-
   const handleLogout = async () => {
     logoutUser();
     setUser(null);

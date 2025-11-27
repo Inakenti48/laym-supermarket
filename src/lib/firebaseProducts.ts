@@ -19,7 +19,23 @@ const PRODUCTS_COLLECTION = 'products';
 const LOCAL_STORAGE_KEY = 'local_products_backup';
 
 // Флаг для отслеживания работы Firebase
-let firebaseAvailable = true;
+// По умолчанию используем локальное хранилище для стабильной работы
+let firebaseAvailable = false;
+
+// Функция для включения Firebase (вызывается из настроек)
+export const enableFirebaseSync = () => {
+  firebaseAvailable = true;
+  console.log('🔥 Firebase синхронизация включена');
+};
+
+// Функция для выключения Firebase
+export const disableFirebaseSync = () => {
+  firebaseAvailable = false;
+  console.log('📦 Переключено на локальное хранилище');
+};
+
+// Проверка статуса Firebase
+export const isFirebaseEnabled = () => firebaseAvailable;
 
 // Получить локальные товары из localStorage
 const getLocalProducts = (): StoredProduct[] => {

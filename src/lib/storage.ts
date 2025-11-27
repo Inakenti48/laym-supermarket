@@ -26,7 +26,7 @@ export interface StoredProduct {
   }>;
 }
 
-// Сохранение фото товара в постоянную базу product_images
+// Сохранение фото товара в ImageKit и базу product_images
 export const saveProductImage = async (
   barcode: string, 
   productName: string, 
@@ -35,35 +35,25 @@ export const saveProductImage = async (
 ): Promise<boolean> => {
   return await retryOperation(
     async () => {
-      // Конвертируем base64 в blob
-      const base64Data = imageBase64.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Загружаем в ImageKit через edge function
+      const { data: uploadResult, error: uploadError } = await supabase.functions.invoke(
+        'upload-to-imagekit',
+        {
+          body: {
+            base64Image: imageBase64,
+            fileName: `${barcode || 'no-barcode'}-${Date.now()}.jpg`,
+            folder: '/products'
+          }
+        }
+      );
+
+      if (uploadError || !uploadResult?.success) {
+        console.error('ImageKit upload error:', uploadError || uploadResult?.error);
+        throw new Error(uploadError?.message || uploadResult?.error || 'Failed to upload to ImageKit');
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
-      // Генерируем имя файла
-      const timestamp = Date.now();
-      const fileName = `${barcode || 'no-barcode'}-${timestamp}.jpg`;
-      const filePath = `products/${fileName}`;
-
-      // Загружаем в storage
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Получаем публичный URL
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
+      const imageUrl = uploadResult.url;
+      const fileId = uploadResult.fileId;
 
       // Проверяем, есть ли уже запись для этого товара
       const { data: existing } = await supabase
@@ -76,8 +66,8 @@ export const saveProductImage = async (
       if (existing) {
         // Обновляем существующую запись
         const updateData: any = {
-          image_url: urlData.publicUrl,
-          storage_path: filePath,
+          image_url: imageUrl,
+          storage_path: fileId, // Сохраняем fileId от ImageKit
           updated_at: new Date().toISOString()
         };
 
@@ -92,8 +82,8 @@ export const saveProductImage = async (
         const insertData: any = {
           barcode,
           product_name: productName,
-          image_url: urlData.publicUrl,
-          storage_path: filePath
+          image_url: imageUrl,
+          storage_path: fileId // Сохраняем fileId от ImageKit
         };
         
         if (userId) {
@@ -107,6 +97,7 @@ export const saveProductImage = async (
         if (dbError) throw dbError;
       }
 
+      console.log('✅ Фото сохранено в ImageKit:', imageUrl);
       return true;
     },
     {
@@ -116,7 +107,10 @@ export const saveProductImage = async (
         console.log(`🔄 Повторная попытка сохранения фото (попытка ${attempt})...`);
       }
     }
-  ).catch(() => false);
+  ).catch((err) => {
+    console.error('Failed to save product image:', err);
+    return false;
+  });
 };
 
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {

@@ -22,14 +22,13 @@ import { WBAnalyticsTab } from '@/components/WBAnalyticsTab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
 import { AppRole } from '@/lib/supabaseAuth';
+import { loginByUsername, getCurrentSession, logoutUser, AppSession } from '@/lib/loginAuth';
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'import' | 'employees' | 'photo-reports' | 'employee-work' | 'cancellations' | 'wb-analytics';
 
 const Index = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<AppSession | null>(null);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
@@ -65,67 +64,72 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   useEffect(() => {
-    // Проверяем локальную сессию из localStorage
-    const savedSession = localStorage.getItem('local_session');
-    
-    if (savedSession) {
+    // Проверяем сессию в Lovable Cloud
+    const checkSession = async () => {
       try {
-        const session = JSON.parse(savedSession);
-        setUser({ id: session.userId, role: session.role } as any);
-        setUserRole(session.role as AppRole);
+        const existingSession = await getCurrentSession();
+        
+        if (existingSession) {
+          setSession(existingSession);
+          setUserRole(existingSession.role as AppRole);
 
-        const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
-        if (availableTabs.length > 0) {
-          setActiveTab(availableTabs[0].id);
+          const availableTabs = allTabsData.filter((tab) => tab.roles.includes(existingSession.role));
+          if (availableTabs.length > 0) {
+            setActiveTab(availableTabs[0].id);
+          }
         }
       } catch (e) {
-        localStorage.removeItem('local_session');
+        console.error('Ошибка проверки сессии:', e);
       }
-    }
+      
+      setLoading(false);
+    };
     
-    setLoading(false);
+    checkSession();
   }, []);
 
-  // Локальные логины без сервера
-  const handleLogin = (login: string) => {
+  // Вход через Lovable Cloud
+  const handleLogin = async (login: string) => {
     setLoading(true);
     
-    // Локальные логины
-    const localLogins: Record<string, { role: AppRole; name: string; tab: Tab }> = {
-      '8080': { role: 'admin', name: 'Администратор', tab: 'dashboard' },
-      '1111': { role: 'admin', name: 'Админ', tab: 'dashboard' },
-      '2222': { role: 'cashier', name: 'Кассир 1', tab: 'cashier' },
-      '3333': { role: 'cashier2', name: 'Кассир 2', tab: 'cashier2' },
-      '4444': { role: 'inventory', name: 'Товаровед', tab: 'inventory' },
-    };
-
-    if (localLogins[login]) {
-      const loginData = localLogins[login];
-      const fakeUser = {
-        id: `local-user-${login}`,
-        role: loginData.role,
-      } as any;
-
-      // Сохраняем в localStorage для сессии
-      localStorage.setItem('local_session', JSON.stringify({
-        userId: fakeUser.id,
-        role: loginData.role,
-        name: loginData.name
-      }));
-
-      setUser(fakeUser);
-      setUserRole(loginData.role);
-      setActiveTab(loginData.tab);
-      toast.success(`Вход: ${loginData.name}`);
-    } else {
-      toast.error('Неверный логин');
+    try {
+      const result = await loginByUsername(login);
+      
+      if (result.success && result.role) {
+        const newSession: AppSession = {
+          userId: result.userId!,
+          role: result.role,
+          login: result.login!,
+          loginTime: Date.now(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        };
+        
+        setSession(newSession);
+        setUserRole(result.role as AppRole);
+        
+        // Определяем начальный таб по роли
+        const roleToTab: Record<string, Tab> = {
+          'admin': 'dashboard',
+          'cashier': 'cashier',
+          'cashier2': 'cashier2',
+          'inventory': 'inventory'
+        };
+        setActiveTab(roleToTab[result.role] || 'dashboard');
+        
+        toast.success(`Добро пожаловать!`);
+      } else {
+        toast.error(result.error || 'Неверный логин');
+      }
+    } catch (error) {
+      console.error('Ошибка входа:', error);
+      toast.error('Ошибка входа');
     }
     
     setLoading(false);
   };
-  const handleLogout = () => {
-    localStorage.removeItem('local_session');
-    setUser(null);
+  const handleLogout = async () => {
+    await logoutUser();
+    setSession(null);
     setUserRole(null);
     setEmployeeId(null);
     setEmployeeName(null);
@@ -158,7 +162,7 @@ const Index = () => {
     );
   }
 
-  if (!user && !employeeId) {
+  if (!session && !employeeId) {
     if (showEmployeeLogin) {
       return <EmployeeLoginScreen onLogin={handleEmployeeLogin} />;
     }

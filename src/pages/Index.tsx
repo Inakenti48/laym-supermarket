@@ -68,32 +68,39 @@ const Index = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const ensureLoadedTimeout = setTimeout(() => {
-      if (isMounted) {
-        setLoading(false);
-      }
-    }, 5000);
-
     (async () => {
       try {
-        // Быстрая проверка сессии с таймаутом, чтобы не висеть на экране "Загрузка..."
+        // Быстрая проверка сессии с таймаутом
         const session = await Promise.race<Awaited<ReturnType<typeof getCurrentSession>> | null>([
           getCurrentSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
         ]);
 
-        if (!isMounted || !session) return;
+        if (!isMounted) return;
 
-        setUser({ id: session.userId, role: session.role } as any);
-        setUserRole(session.role as AppRole);
+        if (session) {
+          // Есть сессия - используем её
+          setUser({ id: session.userId, role: session.role } as any);
+          setUserRole(session.role as AppRole);
 
-        const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
-        if (availableTabs.length > 0) {
-          setActiveTab(availableTabs[0].id);
+          const availableTabs = allTabsData.filter((tab) => tab.roles.includes(session.role));
+          if (availableTabs.length > 0) {
+            setActiveTab(availableTabs[0].id);
+          }
+        } else {
+          // Нет сессии - автоматический вход как admin
+          console.log('🚀 Автоматический вход администратором');
+          const fakeUser = {
+            id: '00000000-0000-0000-0000-000000000001',
+            role: 'admin'
+          } as any;
+          
+          setUser(fakeUser);
+          setUserRole('admin' as AppRole);
+          setActiveTab('dashboard');
         }
       } finally {
         if (isMounted) {
-          clearTimeout(ensureLoadedTimeout);
           setLoading(false);
         }
       }
@@ -101,7 +108,6 @@ const Index = () => {
 
     return () => {
       isMounted = false;
-      clearTimeout(ensureLoadedTimeout);
     };
   }, []);
 

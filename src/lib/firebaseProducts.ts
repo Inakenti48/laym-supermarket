@@ -636,6 +636,49 @@ export const initializeWithTestProducts = async (): Promise<{
   };
 };
 
+// Очистить все товары (Firebase + localStorage)
+export const clearAllFirebaseProducts = async (): Promise<{
+  success: boolean;
+  message: string;
+  deletedCount: number;
+}> => {
+  let deletedCount = 0;
+  
+  if (firebaseAvailable) {
+    try {
+      const querySnapshot = await Promise.race([
+        getDocs(collection(firebaseDb, PRODUCTS_COLLECTION)),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('timeout')), 10000)
+        )
+      ]);
+      
+      const deletePromises: Promise<void>[] = [];
+      querySnapshot.forEach((docSnap) => {
+        deletePromises.push(deleteDoc(docSnap.ref));
+        deletedCount++;
+      });
+      
+      await Promise.all(deletePromises);
+      console.log(`✅ Удалено ${deletedCount} товаров из Firebase`);
+    } catch (error: any) {
+      console.warn('⚠️ Ошибка очистки Firebase:', error.message);
+    }
+  }
+  
+  // Очищаем localStorage
+  const localProducts = getLocalProducts();
+  const localCount = localProducts.length;
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
+  console.log(`✅ Очищено ${localCount} товаров локально`);
+  
+  return {
+    success: true,
+    message: `Удалено ${deletedCount} товаров из Firebase, ${localCount} локально`,
+    deletedCount: deletedCount + localCount
+  };
+};
+
 // Проверить статус Firebase
 export const getFirebaseStatus = (): { available: boolean; mode: string } => {
   return {

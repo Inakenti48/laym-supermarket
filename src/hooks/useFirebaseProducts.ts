@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { StoredProduct } from '@/lib/storage';
-import { getAllFirebaseProducts, subscribeToFirebaseProducts } from '@/lib/firebaseProducts';
-import { toast } from 'sonner';
+import { getAllFirebaseProducts, subscribeToFirebaseProducts, getFirebaseStatus } from '@/lib/firebaseProducts';
 
 export const useFirebaseProducts = () => {
   const [products, setProducts] = useState<StoredProduct[]>([]);
@@ -15,7 +14,6 @@ export const useFirebaseProducts = () => {
       setLoading(false);
     } catch (error) {
       console.error('Ошибка загрузки товаров:', error);
-      toast.error('Не удалось загрузить товары из Firebase');
       setLoading(false);
     }
   };
@@ -24,9 +22,10 @@ export const useFirebaseProducts = () => {
     // Загружаем товары при монтировании
     fetchProducts();
 
-    // Подписываемся на realtime обновления Firebase
+    // Подписываемся на realtime обновления
     const unsubscribe = subscribeToFirebaseProducts((updatedProducts) => {
-      console.log('🔄 Firebase realtime обновление:', updatedProducts.length, 'товаров');
+      const status = getFirebaseStatus();
+      console.log(`🔄 ${status.mode} обновление:`, updatedProducts.length, 'товаров');
       setProducts(updatedProducts);
       setLoading(false);
     });

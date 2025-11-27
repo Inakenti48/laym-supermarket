@@ -28,3 +28,6 @@ verify_jwt = true
 
 [functions.upload-to-imagekit]
 verify_jwt = false
+
+[functions.login-by-username]
+verify_jwt = false

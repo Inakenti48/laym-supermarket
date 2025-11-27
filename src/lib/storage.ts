@@ -3,11 +3,14 @@ import { retryOperation } from './retryUtils';
 import {
   getAllFirebaseProducts,
   findFirebaseProductByBarcode,
-  saveFirebaseProduct,
+  saveFirebaseProduct as saveFirebaseProductBase,
   updateFirebaseProductQuantity,
   removeFirebaseExpiredProduct,
-  getFirebaseExpiringProducts
+  getFirebaseExpiringProducts,
+  searchFirebaseProducts
 } from './firebaseProducts';
+import { firebaseDb } from './firebase';
+import { collection, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export interface StoredProduct {
   id: string;
@@ -140,7 +143,7 @@ export const saveProduct = async (
   return await retryOperation(
     async () => {
       console.log('💾 Сохранение товара в Firebase...');
-      return saveFirebaseProduct(product, userId);
+      return saveFirebaseProductBase(product, userId);
     },
     {
       maxAttempts: 5,
@@ -173,6 +176,175 @@ export const updateProductQuantity = async (barcode: string, quantityChange: num
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
   return removeFirebaseExpiredProduct(barcode);
+};
+
+// === ДОПОЛНИТЕЛЬНЫЕ FIREBASE ФУНКЦИИ ДЛЯ КОМПОНЕНТОВ ===
+
+// Upsert товара (вставка или обновление по штрихкоду)
+export const upsertProduct = async (
+  productData: {
+    barcode: string;
+    name: string;
+    category?: string;
+    supplier?: string | null;
+    unit?: string;
+    purchase_price: number;
+    sale_price: number;
+    quantity: number;
+    expiry_date?: string | null;
+    created_by?: string;
+  }
+): Promise<{ success: boolean; isUpdate: boolean; newQuantity?: number }> => {
+  try {
+    const existing = await findFirebaseProductByBarcode(productData.barcode);
+    
+    if (existing) {
+      // Обновляем существующий товар
+      const q = query(
+        collection(firebaseDb, 'products'),
+        where('barcode', '==', productData.barcode)
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const docRef = snapshot.docs[0].ref;
+        const newQuantity = existing.quantity + productData.quantity;
+        
+        await updateDoc(docRef, {
+          name: productData.name,
+          category: productData.category || existing.category,
+          supplier: productData.supplier || existing.supplier || null,
+          purchasePrice: productData.purchase_price,
+          salePrice: productData.sale_price,
+          quantity: newQuantity,
+          expiryDate: productData.expiry_date || existing.expiryDate || null,
+          updatedAt: new Date().toISOString()
+        });
+        
+        return { success: true, isUpdate: true, newQuantity };
+      }
+    }
+    
+    // Создаём новый товар
+    const newId = crypto.randomUUID();
+    await setDoc(doc(firebaseDb, 'products', newId), {
+      barcode: productData.barcode,
+      name: productData.name,
+      category: productData.category || '',
+      supplier: productData.supplier || null,
+      unit: productData.unit || 'шт',
+      purchasePrice: productData.purchase_price,
+      salePrice: productData.sale_price,
+      quantity: productData.quantity,
+      expiryDate: productData.expiry_date || null,
+      paymentType: 'full',
+      paidAmount: productData.purchase_price * productData.quantity,
+      debtAmount: 0,
+      addedBy: productData.created_by || '',
+      priceHistory: [{
+        date: new Date().toISOString(),
+        purchasePrice: productData.purchase_price,
+        retailPrice: productData.sale_price,
+        changedBy: productData.created_by || ''
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    
+    return { success: true, isUpdate: false, newQuantity: productData.quantity };
+  } catch (error) {
+    console.error('❌ Ошибка upsert товара:', error);
+    return { success: false, isUpdate: false };
+  }
+};
+
+// Обновить товар по ID
+export const updateProductById = async (
+  id: string,
+  updates: Partial<{
+    quantity: number;
+    name: string;
+    category: string;
+    supplier: string | null;
+    purchasePrice: number;
+    salePrice: number;
+    expiryDate: string | null;
+  }>
+): Promise<boolean> => {
+  try {
+    const docRef = doc(firebaseDb, 'products', id);
+    const updateData: any = { updatedAt: new Date().toISOString() };
+    
+    if (updates.quantity !== undefined) updateData.quantity = updates.quantity;
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.category !== undefined) updateData.category = updates.category;
+    if (updates.supplier !== undefined) updateData.supplier = updates.supplier;
+    if (updates.purchasePrice !== undefined) updateData.purchasePrice = updates.purchasePrice;
+    if (updates.salePrice !== undefined) updateData.salePrice = updates.salePrice;
+    if (updates.expiryDate !== undefined) updateData.expiryDate = updates.expiryDate;
+    
+    await updateDoc(docRef, updateData);
+    return true;
+  } catch (error) {
+    console.error('❌ Ошибка обновления товара по ID:', error);
+    return false;
+  }
+};
+
+// Получить товар по ID
+export const getProductById = async (id: string): Promise<StoredProduct | null> => {
+  try {
+    const { getDoc: fbGetDoc } = await import('firebase/firestore');
+    const docRef = doc(firebaseDb, 'products', id);
+    const docSnap = await fbGetDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        barcode: data.barcode || '',
+        name: data.name || '',
+        category: data.category || '',
+        purchasePrice: Number(data.purchasePrice) || 0,
+        retailPrice: Number(data.salePrice) || 0,
+        quantity: Number(data.quantity) || 0,
+        unit: 'шт' as const,
+        expiryDate: data.expiryDate || undefined,
+        photos: data.photos || [],
+        paymentType: (data.paymentType as 'full' | 'partial' | 'debt') || 'full',
+        paidAmount: Number(data.paidAmount) || 0,
+        debtAmount: Number(data.debtAmount) || 0,
+        addedBy: data.addedBy || '',
+        supplier: data.supplier || undefined,
+        lastUpdated: data.updatedAt || data.createdAt || new Date().toISOString(),
+        priceHistory: data.priceHistory || []
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('❌ Ошибка получения товара по ID:', error);
+    return null;
+  }
+};
+
+// Удалить товар полностью
+export const deleteProduct = async (barcode: string): Promise<boolean> => {
+  try {
+    const q = query(
+      collection(firebaseDb, 'products'),
+      where('barcode', '==', barcode)
+    );
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      await deleteDoc(snapshot.docs[0].ref);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Ошибка удаления товара:', error);
+    return false;
+  }
 };
 
 // === СИСТЕМА ОТМЕНЫ ТОВАРОВ (остаётся в Supabase) ===

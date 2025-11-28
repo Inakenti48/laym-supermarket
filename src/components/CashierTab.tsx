@@ -817,6 +817,7 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                   }
                   
                   if (product) {
+                    // Товар найден - добавляем в корзину
                     if (isProductExpired(product)) {
                       toast.error(`❌ ПРОСРОЧКА! "${product.name}"`, { duration: 5000 });
                       return;
@@ -829,7 +830,55 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                     toast.success(`✅ "${product.name}" добавлен`);
                     setShowAIScanner(false);
                   } else {
-                    toast.error(`❌ "${data.name}" не найден в базе`, { duration: 4000 });
+                    // ТОВАР НЕ НАЙДЕН - АВТОМАТИЧЕСКИ ДОБАВЛЯЕМ В ОЧЕРЕДЬ
+                    console.log('📦 Товар не найден, добавляем в очередь...');
+                    try {
+                      // Проверяем нет ли уже такого товара в очереди
+                      const checkBarcode = data.barcode?.trim() || '';
+                      const checkName = data.name?.trim() || '';
+                      
+                      let existingQuery = supabase.from('vremenno_product_foto').select('id');
+                      
+                      if (checkBarcode) {
+                        existingQuery = existingQuery.eq('barcode', checkBarcode);
+                      } else if (checkName) {
+                        existingQuery = existingQuery.eq('product_name', checkName);
+                      }
+                      
+                      const { data: existing } = await existingQuery.maybeSingle();
+                      
+                      if (existing) {
+                        toast.warning(`⚠️ "${data.name || data.barcode}" уже в очереди`, { duration: 3000 });
+                      } else {
+                        // Добавляем в очередь
+                        const { error: insertError } = await supabase
+                          .from('vremenno_product_foto')
+                          .insert([{
+                            barcode: checkBarcode || '',
+                            product_name: checkName || 'Неизвестный товар',
+                            category: data.category || '',
+                            front_photo: data.frontPhoto || '',
+                            barcode_photo: data.barcodePhoto || '',
+                            quantity: 1,
+                            image_url: '',
+                            storage_path: ''
+                          }]);
+                        
+                        if (insertError) {
+                          console.error('Ошибка добавления в очередь:', insertError);
+                          toast.error('❌ Ошибка добавления в очередь');
+                        } else {
+                          toast.info(`📦 "${data.name || 'Товар'}" добавлен в очередь`, { 
+                            duration: 4000,
+                            description: 'Заполните цены во вкладке "Очередь"'
+                          });
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Ошибка при добавлении в очередь:', err);
+                      toast.error('❌ Ошибка при добавлении в очередь');
+                    }
+                    setShowAIScanner(false);
                   }
                 }}
               />

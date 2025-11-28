@@ -32,7 +32,8 @@ import {
   isProductExpired, 
   updateProductQuantity,
   createCancellationRequest,
-  getAllProducts
+  getAllProducts,
+  saveProduct
 } from '@/lib/storage';
 import { 
   connectPrinter, 
@@ -830,53 +831,53 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                     toast.success(`✅ "${product.name}" добавлен`);
                     setShowAIScanner(false);
                   } else {
-                    // ТОВАР НЕ НАЙДЕН - АВТОМАТИЧЕСКИ ДОБАВЛЯЕМ В ОЧЕРЕДЬ
-                    console.log('📦 Товар не найден, добавляем в очередь...');
+                    // ТОВАР НЕ НАЙДЕН - ДОБАВЛЯЕМ СРАЗУ В ОСНОВНУЮ БАЗУ PRODUCTS
+                    console.log('📦 Товар не найден, добавляем в базу products...');
                     try {
-                      // Проверяем нет ли уже такого товара в очереди
                       const checkBarcode = data.barcode?.trim() || '';
-                      const checkName = data.name?.trim() || '';
+                      const checkName = data.name?.trim() || 'Неизвестный товар';
+                      const userName = user?.username || user?.cashierName || 'AI-сканер';
                       
-                      let existingQuery = supabase.from('vremenno_product_foto').select('id');
+                      // Проверяем нет ли уже такого товара в базе
+                      const existingProduct = checkBarcode 
+                        ? productsBarcodeMap.current.get(checkBarcode.toLowerCase())
+                        : productsNameMap.current.get(checkName.toLowerCase());
                       
-                      if (checkBarcode) {
-                        existingQuery = existingQuery.eq('barcode', checkBarcode);
-                      } else if (checkName) {
-                        existingQuery = existingQuery.eq('product_name', checkName);
-                      }
-                      
-                      const { data: existing } = await existingQuery.maybeSingle();
-                      
-                      if (existing) {
-                        toast.warning(`⚠️ "${data.name || data.barcode}" уже в очереди`, { duration: 3000 });
+                      if (existingProduct) {
+                        toast.warning(`⚠️ "${checkName}" уже есть в базе`, { duration: 3000 });
                       } else {
-                        // Добавляем в очередь
-                        const { error: insertError } = await supabase
-                          .from('vremenno_product_foto')
-                          .insert([{
-                            barcode: checkBarcode || '',
-                            product_name: checkName || 'Неизвестный товар',
-                            category: data.category || '',
-                            front_photo: data.frontPhoto || '',
-                            barcode_photo: data.barcodePhoto || '',
-                            quantity: 1,
-                            image_url: '',
-                            storage_path: ''
-                          }]);
+                        // Добавляем в основную базу products
+                        const newProduct = await saveProduct({
+                          barcode: checkBarcode,
+                          name: checkName,
+                          category: data.category || 'Без категории',
+                          purchasePrice: 0, // Цены по умолчанию
+                          retailPrice: 0,
+                          quantity: 1,
+                          unit: 'шт',
+                          photos: [],
+                          paymentType: 'full',
+                          paidAmount: 0,
+                          debtAmount: 0,
+                          addedBy: userName,
+                          supplier: ''
+                        }, userName);
                         
-                        if (insertError) {
-                          console.error('Ошибка добавления в очередь:', insertError);
-                          toast.error('❌ Ошибка добавления в очередь');
-                        } else {
-                          toast.info(`📦 "${data.name || 'Товар'}" добавлен в очередь`, { 
-                            duration: 4000,
-                            description: 'Заполните цены во вкладке "Очередь"'
-                          });
+                        // Обновляем кэш
+                        productsCache.current = [newProduct, ...productsCache.current];
+                        if (newProduct.barcode) {
+                          productsBarcodeMap.current.set(newProduct.barcode.toLowerCase(), newProduct);
                         }
+                        productsNameMap.current.set(newProduct.name.toLowerCase(), newProduct);
+                        
+                        toast.success(`✅ "${checkName}" добавлен в базу`, { 
+                          duration: 4000,
+                          description: 'Установите цены во вкладке "Товары"'
+                        });
                       }
                     } catch (err) {
-                      console.error('Ошибка при добавлении в очередь:', err);
-                      toast.error('❌ Ошибка при добавлении в очередь');
+                      console.error('Ошибка при добавлении в базу:', err);
+                      toast.error('❌ Ошибка при добавлении товара');
                     }
                     setShowAIScanner(false);
                   }

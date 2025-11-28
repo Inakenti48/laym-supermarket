@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Клиент для внешней базы Supabase
-// URL и ключ берутся из переменных окружения
-const EXTERNAL_URL = import.meta.env.VITE_EXTERNAL_SUPABASE_URL || '';
-const EXTERNAL_KEY = import.meta.env.VITE_EXTERNAL_SUPABASE_KEY || '';
+const EXTERNAL_URL = 'https://tnjwnvquqtmwdzmplqew.supabase.co';
+const EXTERNAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuandudnF1cXRtd2R6bXBscWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3NzAxOTQsImV4cCI6MjA3NjM0NjE5NH0.gB4w9Q9EvZBOuJ0tvAl3onJhiiEsjUaeoXrIDmHd6JQ';
 
 export const externalSupabase = EXTERNAL_URL && EXTERNAL_KEY 
   ? createClient(EXTERNAL_URL, EXTERNAL_KEY, {

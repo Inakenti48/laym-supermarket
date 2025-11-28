@@ -1001,19 +1001,15 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
           {/* Scanner and Search */}
           <Card className="p-3 sm:p-4">
             <div className="space-y-3 mb-3">
-              {/* Кнопка AI-сканирования - всегда видна */}
-              <div className="flex justify-center py-2 bg-blue-50 dark:bg-blue-950 rounded-lg border-2 border-blue-300 dark:border-blue-700">
+              {/* Кнопка AI-сканирования */}
+              <div className="flex justify-center">
                 <Button
-                  onClick={() => {
-                    console.log('🔘 Нажата кнопка AI-сканера, текущее состояние:', showAIScanner);
-                    setShowAIScanner(!showAIScanner);
-                  }}
-                  variant={showAIScanner ? "default" : "secondary"}
-                  size="lg"
-                  className="w-full max-w-md h-14 text-base font-bold"
+                  onClick={() => setShowAIScanner(!showAIScanner)}
+                  variant={showAIScanner ? "default" : "outline"}
+                  className="w-full max-w-md"
                 >
-                  <Camera className="h-6 w-6 mr-2" />
-                  {showAIScanner ? '❌ Закрыть AI-сканер' : '📸 AI-распознавание товара (2 фото)'}
+                  <Camera className="h-4 w-4 mr-2" />
+                  {showAIScanner ? 'Закрыть AI-сканер' : 'AI-распознавание товара (2 фото)'}
                 </Button>
               </div>
 

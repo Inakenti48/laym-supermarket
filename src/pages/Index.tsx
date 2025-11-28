@@ -75,7 +75,7 @@ const Index = () => {
   useEffect(() => {
     if (localMode) {
       initAllLocalSystems().then(() => {
-        toast.success('📦 Локальный режим активен', { duration: 2000 });
+        toast.success('🔥 Firebase режим активен', { duration: 2000 });
       });
     }
   }, []);
@@ -154,9 +154,9 @@ const Index = () => {
             <Package className="h-6 w-6 text-primary flex-shrink-0" />
             <h1 className="text-base font-bold truncate">Учет товаров</h1>
             {localMode && (
-              <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+              <span className="flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
                 <Database className="h-3 w-3" />
-                Локально
+                Firebase
               </span>
             )}
           </div>

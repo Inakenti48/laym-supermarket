@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, Package, ShoppingCart, Building2, 
-  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, Loader2
+  LogOut, FileText, AlertTriangle, Activity, Upload, Users, ArrowLeft, XCircle, Settings, Loader2, Database
 } from 'lucide-react';
 import { DatabaseBackupButton } from '@/components/DatabaseBackupButton';
 import { EmployeeLoginScreen } from '@/components/EmployeeLoginScreen';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loginWithFirebase, logoutFirebase, getCurrentSession, AppRole, AppSession } from '@/lib/firebase';
+import { initLocalMode, initAllLocalSystems, isLocalOnlyMode } from '@/lib/localOnlyMode';
 
 // Ленивая загрузка компонентов для быстрого старта
 const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
@@ -64,10 +65,20 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
+  const [localMode, setLocalMode] = useState(() => initLocalMode());
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const s = getCurrentSession();
     return s ? (ROLE_TO_TAB[s.role] || 'dashboard') : 'dashboard';
   });
+
+  // Инициализация локальных систем
+  useEffect(() => {
+    if (localMode) {
+      initAllLocalSystems().then(() => {
+        toast.success('📦 Локальный режим активен', { duration: 2000 });
+      });
+    }
+  }, []);
 
   // Мемоизация табов
   const tabs = useMemo(() => {
@@ -142,6 +153,12 @@ const Index = () => {
           <div className="flex items-center gap-2 min-w-0">
             <Package className="h-6 w-6 text-primary flex-shrink-0" />
             <h1 className="text-base font-bold truncate">Учет товаров</h1>
+            {localMode && (
+              <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                <Database className="h-3 w-3" />
+                Локально
+              </span>
+            )}
           </div>
           
           <div className="flex items-center gap-1 flex-shrink-0">

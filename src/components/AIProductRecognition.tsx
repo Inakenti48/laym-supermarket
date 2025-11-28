@@ -7,6 +7,7 @@ import { getAllProducts } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
+import { isLocalOnlyMode, saveOrUpdateLocalProduct, saveToLocalQueue } from '@/lib/localOnlyMode';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -610,89 +611,121 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       let savedTo = '';
       let saveError = '';
       
-      // Сохраняем напрямую в Supabase (минуя edge function)
-      if (priceInfo && priceInfo.purchasePrice > 0) {
-        // ЦЕНА НАЙДЕНА → Сохраняем в products
-        console.log(`✅ Цена найдена: ${priceInfo.purchasePrice}₽`);
+      // ЛОКАЛЬНЫЙ РЕЖИМ - сохраняем в IndexedDB
+      if (isLocalOnlyMode()) {
+        console.log('📦 Локальный режим: сохранение в IndexedDB');
         
-        try {
-          const { data: existing } = await supabase
-            .from('products')
-            .select('id, quantity')
-            .eq('barcode', scannedBarcode)
-            .maybeSingle();
-
-          if (existing) {
-            await supabase
-              .from('products')
-              .update({ quantity: (existing.quantity || 0) + 1 })
-              .eq('id', existing.id);
-            savedTo = 'products_updated';
-          } else {
-            const { error: insertError } = await supabase
-              .from('products')
-              .insert([{
-                barcode: scannedBarcode,
-                name: priceInfo.name || scannedName,
-                category: priceInfo.category || scannedCategory,
-                purchase_price: priceInfo.purchasePrice,
-                sale_price: Math.round(priceInfo.purchasePrice * 1.3), // Наценка 30%
-                quantity: 1,
-                unit: priceInfo.unit || 'шт',
-                created_by: userName
-              }]);
-            
-            if (insertError) {
-              console.error('Insert error:', insertError);
-              saveError = insertError.message;
-            } else {
-              savedTo = 'products';
-            }
+        if (priceInfo && priceInfo.purchasePrice > 0) {
+          try {
+            const result = await saveOrUpdateLocalProduct({
+              barcode: scannedBarcode,
+              name: priceInfo.name || scannedName,
+              purchasePrice: priceInfo.purchasePrice,
+              salePrice: Math.round(priceInfo.purchasePrice * 1.3),
+              quantity: 1,
+              category: priceInfo.category || scannedCategory,
+              addedBy: userName,
+            });
+            savedTo = result.isNew ? 'products' : 'products_updated';
+          } catch (err: any) {
+            saveError = err.message;
           }
-        } catch (dbErr: any) {
-          console.error('DB error:', dbErr);
-          saveError = dbErr.message;
+        } else {
+          try {
+            await saveToLocalQueue({
+              barcode: scannedBarcode || `auto-${Date.now()}`,
+              recognizedName: scannedName,
+              imageData: tempFrontPhoto,
+              addedBy: userName,
+            });
+            savedTo = 'queue';
+          } catch (err: any) {
+            saveError = err.message;
+          }
         }
       } else {
-        // ЦЕНА НЕ НАЙДЕНА → В очередь
-        console.log(`⏳ Цена не найдена, в очередь`);
-        
-        try {
-          const effectiveBarcode = scannedBarcode || `auto-${Date.now()}`;
+        // ОБЛАЧНЫЙ РЕЖИМ - Supabase
+        if (priceInfo && priceInfo.purchasePrice > 0) {
+          console.log(`✅ Цена найдена: ${priceInfo.purchasePrice}₽`);
           
-          const { data: existingQueue } = await supabase
-            .from('vremenno_product_foto')
-            .select('id')
-            .eq('barcode', effectiveBarcode)
-            .maybeSingle();
+          try {
+            const { data: existing } = await supabase
+              .from('products')
+              .select('id, quantity')
+              .eq('barcode', scannedBarcode)
+              .maybeSingle();
 
-          if (existingQueue) {
-            savedTo = 'queue_exists';
-          } else {
-            const { error: queueError } = await supabase
-              .from('vremenno_product_foto')
-              .insert([{
-                barcode: effectiveBarcode,
-                product_name: scannedName || 'Неизвестный товар',
-                category: scannedCategory,
-                front_photo: tempFrontPhoto,
-                barcode_photo: tempBarcodePhoto,
-                image_url: tempFrontPhoto || '',
-                storage_path: '',
-                quantity: 1,
-                created_by: userName
-              }]);
-            
-            if (queueError) {
-              console.error('Queue insert error:', queueError);
-              saveError = queueError.message;
+            if (existing) {
+              await supabase
+                .from('products')
+                .update({ quantity: (existing.quantity || 0) + 1 })
+                .eq('id', existing.id);
+              savedTo = 'products_updated';
             } else {
-              savedTo = 'queue';
+              const { error: insertError } = await supabase
+                .from('products')
+                .insert([{
+                  barcode: scannedBarcode,
+                  name: priceInfo.name || scannedName,
+                  category: priceInfo.category || scannedCategory,
+                  purchase_price: priceInfo.purchasePrice,
+                  sale_price: Math.round(priceInfo.purchasePrice * 1.3),
+                  quantity: 1,
+                  unit: priceInfo.unit || 'шт',
+                  created_by: userName
+                }]);
+              
+              if (insertError) {
+                console.error('Insert error:', insertError);
+                saveError = insertError.message;
+              } else {
+                savedTo = 'products';
+              }
             }
+          } catch (dbErr: any) {
+            console.error('DB error:', dbErr);
+            saveError = dbErr.message;
           }
-        } catch (qErr: any) {
-          console.error('Queue error:', qErr);
-          saveError = qErr.message;
+        } else {
+          console.log(`⏳ Цена не найдена, в очередь`);
+          
+          try {
+            const effectiveBarcode = scannedBarcode || `auto-${Date.now()}`;
+            
+            const { data: existingQueue } = await supabase
+              .from('vremenno_product_foto')
+              .select('id')
+              .eq('barcode', effectiveBarcode)
+              .maybeSingle();
+
+            if (existingQueue) {
+              savedTo = 'queue_exists';
+            } else {
+              const { error: queueError } = await supabase
+                .from('vremenno_product_foto')
+                .insert([{
+                  barcode: effectiveBarcode,
+                  product_name: scannedName || 'Неизвестный товар',
+                  category: scannedCategory,
+                  front_photo: tempFrontPhoto,
+                  barcode_photo: tempBarcodePhoto,
+                  image_url: tempFrontPhoto || '',
+                  storage_path: '',
+                  quantity: 1,
+                  created_by: userName
+                }]);
+              
+              if (queueError) {
+                console.error('Queue insert error:', queueError);
+                saveError = queueError.message;
+              } else {
+                savedTo = 'queue';
+              }
+            }
+          } catch (qErr: any) {
+            console.error('Queue error:', qErr);
+            saveError = qErr.message;
+          }
         }
       }
 

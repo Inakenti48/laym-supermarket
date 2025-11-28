@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loginWithFirebase, logoutFirebase, getCurrentSession, AppRole, AppSession } from '@/lib/firebase';
 import { initLocalMode, initAllLocalSystems, isLocalOnlyMode } from '@/lib/localOnlyMode';
-import { enableFirebaseSync, getAllFirebaseProducts, getFirebaseStatus } from '@/lib/firebaseProducts';
+import { enableFirebaseSync, getAllFirebaseProducts, getFirebaseStatus, subscribeToFirebaseProducts } from '@/lib/firebaseProducts';
 
 // Ленивая загрузка компонентов для быстрого старта
 const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
@@ -72,29 +72,37 @@ const Index = () => {
     return s ? (ROLE_TO_TAB[s.role] || 'dashboard') : 'dashboard';
   });
 
-  // Инициализация Firebase синхронизации
+  // Инициализация Firebase синхронизации с постоянной подпиской
   useEffect(() => {
-    const initFirebase = async () => {
-      // Включаем Firebase синхронизацию
-      enableFirebaseSync();
+    // Включаем Firebase синхронизацию
+    enableFirebaseSync();
+    
+    let unsubscribe: (() => void) | null = null;
+    let isFirstLoad = true;
+    
+    // Подписываемся на realtime обновления Firebase
+    unsubscribe = subscribeToFirebaseProducts((products) => {
+      const status = getFirebaseStatus();
       
-      try {
-        // Пробуем загрузить товары для проверки подключения
-        const products = await getAllFirebaseProducts();
-        const status = getFirebaseStatus();
+      if (isFirstLoad) {
         console.log(`🔥 Firebase ${status.mode}: загружено ${products.length} товаров`);
         toast.success(`🔥 ${status.message} (${products.length} товаров)`, { duration: 2000 });
-      } catch (error) {
-        console.warn('⚠️ Firebase недоступен:', error);
-        toast.warning('📦 Работаем в локальном режиме', { duration: 2000 });
+        isFirstLoad = false;
+      } else {
+        console.log(`🔄 Синхронизация: ${products.length} товаров`);
       }
-    };
-
-    initFirebase();
+    });
     
     if (localMode) {
       initAllLocalSystems().catch(console.error);
     }
+    
+    // Очистка подписки при размонтировании
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   // Мемоизация табов

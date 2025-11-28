@@ -123,30 +123,44 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
   const productsNameMap = useRef<Map<string, any>>(new Map());
   const [cacheReady, setCacheReady] = useState(false);
   
-  // Загружаем товары один раз при монтировании
+  // Загружаем товары один раз при монтировании - НЕ БЛОКИРУЯ UI
   useEffect(() => {
+    // Показываем UI сразу, отмечаем кэш как готовый через 100мс даже если товары не загружены
+    const timeoutId = setTimeout(() => {
+      if (!cacheReady) {
+        console.log('⚠️ Таймаут загрузки кэша - показываем UI');
+        setCacheReady(true);
+      }
+    }, 2000);
+
     const loadProductsCache = async () => {
       console.log('🔄 Начинаем загрузку кэша товаров...');
-      const products = await getAllProducts();
-      productsCache.current = products;
-      
-      // Создаем быстрые индексы для поиска
-      productsBarcodeMap.current.clear();
-      productsNameMap.current.clear();
-      
-      products.forEach(product => {
-        if (product.barcode) {
-          productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
-        }
-        productsNameMap.current.set(product.name.toLowerCase(), product);
-      });
-      
-      console.log(`✅ Кэш готов! Загружено ${products.length} товаров`);
-      console.log(`📊 Штрихкодов: ${productsBarcodeMap.current.size}, Названий: ${productsNameMap.current.size}`);
-      setCacheReady(true);
+      try {
+        const products = await getAllProducts();
+        productsCache.current = products;
+        
+        // Создаем быстрые индексы для поиска
+        productsBarcodeMap.current.clear();
+        productsNameMap.current.clear();
+        
+        products.forEach(product => {
+          if (product.barcode) {
+            productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
+          }
+          productsNameMap.current.set(product.name.toLowerCase(), product);
+        });
+        
+        console.log(`✅ Кэш готов! Загружено ${products.length} товаров`);
+        setCacheReady(true);
+      } catch (error) {
+        console.error('❌ Ошибка загрузки кэша:', error);
+        setCacheReady(true); // Всё равно показываем UI
+      }
     };
     
     loadProductsCache();
+    
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Сохраняем корзину при изменении
@@ -350,10 +364,10 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
       names: productsNameMap.current.size
     });
     
-    // Проверяем готовность кэша
+    // Если кэш не готов - ищем напрямую в базе
     if (!cacheReady) {
-      toast.error('Подождите, загружается база товаров...');
-      return;
+      console.log('⚠️ Кэш не готов, поиск в базе напрямую');
+      // Продолжаем поиск, но через findProductByBarcode
     }
     
     // Если все поля пустые - пропускаем
@@ -369,7 +383,11 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
     // Если есть штрихкод - ищем по штрихкоду в кеше
     if (sanitizedBarcode && sanitizedBarcode.length <= 50) {
       product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
-      console.log('🔍 Поиск по штрихкоду в кеше:', sanitizedBarcode, '-> найден:', !!product);
+      // Если в кэше не найден и кэш не готов - ищем в базе напрямую
+      if (!product && !cacheReady) {
+        product = await findProductByBarcode(sanitizedBarcode);
+      }
+      console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, '-> найден:', !!product);
       if (product) {
         console.log('✅ Товар найден:', product.name, 'Цена:', product.retailPrice);
       }
@@ -722,6 +740,16 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
 
   return (
     <div className="space-y-4">
+      {/* Loading indicator - не блокирует UI */}
+      {!cacheReady && (
+        <Card className="p-2 bg-blue-50 border-blue-200">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            Загрузка товаров...
+          </div>
+        </Card>
+      )}
+
       {/* Print Confirmation Dialog */}
       <AlertDialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
         <AlertDialogContent>

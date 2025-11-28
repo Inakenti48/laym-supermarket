@@ -777,20 +777,17 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
             </div>
           </div>
 
-          <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '500px' }}>
+          <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '280px' }}>
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
+              className="w-full object-cover block bg-black"
               style={{ 
-                width: '100%',
                 height: 'auto',
-                minHeight: '500px',
-                maxHeight: '700px',
-                objectFit: 'cover',
-                display: 'block',
-                backgroundColor: '#000'
+                minHeight: '280px',
+                maxHeight: '450px',
               }}
             />
           
@@ -832,17 +829,17 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           {/* Кнопки управления - поверх всех уведомлений */}
           {!isProcessing && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000000] space-y-3 bg-card/95 p-4 rounded-xl shadow-lg border">
+            <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-[1000000] w-[calc(100%-1rem)] sm:w-auto sm:min-w-[280px] space-y-2 sm:space-y-3 bg-card/95 p-3 sm:p-4 rounded-xl shadow-lg border">
               {mode === 'dual' && (
-                <div className="mb-2 text-center space-y-1">
+                <div className="text-center">
                   {!tempFrontPhoto && !tempBarcodePhoto && (
-                    <p className="text-sm font-medium text-muted-foreground">📸 Шаг 1/2: Снимите лицевую сторону</p>
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground">📸 1/2: Снимите лицевую сторону</p>
                   )}
                   {tempFrontPhoto && !tempBarcodePhoto && (
-                    <p className="text-sm font-medium text-green-600">✅ Лицевая готова! Шаг 2/2: Снимите штрихкод</p>
+                    <p className="text-xs sm:text-sm font-medium text-green-600">✅ Лицевая готова! 2/2: Штрихкод</p>
                   )}
                   {tempFrontPhoto && tempBarcodePhoto && (
-                    <p className="text-sm font-medium text-green-600">✅ Обе фото готовы! Нажмите кнопку ниже</p>
+                    <p className="text-xs sm:text-sm font-medium text-green-600">✅ Готово! Нажмите кнопку</p>
                   )}
                 </div>
               )}
@@ -875,51 +872,44 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 <Button
                   onClick={handleManualCapture}
                   size="lg"
-                  className="rounded-full shadow-lg w-full"
+                  className="rounded-full shadow-lg w-full h-11 sm:h-12 text-sm sm:text-base"
                   disabled={!cameraReady || isProcessing}
                 >
-                  <Camera className="h-5 w-5 mr-2" />
-                  {!tempFrontPhoto ? 'Снять лицевую (1/2)' : 'Снять штрихкод (2/2)'}
+                  <Camera className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  {!tempFrontPhoto ? '📷 Снять лицевую' : '📷 Снять штрихкод'}
                 </Button>
               )}
               
               {mode === 'dual' && dualPhotoStep === 'ready' && (
                 <div className="space-y-2 animate-in slide-in-from-bottom-4">
-                  <div className="bg-green-50 dark:bg-green-950 border-2 border-green-500 rounded-lg p-3 mb-2">
-                    <p className="text-sm font-bold text-green-700 dark:text-green-300 text-center flex items-center justify-center gap-2">
-                      <CheckCircle className="h-4 w-4" />
-                      Обе фотографии готовы! Нажмите кнопку ниже
-                    </p>
-                  </div>
                   <Button
                     onClick={handleAIScan}
                     size="lg"
-                    className="rounded-full shadow-xl w-full bg-green-600 hover:bg-green-700 text-white font-bold text-base py-7 animate-pulse"
+                    className="rounded-full shadow-xl w-full bg-green-600 hover:bg-green-700 text-white font-bold text-sm sm:text-base h-12 sm:h-14 animate-pulse"
                     disabled={!cameraReady || isProcessing || !tempFrontPhoto || !tempBarcodePhoto}
                   >
                     {isProcessing ? (
                       <>
-                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                        Распознавание...
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                        Распознаю...
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="h-6 w-6 mr-2" />
-                        ✅ РАСПОЗНАТЬ ТОВАР
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        ✅ РАСПОЗНАТЬ
                       </>
                     )}
                   </Button>
                   <Button
                     onClick={() => {
-                      console.log('🔄 Сброс фотографий для повторной съемки');
                       setTempFrontPhoto('');
                       setTempBarcodePhoto('');
                       setDualPhotoStep('none');
-                      toast.info('📸 Начните сначала: снимите лицевую сторону', { position: 'top-center' });
+                      toast.info('📸 Начните сначала', { position: 'top-center' });
                     }}
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="w-full h-9"
                     disabled={isProcessing}
                   >
                     🔄 Переснять

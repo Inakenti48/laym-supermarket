@@ -23,9 +23,14 @@ verify_jwt = true
 [functions.scan-product-photos]
 verify_jwt = true
 
-
 [functions.upload-to-imagekit]
 verify_jwt = false
 
 [functions.login-by-username]
 verify_jwt = false
+
+[functions.setup-external-db]
+verify_jwt = false
+
+[functions.transfer-queue-to-products]
+verify_jwt = true

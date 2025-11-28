@@ -11,13 +11,6 @@ import {
 } from './firebaseProducts';
 import { firebaseDb } from './firebase';
 import { collection, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { 
-  addExternalProduct, 
-  updateExternalProduct, 
-  getExternalProducts,
-  isExternalDbConfigured,
-  externalSupabase
-} from './externalSupabase';
 
 export interface StoredProduct {
   id: string;
@@ -228,43 +221,6 @@ export const upsertProduct = async (
           updatedAt: new Date().toISOString()
         });
 
-        // Синхронизация с внешней базой
-        if (isExternalDbConfigured() && externalSupabase) {
-          try {
-            const { data: extExisting } = await externalSupabase
-              .from('products')
-              .select('id, quantity')
-              .eq('barcode', productData.barcode)
-              .maybeSingle();
-
-            if (extExisting) {
-              await updateExternalProduct(extExisting.id, {
-                name: productData.name,
-                category: productData.category,
-                supplier_id: null,
-                purchase_price: productData.purchase_price,
-                selling_price: productData.sale_price,
-                quantity: extExisting.quantity + productData.quantity,
-                expiry_date: productData.expiry_date,
-                updated_at: new Date().toISOString()
-              });
-            } else {
-              await addExternalProduct({
-                barcode: productData.barcode,
-                name: productData.name,
-                category: productData.category,
-                purchase_price: productData.purchase_price,
-                selling_price: productData.sale_price,
-                quantity: productData.quantity,
-                unit: productData.unit || 'шт',
-                expiry_date: productData.expiry_date
-              });
-            }
-            console.log('✅ Товар синхронизирован с внешней базой');
-          } catch (extError) {
-            console.error('⚠️ Ошибка синхронизации с внешней базой:', extError);
-          }
-        }
         
         return { success: true, isUpdate: true, newQuantity };
       }
@@ -296,24 +252,6 @@ export const upsertProduct = async (
       updatedAt: new Date().toISOString()
     });
 
-    // Синхронизация с внешней базой для нового товара
-    if (isExternalDbConfigured() && externalSupabase) {
-      try {
-        await addExternalProduct({
-          barcode: productData.barcode,
-          name: productData.name,
-          category: productData.category,
-          purchase_price: productData.purchase_price,
-          selling_price: productData.sale_price,
-          quantity: productData.quantity,
-          unit: productData.unit || 'шт',
-          expiry_date: productData.expiry_date
-        });
-        console.log('✅ Новый товар добавлен во внешнюю базу');
-      } catch (extError) {
-        console.error('⚠️ Ошибка добавления во внешнюю базу:', extError);
-      }
-    }
     
     return { success: true, isUpdate: false, newQuantity: productData.quantity };
   } catch (error) {

@@ -779,20 +779,20 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
           <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '500px' }}>
             <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{ 
-              width: '100%',
-              height: 'auto',
-              minHeight: '500px',
-              maxHeight: '700px',
-              objectFit: 'cover',
-              display: 'block',
-              backgroundColor: '#000'
-            }}
-          />
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ 
+                width: '100%',
+                height: 'auto',
+                minHeight: '500px',
+                maxHeight: '700px',
+                objectFit: 'cover',
+                display: 'block',
+                backgroundColor: '#000'
+              }}
+            />
           
           {/* Индикатор загрузки камеры - показываем только при первом запросе */}
           {!cameraReady && !error && !hasPermission && (

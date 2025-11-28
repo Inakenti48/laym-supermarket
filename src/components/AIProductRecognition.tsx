@@ -765,6 +765,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         const price = priceInfo?.purchasePrice || 0;
         setNotification(`✅ ${scannedName} → база (${price}₽)`);
         toast.success(`✅ "${scannedName}" сохранён с ценой ${price}₽`, { duration: 2000 });
+        // ВАЖНО: передаём данные в форму
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: scannedCategory,
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
       } else if (savedTo === 'queue') {
         setNotification(`📋 ${scannedName} → очередь`);
         toast.info(`📋 "${scannedName}" в очереди (нет цены)`, { duration: 2000 });

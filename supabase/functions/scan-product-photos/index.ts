@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,12 +11,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
-    const { frontPhoto, barcodePhoto } = await req.json();
+    const { frontPhoto, barcodePhoto, autoSave, deviceId, userName } = await req.json();
     
-    console.log('=== SCAN PRODUCT PHOTOS START ===');
-    console.log('Front photo:', frontPhoto ? 'Yes' : 'No');
-    console.log('Barcode photo:', barcodePhoto ? 'Yes' : 'No');
+    console.log('=== FAST SCAN START ===');
+    console.log('Device:', deviceId || 'unknown');
 
     if (!frontPhoto && !barcodePhoto) {
       return new Response(
@@ -29,42 +31,40 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    let barcode = '';
-    let productName = '';
-    let category = '';
+    // Инициализируем Supabase для автосохранения
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Объединенное распознавание штрихкода и названия за один запрос
-    console.log('📷 Распознавание товара...');
-    
-    const messages: any[] = [
-      { 
-        role: 'system', 
-        content: `Ты эксперт по распознаванию товаров и штрихкодов.
+    // Загружаем существующие товары для проверки цен
+    let pricesMap = new Map<string, any>();
+    try {
+      const { data: existingProducts } = await supabase
+        .from('products')
+        .select('barcode, name, category, purchase_price, sale_price')
+        .not('barcode', 'is', null)
+        .gt('sale_price', 0);
 
-ЗАДАЧА: Извлечь штрихкод, полное название товара и категорию с упаковки.
-
-ШТРИХКОД:
-- Найди и прочитай штрихкод (EAN-13, EAN-8, UPC-A, Code-128)
-- Верни только цифры, без пробелов
-- Если штрихкод нечитаем - верни пустую строку
-
-НАЗВАНИЕ:
-- Прочитай ВСЕ надписи на упаковке
-- Включи: бренд, название продукта, вариант/вкус, объем/вес
-- Название должно быть максимально подробным
-- Если текст нечитаем - верни пустую строку
-
-КАТЕГОРИЯ:
-- Определи категорию товара на основе его названия и внешнего вида
-- Используй одну из категорий: Продукты питания, Напитки, Бытовая химия, Косметика, Детские товары, Одежда, Электроника, Другое
-- Выбирай наиболее подходящую категорию
-
-ВАЖНО: Будь точным, не выдумывай данные.` 
+      if (existingProducts) {
+        for (const p of existingProducts) {
+          if (p.barcode) {
+            pricesMap.set(p.barcode, {
+              name: p.name,
+              category: p.category || '',
+              purchasePrice: p.purchase_price || 0,
+              salePrice: p.sale_price || 0
+            });
+          }
+        }
       }
-    ];
+      console.log(`📊 Справочник цен: ${pricesMap.size} товаров`);
+    } catch (e) {
+      console.error('Error loading prices:', e);
+    }
 
+    // ИСПОЛЬЗУЕМ БЫСТРУЮ МОДЕЛЬ для распознавания
     const userContent: any[] = [
-      { type: 'text', text: 'Распознай штрихкод и название товара. Верни точные данные.' }
+      { type: 'text', text: 'Быстро распознай: 1) Штрихкод (цифры), 2) Название товара, 3) Категорию' }
     ];
 
     if (frontPhoto) {
@@ -74,8 +74,6 @@ serve(async (req) => {
       userContent.push({ type: 'image_url', image_url: { url: barcodePhoto } });
     }
 
-    messages.push({ role: 'user', content: userContent });
-
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -83,118 +81,193 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro', // Более мощная модель для точности
-        messages,
+        model: 'google/gemini-2.5-flash-lite', // САМАЯ БЫСТРАЯ модель!
+        messages: [
+          { 
+            role: 'system', 
+            content: `Быстрое распознавание товаров. Извлеки:
+- ШТРИХКОД: цифры EAN-13/EAN-8 или внутренний код
+- НАЗВАНИЕ: бренд + продукт + вес/объём
+- КАТЕГОРИЯ: еда/напитки/химия/косметика/другое
+Отвечай точно и быстро.`
+          },
+          { role: 'user', content: userContent }
+        ],
         tools: [{
           type: "function",
           function: {
-            name: "extract_product_data",
-            description: "Извлекает штрихкод, название товара и категорию",
+            name: "extract_product",
+            description: "Извлекает данные товара",
             parameters: {
               type: "object",
               properties: {
-                barcode: { 
-                  type: "string", 
-                  description: "Штрихкод (только цифры) или пустая строка" 
-                },
-                name: { 
-                  type: "string", 
-                  description: "Полное название товара или пустая строка" 
-                },
-                category: {
-                  type: "string",
-                  description: "Категория товара: Продукты питания, Напитки, Бытовая химия, Косметика, Детские товары, Одежда, Электроника, Другое"
-                }
+                barcode: { type: "string", description: "Штрихкод (только цифры)" },
+                name: { type: "string", description: "Название товара" },
+                category: { type: "string", description: "Категория" }
               },
-              required: ["barcode", "name", "category"],
-              additionalProperties: false
+              required: ["barcode", "name", "category"]
             }
           }
         }],
-        tool_choice: { type: "function", function: { name: "extract_product_data" } }
+        tool_choice: { type: "function", function: { name: "extract_product" } },
+        temperature: 0.1,
+        max_tokens: 200
       }),
     });
+
+    let barcode = '';
+    let productName = '';
+    let category = '';
 
     if (response.ok) {
       const data = await response.json();
       try {
         const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
         if (toolCall?.function?.arguments) {
-          console.log('🔍 Raw arguments:', toolCall.function.arguments);
-          
-          let parsed;
-          try {
-            parsed = JSON.parse(toolCall.function.arguments);
-          } catch (jsonError) {
-            console.log('⚠️ Invalid JSON, trying string extraction');
-            const argStr = String(toolCall.function.arguments);
-            
-            // Извлекаем штрихкод
-            const barcodeMatch = argStr.match(/barcode["']?\s*:\s*["']?(\d+)/);
-            // Извлекаем название
-            const nameMatch = argStr.match(/name["']?\s*:\s*["']([^"']+)["']/);
-            // Извлекаем категорию
-            const categoryMatch = argStr.match(/category["']?\s*:\s*["']([^"']+)["']/);
-            
-            parsed = {
-              barcode: barcodeMatch ? barcodeMatch[1] : '',
-              name: nameMatch ? nameMatch[1] : '',
-              category: categoryMatch ? categoryMatch[1] : ''
-            };
-          }
-          
-          if (parsed) {
-            barcode = (parsed.barcode || '').trim();
-            productName = (parsed.name || '').trim();
-            category = (parsed.category || '').trim();
-            console.log('✅ Распознано:', { barcode, productName, category });
-          }
-        }
-        
-        // Fallback: пробуем получить из текста ответа
-        if (!barcode || !productName) {
-          const content = data.choices?.[0]?.message?.content;
-          if (content) {
-            console.log('🔄 Fallback: извлекаем из текста');
-            if (!barcode) {
-              const digits = content.match(/\d{8,13}/);
-              if (digits) {
-                barcode = digits[0];
-                console.log('✅ Штрихкод из текста:', barcode);
-              }
-            }
-          }
+          const parsed = JSON.parse(toolCall.function.arguments);
+          barcode = (parsed.barcode || '').replace(/\D/g, ''); // Только цифры
+          productName = (parsed.name || '').trim();
+          category = (parsed.category || '').trim();
         }
       } catch (e) {
-        console.error('Ошибка парсинга:', e);
+        console.error('Parse error:', e);
       }
     } else {
-      console.error('Ошибка API:', response.status);
+      const status = response.status;
+      console.error('AI API error:', status);
+      if (status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'rate_limit', barcode: '', name: '', category: '' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    console.log('=== РЕЗУЛЬТАТ СКАНИРОВАНИЯ ===');
-    console.log('Штрихкод:', barcode || 'не распознан');
-    console.log('Название:', productName || 'не распознано');
-    console.log('Категория:', category || 'не определена');
+    const aiTime = Date.now() - startTime;
+    console.log(`⚡ AI за ${aiTime}ms: ${barcode} - ${productName}`);
+
+    // Проверяем цену в справочнике
+    let priceInfo = barcode ? pricesMap.get(barcode) : null;
+    
+    // Поиск по частичному совпадению если точного нет
+    if (!priceInfo && barcode && barcode.length >= 4) {
+      const last4 = barcode.slice(-4);
+      for (const [key, value] of pricesMap) {
+        if (key.endsWith(last4)) {
+          priceInfo = value;
+          console.log(`✅ Найдено по последним 4 цифрам: ${key}`);
+          break;
+        }
+      }
+    }
+
+    let savedTo = '';
+    let productId = '';
+
+    // Автосохранение если включено
+    if (autoSave !== false) {
+      if (priceInfo && priceInfo.salePrice > 0) {
+        // ЦЕНА НАЙДЕНА → Сохраняем в products
+        console.log(`✅ Цена найдена: ${priceInfo.salePrice}₽`);
+        
+        const { data: existing } = await supabase
+          .from('products')
+          .select('id, quantity')
+          .eq('barcode', barcode)
+          .maybeSingle();
+
+        if (existing) {
+          // Увеличиваем количество
+          await supabase
+            .from('products')
+            .update({ quantity: (existing.quantity || 0) + 1 })
+            .eq('id', existing.id);
+          
+          productId = existing.id;
+          savedTo = 'products_updated';
+        } else {
+          const { data: newProduct } = await supabase
+            .from('products')
+            .insert([{
+              barcode,
+              name: priceInfo.name || productName,
+              category: priceInfo.category || category,
+              purchase_price: priceInfo.purchasePrice,
+              sale_price: priceInfo.salePrice,
+              quantity: 1,
+              unit: 'шт',
+              created_by: userName || deviceId
+            }])
+            .select('id')
+            .single();
+
+          productId = newProduct?.id || '';
+          savedTo = 'products';
+        }
+      } else {
+        // ЦЕНА НЕ НАЙДЕНА → В очередь
+        console.log(`⏳ Цена не найдена, в очередь`);
+        
+        const effectiveBarcode = barcode || `auto-${Date.now()}`;
+        const effectiveName = productName || 'Неизвестный товар';
+        
+        const { data: existingQueue } = await supabase
+          .from('vremenno_product_foto')
+          .select('id')
+          .or(`barcode.eq.${effectiveBarcode},product_name.ilike.${effectiveName}`)
+          .maybeSingle();
+
+        if (existingQueue) {
+          savedTo = 'queue_exists';
+          productId = existingQueue.id;
+        } else {
+          const { data: newQueue } = await supabase
+            .from('vremenno_product_foto')
+            .insert([{
+              barcode: effectiveBarcode,
+              product_name: effectiveName,
+              category,
+              front_photo: frontPhoto || '',
+              barcode_photo: barcodePhoto || '',
+              quantity: 1,
+              created_by: userName || deviceId
+            }])
+            .select('id')
+            .single();
+
+          productId = newQueue?.id || '';
+          savedTo = 'queue';
+        }
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`=== DONE in ${totalTime}ms, saved to: ${savedTo} ===`);
 
     return new Response(
       JSON.stringify({
         success: true,
         barcode,
         name: productName,
-        category
+        category,
+        hasPrice: !!priceInfo,
+        price: priceInfo?.salePrice || 0,
+        savedTo,
+        productId,
+        processingTime: totalTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in scan-product-photos:', error);
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Unknown error',
         success: false,
         barcode: '',
-        name: ''
+        name: '',
+        category: ''
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

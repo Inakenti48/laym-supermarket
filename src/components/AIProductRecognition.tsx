@@ -557,7 +557,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     });
     
     setIsProcessing(true);
-    setNotification('🔍 AI сканирование фотографий...');
+    setNotification('⚡ Быстрое AI сканирование...');
     
     try {
       // Сжимаем изображения перед отправкой
@@ -565,66 +565,80 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const compressedFront = await compressForAI(tempFrontPhoto);
       const compressedBarcode = await compressForAI(tempBarcodePhoto);
       
-      console.log('📦 После сжатия:', {
-        front: compressedFront.length,
-        barcode: compressedBarcode.length
-      });
+      // Получаем deviceId для синхронизации между устройствами
+      const deviceId = localStorage.getItem('device_id') || `device-${Date.now()}`;
+      if (!localStorage.getItem('device_id')) {
+        localStorage.setItem('device_id', deviceId);
+      }
       
-      // КРИТИЧНО: Вызываем ТОЛЬКО scan-product-photos для режима dual
-      console.log('📷 Вызов scan-product-photos edge function...');
+      // БЫСТРОЕ СКАНИРОВАНИЕ с автосохранением
+      console.log('⚡ Вызов fast scan-product-photos...');
       const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
         body: { 
           frontPhoto: compressedFront,
-          barcodePhoto: compressedBarcode
+          barcodePhoto: compressedBarcode,
+          autoSave: true, // Автосохранение включено
+          deviceId,
+          userName: localStorage.getItem('login_user_name') || 'Устройство'
         }
       });
       
-      console.log('📦 Ответ от scan-product-photos:', { scanData, scanError });
+      console.log('⚡ Ответ:', { scanData, scanError, time: scanData?.processingTime });
 
-      // Извлекаем данные из ответа (даже при ошибке пробуем получить что-то)
       const scannedBarcode = scanData?.barcode || '';
       const scannedName = scanData?.name || '';
       const scannedCategory = scanData?.category || '';
+      const savedTo = scanData?.savedTo || '';
+      const hasPrice = scanData?.hasPrice || false;
+      const price = scanData?.price || 0;
 
-      console.log('📊 Данные из AI:', { scannedBarcode, scannedName, scannedCategory, hasError: !!scanError });
-
-      // КРИТИЧНО: Всегда передаем товар с фотографиями, даже если AI не смог распознать
-      // Пользователь заполнит данные вручную
-      console.log('✅ Передача товара с фотографиями в форму');
-      
-      onProductFound({
-        barcode: scannedBarcode,
-        name: scannedName,
-        category: scannedCategory,
-        frontPhoto: tempFrontPhoto,
-        barcodePhoto: tempBarcodePhoto
-      });
-      
-      // Увеличиваем счетчик добавленных товаров
+      // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
       
-      // СРАЗУ очищаем фотографии и готовим камеру для следующего товара
-      // НЕ ЖДЕМ окончания обработки формы
+      // Очищаем для следующего товара
       setDualPhotoStep('none');
       setTempFrontPhoto('');
       setTempBarcodePhoto('');
-      setIsProcessing(false); // Разблокируем сразу для следующего товара
+      setIsProcessing(false);
       
-      // Для удобства оставляем только тихую текстовую подсказку в блоке камеры,
-      // без всплывающих тостов
+      // Показываем статус автосохранения
       if (scanError) {
-        setNotification('⚠️ Не удалось распознать, заполните вручную');
-      } else if (scannedBarcode && scannedName) {
-        setNotification('✅ Товар распознан AI - готов к следующему');
-      } else if (scannedBarcode) {
-        setNotification('✅ Штрихкод распознан - готов к следующему');
-      } else if (scannedName) {
-        setNotification('✅ Название распознано - готов к следующему');
+        setNotification('⚠️ Ошибка AI');
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: scannedCategory,
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
+      } else if (savedTo === 'products' || savedTo === 'products_updated') {
+        setNotification(`✅ ${scannedName} → база (${price}₽)`);
+        toast.success(`✅ "${scannedName}" сохранён с ценой ${price}₽`, { duration: 2000 });
+      } else if (savedTo === 'queue') {
+        setNotification(`📋 ${scannedName} → очередь`);
+        toast.info(`📋 "${scannedName}" в очереди (нет цены)`, { duration: 2000 });
+        // Передаём в форму для возможного редактирования
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: scannedCategory,
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
+      } else if (savedTo === 'queue_exists') {
+        setNotification(`⚠️ ${scannedName} уже в очереди`);
       } else {
-        setNotification('📸 Фото сохранены - готов к следующему');
+        setNotification('📸 Сканировано');
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: scannedCategory,
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
       }
       
-      setTimeout(() => setNotification(''), 2000);
+      setTimeout(() => setNotification(''), 2500);
     } catch (err: any) {
       console.error('Ошибка при AI-сканировании:', err);
       setNotification('❌ Ошибка AI, заполните данные вручную');

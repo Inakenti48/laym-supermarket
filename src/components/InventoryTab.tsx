@@ -22,8 +22,8 @@ import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint'
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { useProductsSync } from '@/hooks/useProductsSync';
 import { useFormSync } from '@/hooks/useFormSync';
+import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import { retryOperation } from '@/lib/retryUtils';
 
 import { getCurrentLoginUser } from '@/lib/loginAuth';
@@ -53,8 +53,8 @@ export const InventoryTab = () => {
     loadUserRole();
   }, []);
 
-  // Realtime синхронизация товаров
-  useProductsSync();
+  // Firebase realtime синхронизация товаров
+  const { refetch: refetchProducts } = useFirebaseProducts();
 
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);

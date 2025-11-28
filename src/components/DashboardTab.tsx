@@ -6,26 +6,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { getAllProducts, getExpiringProducts, exportAllData } from '@/lib/storage';
 import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
-import { useProductsSync } from '@/hooks/useProductsSync';
-import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [recentReturns, setRecentReturns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   
   // Firebase realtime синхронизация товаров
-  const { products: firebaseProducts, loading: firebaseLoading } = useFirebaseProducts();
-  
-  // Realtime синхронизация товаров
-  useProductsSync(() => {
-    // При изменении товаров перезагружаем статистику
-    setRefreshTrigger(prev => prev + 1);
-  });
+  const { products: firebaseProducts, loading: firebaseLoading, refetch } = useFirebaseProducts();
 
   // Перезагрузка при изменении Firebase товаров
   useEffect(() => {
@@ -33,32 +24,6 @@ export const DashboardTab = () => {
       setRefreshTrigger(prev => prev + 1);
     }
   }, [firebaseProducts.length, firebaseLoading]);
-
-  // Realtime подписка на изменения в возвратах (оставляем Supabase)
-  useEffect(() => {
-    console.log('🔔 Setting up realtime subscriptions...');
-
-    const returnsChannel = supabase
-      .channel('dashboard-returns-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'product_returns'
-        },
-        (payload) => {
-          console.log('↩️ Returns change detected:', payload);
-          setRefreshTrigger(prev => prev + 1);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      console.log('🔕 Cleaning up realtime subscriptions...');
-      supabase.removeChannel(returnsChannel);
-    };
-  }, []);
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -71,7 +36,7 @@ export const DashboardTab = () => {
   });
 
   useEffect(() => {
-    const calculateStats = async (retryCount = 0) => {
+    const calculateStats = async () => {
       try {
         setIsLoading(true);
         setConnectionError(false);
@@ -132,63 +97,24 @@ export const DashboardTab = () => {
         setConnectionError(false);
       } catch (error: any) {
         console.error('❌ Error loading stats:', error);
-        
-        // Retry logic - попробуем до 3 раз с задержкой
-        if (retryCount < 3) {
-          console.log(`🔄 Retry ${retryCount + 1}/3 after 2 seconds...`);
-          setTimeout(() => {
-            calculateStats(retryCount + 1);
-          }, 2000);
-          return;
-        }
-
         setConnectionError(true);
-        
-        if (retryCount === 0) {
-          toast.error('Нет связи с сервером. Повторная попытка...', {
-            duration: 3000,
-          });
-        }
       } finally {
         setIsLoading(false);
       }
     };
 
-    const loadRecentReturns = async (retryCount = 0) => {
-      try {
-        const { data, error } = await supabase
-          .from('product_returns')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-        setRecentReturns(data || []);
-      } catch (error: any) {
-        console.error('Error loading returns:', error);
-        
-        // Retry для возвратов
-        if (retryCount < 3) {
-          setTimeout(() => {
-            loadRecentReturns(retryCount + 1);
-          }, 2000);
-        }
-      }
-    };
-
     calculateStats();
-    loadRecentReturns();
     
-    // Обновление каждые 30 секунд для онлайн-статистики
+    // Обновление каждые 30 секунд
     const interval = setInterval(() => {
-      calculateStats();
-      loadRecentReturns();
+      refetch();
     }, 30000);
     
     return () => clearInterval(interval);
-  }, [refreshTrigger]);
+  }, [refreshTrigger, firebaseProducts, firebaseLoading]);
 
   const handleManualRefresh = () => {
+    refetch();
     setRefreshTrigger(prev => prev + 1);
     toast.info('Обновление данных...');
   };
@@ -266,7 +192,7 @@ export const DashboardTab = () => {
         <Alert variant="destructive">
           <WifiOff className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
-            <span>Нет связи с сервером. Данные могут быть неактуальны.</span>
+            <span>Ошибка загрузки данных. Попробуйте обновить.</span>
             <Button 
               onClick={handleManualRefresh} 
               variant="outline" 
@@ -433,47 +359,6 @@ export const DashboardTab = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Returns Section */}
-      {recentReturns.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ArrowLeft className="h-5 w-5 text-primary" />
-              Последние возвраты
-            </CardTitle>
-            <CardDescription>История возвратов товара</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Дата</TableHead>
-                  <TableHead>Товар</TableHead>
-                  <TableHead>Количество</TableHead>
-                  <TableHead>Сумма</TableHead>
-                  <TableHead>Поставщик</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentReturns.map((returnItem) => (
-                  <TableRow key={returnItem.id}>
-                    <TableCell>
-                      {new Date(returnItem.created_at).toLocaleDateString('ru-RU')}
-                    </TableCell>
-                    <TableCell>{returnItem.product_name}</TableCell>
-                    <TableCell>{returnItem.quantity}</TableCell>
-                    <TableCell>
-                      ₽{(returnItem.purchase_price * returnItem.quantity).toFixed(2)}
-                    </TableCell>
-                    <TableCell>{returnItem.supplier || '-'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

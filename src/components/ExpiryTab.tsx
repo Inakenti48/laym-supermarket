@@ -3,15 +3,18 @@ import { AlertTriangle, Package, Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getExpiringProducts, removeExpiredProduct } from '@/lib/storage';
-import { logSystemAction } from '@/lib/supabaseAuth';
+import { addLog } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
-import { useProductsSync } from '@/hooks/useProductsSync';
+import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 
 export const ExpiryTab = () => {
   const [expiringProducts, setExpiringProducts] = useState<StoredProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Используем Firebase для реактивности
+  const { products: firebaseProducts, loading: firebaseLoading } = useFirebaseProducts();
 
   const loadProducts = async () => {
     const products = await getExpiringProducts(3);
@@ -19,8 +22,12 @@ export const ExpiryTab = () => {
     setLoading(false);
   };
 
-  // Realtime синхронизация товаров
-  useProductsSync(loadProducts);
+  // Перезагружаем при изменении Firebase товаров
+  useEffect(() => {
+    if (!firebaseLoading) {
+      loadProducts();
+    }
+  }, [firebaseProducts, firebaseLoading]);
 
   useEffect(() => {
     loadProducts();
@@ -44,8 +51,8 @@ export const ExpiryTab = () => {
       const removed = await removeExpiredProduct(product.barcode);
       if (removed) {
         const expiryDate = new Date(product.expiryDate!).toLocaleDateString('ru-RU');
-        const logMessage = `Убран с прилавки товар со сроком годности до ${expiryDate}: "${product.name}", количество: ${product.quantity} шт`;
-        await logSystemAction(logMessage);
+        const logMessage = `Убран с прилавка товар со сроком годности до ${expiryDate}: "${product.name}", количество: ${product.quantity} шт`;
+        addLog(logMessage);
         toast.success('Товар удален из прилавка');
         
         // Обновляем список
@@ -57,7 +64,7 @@ export const ExpiryTab = () => {
     }
   };
 
-  if (loading) {
+  if (loading || firebaseLoading) {
     return (
       <Card className="p-4 sm:p-6">
         <div className="text-center py-8">

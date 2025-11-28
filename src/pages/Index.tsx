@@ -37,7 +37,7 @@ type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-product
 // Данные табов вынесены за компонент для оптимизации
 const ALL_TABS_DATA = [
   { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
-  { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory'] },
+  { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory', 'system'] },
   { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
   { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
   { id: 'pending-products' as Tab, label: 'Очередь', icon: Upload, roles: ['admin', 'inventory'] },
@@ -54,7 +54,8 @@ const ROLE_TO_TAB: Record<string, Tab> = {
   'admin': 'dashboard',
   'cashier': 'cashier',
   'cashier2': 'cashier2',
-  'inventory': 'inventory'
+  'inventory': 'inventory',
+  'system': 'inventory'
 };
 
 const Index = () => {

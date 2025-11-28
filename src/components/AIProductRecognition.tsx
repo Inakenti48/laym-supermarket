@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAllProducts } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
+import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,10 +46,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const [existingProductData, setExistingProductData] = useState<any>(null);
   const [pendingRecognitionData, setPendingRecognitionData] = useState<any>(null);
   const [addedProductsCount, setAddedProductsCount] = useState(0);
+  const [priceCacheLoaded, setPriceCacheLoaded] = useState(false);
 
+  // Загружаем кэш цен при монтировании
   useEffect(() => {
     isMountedRef.current = true;
     startCamera();
+    
+    // Инициализируем кэш цен
+    initPriceCache().then(count => {
+      console.log(`📦 Кэш цен загружен: ${count} товаров`);
+      setPriceCacheLoaded(true);
+    });
 
     return () => {
       isMountedRef.current = false;
@@ -570,28 +579,122 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       if (!localStorage.getItem('device_id')) {
         localStorage.setItem('device_id', deviceId);
       }
+      const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      // БЫСТРОЕ СКАНИРОВАНИЕ с автосохранением
-      console.log('⚡ Вызов fast scan-product-photos...');
+      // ТОЛЬКО AI распознавание (без автосохранения на сервере)
+      console.log('⚡ Вызов AI распознавания...');
       const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
         body: { 
           frontPhoto: compressedFront,
           barcodePhoto: compressedBarcode,
-          autoSave: true, // Автосохранение включено
+          autoSave: false, // НЕ сохраняем на сервере - сделаем это локально
           deviceId,
-          userName: localStorage.getItem('login_user_name') || 'Устройство'
+          userName
         }
       });
       
-      console.log('⚡ Ответ:', { scanData, scanError, time: scanData?.processingTime });
+      console.log('⚡ AI ответ:', { scanData, scanError, time: scanData?.processingTime });
 
       const scannedBarcode = scanData?.barcode || '';
       const scannedName = scanData?.name || '';
       const scannedCategory = scanData?.category || '';
-      const savedTo = scanData?.savedTo || '';
-      const hasPrice = scanData?.hasPrice || false;
-      const price = scanData?.price || 0;
-      const serverError = scanData?.error || '';
+      
+      // ЛОКАЛЬНЫЙ поиск цены (избегаем таймаут базы)
+      console.log('🔍 Локальный поиск цены...');
+      let priceInfo = findPriceByBarcode(scannedBarcode);
+      if (!priceInfo && scannedName) {
+        priceInfo = findPriceByName(scannedName);
+      }
+      console.log('💰 Найдена цена:', priceInfo);
+      
+      let savedTo = '';
+      let saveError = '';
+      
+      // Сохраняем напрямую в Supabase (минуя edge function)
+      if (priceInfo && priceInfo.purchasePrice > 0) {
+        // ЦЕНА НАЙДЕНА → Сохраняем в products
+        console.log(`✅ Цена найдена: ${priceInfo.purchasePrice}₽`);
+        
+        try {
+          const { data: existing } = await supabase
+            .from('products')
+            .select('id, quantity')
+            .eq('barcode', scannedBarcode)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from('products')
+              .update({ quantity: (existing.quantity || 0) + 1 })
+              .eq('id', existing.id);
+            savedTo = 'products_updated';
+          } else {
+            const { error: insertError } = await supabase
+              .from('products')
+              .insert([{
+                barcode: scannedBarcode,
+                name: priceInfo.name || scannedName,
+                category: priceInfo.category || scannedCategory,
+                purchase_price: priceInfo.purchasePrice,
+                sale_price: Math.round(priceInfo.purchasePrice * 1.3), // Наценка 30%
+                quantity: 1,
+                unit: priceInfo.unit || 'шт',
+                created_by: userName
+              }]);
+            
+            if (insertError) {
+              console.error('Insert error:', insertError);
+              saveError = insertError.message;
+            } else {
+              savedTo = 'products';
+            }
+          }
+        } catch (dbErr: any) {
+          console.error('DB error:', dbErr);
+          saveError = dbErr.message;
+        }
+      } else {
+        // ЦЕНА НЕ НАЙДЕНА → В очередь
+        console.log(`⏳ Цена не найдена, в очередь`);
+        
+        try {
+          const effectiveBarcode = scannedBarcode || `auto-${Date.now()}`;
+          
+          const { data: existingQueue } = await supabase
+            .from('vremenno_product_foto')
+            .select('id')
+            .eq('barcode', effectiveBarcode)
+            .maybeSingle();
+
+          if (existingQueue) {
+            savedTo = 'queue_exists';
+          } else {
+            const { error: queueError } = await supabase
+              .from('vremenno_product_foto')
+              .insert([{
+                barcode: effectiveBarcode,
+                product_name: scannedName || 'Неизвестный товар',
+                category: scannedCategory,
+                front_photo: tempFrontPhoto,
+                barcode_photo: tempBarcodePhoto,
+                image_url: tempFrontPhoto || '',
+                storage_path: '',
+                quantity: 1,
+                created_by: userName
+              }]);
+            
+            if (queueError) {
+              console.error('Queue insert error:', queueError);
+              saveError = queueError.message;
+            } else {
+              savedTo = 'queue';
+            }
+          }
+        } catch (qErr: any) {
+          console.error('Queue error:', qErr);
+          saveError = qErr.message;
+        }
+      }
 
       // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
@@ -602,11 +705,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setTempBarcodePhoto('');
       setIsProcessing(false);
       
-      // Показываем статус автосохранения
+      // Показываем статус
       if (scanError) {
         console.error('Function invoke error:', scanError);
-        setNotification('⚠️ Ошибка сети');
-        toast.error('Ошибка сети при сканировании');
+        setNotification('⚠️ Ошибка AI');
+        toast.error('Ошибка AI при сканировании');
         onProductFound({
           barcode: scannedBarcode,
           name: scannedName,
@@ -614,10 +717,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           frontPhoto: tempFrontPhoto,
           barcodePhoto: tempBarcodePhoto
         });
-      } else if (serverError) {
-        console.error('Server error:', serverError);
-        setNotification(`⚠️ Ошибка БД: ${serverError.substring(0, 30)}`);
-        toast.error(`Ошибка базы данных: ${serverError}`);
+      } else if (saveError) {
+        console.error('Save error:', saveError);
+        setNotification(`⚠️ Ошибка: ${saveError.substring(0, 30)}`);
+        toast.error(`Ошибка сохранения: ${saveError}`);
         onProductFound({
           barcode: scannedBarcode,
           name: scannedName,
@@ -626,12 +729,12 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           barcodePhoto: tempBarcodePhoto
         });
       } else if (savedTo === 'products' || savedTo === 'products_updated') {
+        const price = priceInfo?.purchasePrice || 0;
         setNotification(`✅ ${scannedName} → база (${price}₽)`);
         toast.success(`✅ "${scannedName}" сохранён с ценой ${price}₽`, { duration: 2000 });
       } else if (savedTo === 'queue') {
         setNotification(`📋 ${scannedName} → очередь`);
         toast.info(`📋 "${scannedName}" в очереди (нет цены)`, { duration: 2000 });
-        // Передаём в форму для возможного редактирования
         onProductFound({
           barcode: scannedBarcode,
           name: scannedName,

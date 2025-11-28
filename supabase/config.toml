@@ -34,3 +34,6 @@ verify_jwt = false
 
 [functions.transfer-queue-to-products]
 verify_jwt = true
+
+[functions.check-external-tables]
+verify_jwt = false

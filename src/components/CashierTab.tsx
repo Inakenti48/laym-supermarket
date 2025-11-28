@@ -772,20 +772,86 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Scanner - всегда активен */}
+      {/* AI Scanner Button - ГЛАВНАЯ КНОПКА СВЕРХУ на мобильных */}
+      <Card className="p-3 sm:p-4 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={() => setShowAIScanner(!showAIScanner)}
+            variant={showAIScanner ? "default" : "outline"}
+            className="w-full h-12 sm:h-14 text-base sm:text-lg font-semibold"
+            size="lg"
+          >
+            <Camera className="h-5 w-5 sm:h-6 sm:w-6 mr-2" />
+            {showAIScanner ? 'Закрыть AI-сканер' : '📸 AI-сканер товара'}
+          </Button>
+          
+          {/* AI Scanner - показываем сразу под кнопкой */}
+          {showAIScanner && (
+            <div className="rounded-lg overflow-hidden">
+              <AIProductRecognition
+                mode="dual"
+                onProductFound={async (data) => {
+                  console.log('🎯 AI-сканер вернул данные:', data);
+                  
+                  if (!data.barcode && !data.name) {
+                    toast.error('❌ Не удалось распознать товар');
+                    return;
+                  }
+                  
+                  let product;
+                  
+                  if (data.barcode) {
+                    const sanitizedBarcode = data.barcode.trim();
+                    product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
+                  }
+                  
+                  if (!product && data.name) {
+                    product = productsNameMap.current.get(data.name.toLowerCase());
+                    if (!product) {
+                      const searchName = data.name.toLowerCase();
+                      product = productsCache.current.find(p => 
+                        p.name.toLowerCase().includes(searchName) ||
+                        searchName.includes(p.name.toLowerCase())
+                      );
+                    }
+                  }
+                  
+                  if (product) {
+                    if (isProductExpired(product)) {
+                      toast.error(`❌ ПРОСРОЧКА! "${product.name}"`, { duration: 5000 });
+                      return;
+                    }
+                    if (product.quantity <= 0) {
+                      toast.error(`❌ ТОВАР ЗАКОНЧИЛСЯ! "${product.name}"`, { duration: 4000 });
+                      return;
+                    }
+                    addToCart(product.name, product.retailPrice || 0, product.barcode);
+                    toast.success(`✅ "${product.name}" добавлен`);
+                    setShowAIScanner(false);
+                  } else {
+                    toast.error(`❌ "${data.name}" не найден в базе`, { duration: 4000 });
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Scanner - штрихкод сканер */}
       <BarcodeScanner onScan={handleScan} autoFocus={true} />
 
-      {/* Printer Connection */}
+      {/* Printer Connection - компактнее на мобильных */}
       {!printerConnected && (
-        <Card className="p-3 bg-amber-50 border-amber-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Printer className="w-4 h-4 text-amber-600" />
-              <span className="text-sm text-amber-800">Принтер чеков не подключен</span>
+        <Card className="p-2 sm:p-3 bg-amber-50 border-amber-200">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Printer className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-xs sm:text-sm text-amber-800 truncate">Принтер не подключен</span>
             </div>
-            <Button onClick={handleConnectPrinter} size="sm" variant="outline">
-              <Usb className="w-4 h-4 mr-1" />
-              Подключить
+            <Button onClick={handleConnectPrinter} size="sm" variant="outline" className="flex-shrink-0">
+              <Usb className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">Подключить</span>
             </Button>
           </div>
         </Card>
@@ -995,124 +1061,11 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Cart */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Scanner and Search */}
+        <div className="lg:col-span-2 space-y-3 sm:space-y-4">
+          {/* Search */}
           <Card className="p-3 sm:p-4">
-            <div className="space-y-3 mb-3">
-              {/* Кнопка AI-сканирования */}
-              <div className="flex justify-center">
-                <Button
-                  onClick={() => setShowAIScanner(!showAIScanner)}
-                  variant={showAIScanner ? "default" : "outline"}
-                  className="w-full max-w-md"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  {showAIScanner ? 'Закрыть AI-сканер' : 'AI-распознавание товара (2 фото)'}
-                </Button>
-              </div>
-
-              {/* AI Scanner - два фото для распознавания */}
-              {showAIScanner && (
-                <div className="flex flex-col items-center gap-3 p-4 bg-primary/5 rounded-lg">
-                  <AIProductRecognition
-                    mode="dual"
-                    onProductFound={async (data) => {
-                      console.log('🎯 AI-сканер вернул данные:', data);
-                      
-                      if (!data.barcode && !data.name) {
-                        toast.error('❌ Не удалось распознать товар');
-                        return;
-                      }
-                      
-                      let product;
-                      
-                      // Сначала ищем по штрихкоду, если есть
-                      if (data.barcode) {
-                        const sanitizedBarcode = data.barcode.trim();
-                        product = productsBarcodeMap.current.get(sanitizedBarcode.toLowerCase());
-                        console.log('🔍 Поиск по штрихкоду:', sanitizedBarcode, product ? '✅ Найден' : '❌ Не найден');
-                      }
-                      
-                      // Если не нашли по штрихкоду, ищем по названию
-                      if (!product && data.name) {
-                        // Точное совпадение
-                        product = productsNameMap.current.get(data.name.toLowerCase());
-                        
-                        // Если не нашли точное совпадение, ищем по части названия
-                        if (!product) {
-                          const searchName = data.name.toLowerCase();
-                          product = productsCache.current.find(p => 
-                            p.name.toLowerCase().includes(searchName) ||
-                            searchName.includes(p.name.toLowerCase())
-                          );
-                        }
-                        console.log('🔍 Поиск по названию:', data.name, product ? '✅ Найден' : '❌ Не найден');
-                      }
-                      
-                      if (product) {
-                        // Товар найден - добавляем в корзину
-                        console.log('✅ Товар найден в базе:', product.name);
-                        
-                        // Проверяем срок годности
-                        if (isProductExpired(product)) {
-                          toast.error(`❌ ПРОСРОЧКА! Товар "${product.name}" истёк ${new Date(product.expiryDate!).toLocaleDateString('ru-RU')}. Продажа запрещена!`, {
-                            duration: 5000,
-                          });
-                          return;
-                        }
-                        
-                        // Проверяем остаток
-                        if (product.quantity <= 0) {
-                          toast.error(`❌ ТОВАР ЗАКОНЧИЛСЯ! "${product.name}" - остаток 0`, {
-                            duration: 4000,
-                          });
-                          return;
-                        }
-                        
-                        // Добавляем в корзину
-                        addToCart(product.name, product.retailPrice || 0, product.barcode);
-                        toast.success(`✅ "${product.name}" добавлен в корзину`);
-                        setShowAIScanner(false);
-                      } else {
-                        // Товар не найден в базе
-                        console.error('❌ Товар не найден в базе');
-                        toast.error(`❌ Товар "${data.name}" не найден в базе`, {
-                          duration: 4000,
-                          description: 'Добавьте товар через вкладку "Товары"'
-                        });
-                      }
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground text-center">
-                    Сделайте 2 фото: лицевую сторону товара и штрихкод
-                  </p>
-                </div>
-              )}
-
-              {/* Background Scanner - автоматическое сканирование с визуализацией */}
-              {!showAIScanner && (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-full max-w-md">
-                    <BackgroundScanner 
-                      onProductFound={(data) => {
-                        if (data.barcode || data.name) {
-                          handleScan({ 
-                            barcode: data.barcode || '', 
-                            name: data.name 
-                          });
-                        }
-                      }}
-                      autoStart={false}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Наведите камеру на штрихкод или переднюю часть упаковки
-                  </p>
-                </div>
-              )}
-            </div>
             <div className="relative" ref={searchRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input

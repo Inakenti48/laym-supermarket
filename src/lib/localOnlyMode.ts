@@ -1,29 +1,31 @@
-// Локальный режим работы без Supabase
+// Режим работы: Firebase вместо Supabase
 import { initLocalDB, saveProductLocally, getAllLocalData } from './localDatabase';
 import { initPriceCache, findPriceByBarcode, findPriceByName } from './localPriceCache';
+import { saveFirebaseProduct, findFirebaseProductByBarcode, getAllFirebaseProducts } from './firebaseProducts';
+import { StoredProduct } from './storage';
 
-// Флаг локального режима
+// Флаг локального режима (теперь = Firebase режим)
 let localOnlyMode = true;
 
 export const isLocalOnlyMode = () => localOnlyMode;
 export const setLocalOnlyMode = (enabled: boolean) => {
   localOnlyMode = enabled;
   localStorage.setItem('local_only_mode', enabled ? 'true' : 'false');
-  console.log(enabled ? '📦 Локальный режим включен' : '☁️ Облачный режим включен');
+  console.log(enabled ? '🔥 Firebase режим включен' : '☁️ Supabase режим включен');
 };
 
 // Инициализация при загрузке
 export const initLocalMode = () => {
   const saved = localStorage.getItem('local_only_mode');
-  localOnlyMode = saved !== 'false'; // По умолчанию локальный режим
+  localOnlyMode = saved !== 'false'; // По умолчанию Firebase режим
   return localOnlyMode;
 };
 
-// Инициализация всех локальных систем
+// Инициализация всех систем
 export const initAllLocalSystems = async () => {
   await initLocalDB();
   await initPriceCache();
-  console.log('✅ Все локальные системы инициализированы');
+  console.log('✅ Firebase + кэш цен инициализированы');
 };
 
 // Интерфейс для локального товара
@@ -42,33 +44,55 @@ export interface LocalProduct {
   updatedAt: string;
 }
 
-// Получить все локальные товары
+// Получить все товары из Firebase
 export const getLocalProducts = async (): Promise<LocalProduct[]> => {
-  const db = await initLocalDB();
-  const items = await db.getAll('products');
-  return items.map(item => ({
-    id: item.id,
-    barcode: item.data.barcode || '',
-    name: item.data.name || '',
-    purchasePrice: item.data.purchasePrice || 0,
-    salePrice: item.data.salePrice || item.data.retailPrice || 0,
-    quantity: item.data.quantity || 0,
-    category: item.data.category,
-    expiryDate: item.data.expiryDate,
-    photos: item.data.photos,
-    addedBy: item.data.addedBy,
-    createdAt: new Date(item.createdAt).toISOString(),
-    updatedAt: new Date(item.updatedAt).toISOString(),
-  }));
+  try {
+    const products = await getAllFirebaseProducts();
+    return products.map(p => ({
+      id: p.id,
+      barcode: p.barcode || '',
+      name: p.name || '',
+      purchasePrice: p.purchasePrice || 0,
+      salePrice: p.retailPrice || 0,
+      quantity: p.quantity || 0,
+      category: p.category,
+      expiryDate: p.expiryDate,
+      photos: p.photos,
+      addedBy: p.addedBy,
+      createdAt: p.lastUpdated,
+      updatedAt: p.lastUpdated,
+    }));
+  } catch (err) {
+    console.warn('⚠️ Firebase недоступен, возвращаем пустой массив');
+    return [];
+  }
 };
 
-// Найти локальный товар по штрихкоду
+// Найти товар по штрихкоду в Firebase
 export const findLocalProductByBarcode = async (barcode: string): Promise<LocalProduct | null> => {
-  const products = await getLocalProducts();
-  return products.find(p => p.barcode === barcode) || null;
+  try {
+    const product = await findFirebaseProductByBarcode(barcode);
+    if (!product) return null;
+    return {
+      id: product.id,
+      barcode: product.barcode,
+      name: product.name,
+      purchasePrice: product.purchasePrice,
+      salePrice: product.retailPrice,
+      quantity: product.quantity,
+      category: product.category,
+      expiryDate: product.expiryDate,
+      photos: product.photos,
+      addedBy: product.addedBy,
+      createdAt: product.lastUpdated,
+      updatedAt: product.lastUpdated,
+    };
+  } catch {
+    return null;
+  }
 };
 
-// Сохранить или обновить товар локально
+// Сохранить или обновить товар в Firebase
 export const saveOrUpdateLocalProduct = async (product: {
   barcode: string;
   name: string;
@@ -81,52 +105,48 @@ export const saveOrUpdateLocalProduct = async (product: {
   addedBy?: string;
 }): Promise<{ isNew: boolean; product: LocalProduct }> => {
   const existing = await findLocalProductByBarcode(product.barcode);
-  const now = Date.now();
+  const userId = product.addedBy || 'system';
   
-  if (existing) {
-    // Обновляем количество
-    const db = await initLocalDB();
-    const updated = {
-      ...existing,
-      quantity: existing.quantity + product.quantity,
-      name: product.name || existing.name,
-      purchasePrice: product.purchasePrice || existing.purchasePrice,
-      salePrice: product.salePrice || existing.salePrice,
-      category: product.category || existing.category,
-      updatedAt: new Date(now).toISOString(),
+  try {
+    const savedProduct = await saveFirebaseProduct({
+      barcode: product.barcode,
+      name: product.name,
+      category: product.category || '',
+      purchasePrice: product.purchasePrice,
+      retailPrice: product.salePrice,
+      quantity: product.quantity,
+      unit: 'шт',
+      expiryDate: product.expiryDate,
+      photos: product.photos || [],
+      paymentType: 'full',
+      paidAmount: 0,
+      debtAmount: 0,
+      addedBy: userId,
+    }, userId);
+    
+    console.log('🔥 Товар сохранён в Firebase:', product.barcode);
+    
+    return {
+      isNew: !existing,
+      product: {
+        id: savedProduct.id,
+        barcode: savedProduct.barcode,
+        name: savedProduct.name,
+        purchasePrice: savedProduct.purchasePrice,
+        salePrice: savedProduct.retailPrice,
+        quantity: savedProduct.quantity,
+        category: savedProduct.category,
+        expiryDate: savedProduct.expiryDate,
+        photos: savedProduct.photos,
+        addedBy: savedProduct.addedBy,
+        createdAt: savedProduct.lastUpdated,
+        updatedAt: savedProduct.lastUpdated,
+      }
     };
-    
-    await db.put('products', {
-      id: existing.id,
-      data: updated,
-      syncStatus: 'pending',
-      createdAt: new Date(existing.createdAt).getTime(),
-      updatedAt: now,
-    });
-    
-    console.log('📦 Товар обновлён локально:', product.barcode);
-    return { isNew: false, product: updated };
+  } catch (err: any) {
+    console.error('❌ Ошибка сохранения в Firebase:', err);
+    throw err;
   }
-  
-  // Создаём новый товар
-  const newProduct: LocalProduct = {
-    id: `local-${now}-${Math.random().toString(36).substr(2, 9)}`,
-    barcode: product.barcode,
-    name: product.name,
-    purchasePrice: product.purchasePrice,
-    salePrice: product.salePrice,
-    quantity: product.quantity,
-    category: product.category,
-    expiryDate: product.expiryDate,
-    photos: product.photos,
-    addedBy: product.addedBy,
-    createdAt: new Date(now).toISOString(),
-    updatedAt: new Date(now).toISOString(),
-  };
-  
-  await saveProductLocally(newProduct);
-  console.log('📦 Новый товар сохранён локально:', product.barcode);
-  return { isNew: true, product: newProduct };
 };
 
 // Сохранить товар в очередь (для товаров без цены)

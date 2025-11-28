@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loginWithFirebase, logoutFirebase, getCurrentSession, AppRole, AppSession } from '@/lib/firebase';
 import { initLocalMode, initAllLocalSystems, isLocalOnlyMode } from '@/lib/localOnlyMode';
+import { enableFirebaseSync, getAllFirebaseProducts, getFirebaseStatus } from '@/lib/firebaseProducts';
 
 // Ленивая загрузка компонентов для быстрого старта
 const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
@@ -71,12 +72,28 @@ const Index = () => {
     return s ? (ROLE_TO_TAB[s.role] || 'dashboard') : 'dashboard';
   });
 
-  // Инициализация локальных систем
+  // Инициализация Firebase синхронизации
   useEffect(() => {
+    const initFirebase = async () => {
+      // Включаем Firebase синхронизацию
+      enableFirebaseSync();
+      
+      try {
+        // Пробуем загрузить товары для проверки подключения
+        const products = await getAllFirebaseProducts();
+        const status = getFirebaseStatus();
+        console.log(`🔥 Firebase ${status.mode}: загружено ${products.length} товаров`);
+        toast.success(`🔥 ${status.message} (${products.length} товаров)`, { duration: 2000 });
+      } catch (error) {
+        console.warn('⚠️ Firebase недоступен:', error);
+        toast.warning('📦 Работаем в локальном режиме', { duration: 2000 });
+      }
+    };
+
+    initFirebase();
+    
     if (localMode) {
-      initAllLocalSystems().then(() => {
-        toast.success('🔥 Firebase режим активен', { duration: 2000 });
-      });
+      initAllLocalSystems().catch(console.error);
     }
   }, []);
 

@@ -39,13 +39,17 @@ serve(async (req) => {
     // Загружаем существующие товары для проверки цен
     let pricesMap = new Map<string, any>();
     try {
-      const { data: existingProducts } = await supabase
+      console.log('📊 Загрузка справочника цен...');
+      const { data: existingProducts, error: loadError } = await supabase
         .from('products')
         .select('barcode, name, category, purchase_price, sale_price')
         .not('barcode', 'is', null)
-        .gt('sale_price', 0);
+        .gt('sale_price', 0)
+        .limit(10000);
 
-      if (existingProducts) {
+      if (loadError) {
+        console.error('Error loading prices:', loadError);
+      } else if (existingProducts) {
         for (const p of existingProducts) {
           if (p.barcode) {
             pricesMap.set(p.barcode, {
@@ -59,7 +63,7 @@ serve(async (req) => {
       }
       console.log(`📊 Справочник цен: ${pricesMap.size} товаров`);
     } catch (e) {
-      console.error('Error loading prices:', e);
+      console.error('Exception loading prices:', e);
     }
 
     // ИСПОЛЬЗУЕМ БЫСТРУЮ МОДЕЛЬ для распознавания
@@ -163,90 +167,122 @@ serve(async (req) => {
 
     let savedTo = '';
     let productId = '';
+    let saveError = '';
 
     // Автосохранение если включено
     if (autoSave !== false) {
-      if (priceInfo && priceInfo.salePrice > 0) {
-        // ЦЕНА НАЙДЕНА → Сохраняем в products
-        console.log(`✅ Цена найдена: ${priceInfo.salePrice}₽`);
-        
-        const { data: existing } = await supabase
-          .from('products')
-          .select('id, quantity')
-          .eq('barcode', barcode)
-          .maybeSingle();
-
-        if (existing) {
-          // Увеличиваем количество
-          await supabase
-            .from('products')
-            .update({ quantity: (existing.quantity || 0) + 1 })
-            .eq('id', existing.id);
+      try {
+        if (priceInfo && priceInfo.salePrice > 0) {
+          // ЦЕНА НАЙДЕНА → Сохраняем в products
+          console.log(`✅ Цена найдена: ${priceInfo.salePrice}₽`);
           
-          productId = existing.id;
-          savedTo = 'products_updated';
-        } else {
-          const { data: newProduct } = await supabase
+          const { data: existing, error: existingError } = await supabase
             .from('products')
-            .insert([{
-              barcode,
-              name: priceInfo.name || productName,
-              category: priceInfo.category || category,
-              purchase_price: priceInfo.purchasePrice,
-              sale_price: priceInfo.salePrice,
-              quantity: 1,
-              unit: 'шт',
-              created_by: userName || deviceId
-            }])
-            .select('id')
-            .single();
+            .select('id, quantity')
+            .eq('barcode', barcode)
+            .maybeSingle();
 
-          productId = newProduct?.id || '';
-          savedTo = 'products';
-        }
-      } else {
-        // ЦЕНА НЕ НАЙДЕНА → В очередь
-        console.log(`⏳ Цена не найдена, в очередь`);
-        
-        const effectiveBarcode = barcode || `auto-${Date.now()}`;
-        const effectiveName = productName || 'Неизвестный товар';
-        
-        const { data: existingQueue } = await supabase
-          .from('vremenno_product_foto')
-          .select('id')
-          .or(`barcode.eq.${effectiveBarcode},product_name.ilike.${effectiveName}`)
-          .maybeSingle();
+          if (existingError) {
+            console.error('Error checking existing product:', existingError);
+            saveError = existingError.message;
+          } else if (existing) {
+            // Увеличиваем количество
+            const { error: updateError } = await supabase
+              .from('products')
+              .update({ quantity: (existing.quantity || 0) + 1 })
+              .eq('id', existing.id);
+            
+            if (updateError) {
+              console.error('Error updating product:', updateError);
+              saveError = updateError.message;
+            } else {
+              productId = existing.id;
+              savedTo = 'products_updated';
+              console.log(`📝 Товар обновлен: ${productId}`);
+            }
+          } else {
+            const { data: newProduct, error: insertError } = await supabase
+              .from('products')
+              .insert([{
+                barcode,
+                name: priceInfo.name || productName,
+                category: priceInfo.category || category,
+                purchase_price: priceInfo.purchasePrice,
+                sale_price: priceInfo.salePrice,
+                quantity: 1,
+                unit: 'шт',
+                created_by: userName || deviceId
+              }])
+              .select('id')
+              .single();
 
-        if (existingQueue) {
-          savedTo = 'queue_exists';
-          productId = existingQueue.id;
+            if (insertError) {
+              console.error('Error inserting product:', insertError);
+              saveError = insertError.message;
+            } else {
+              productId = newProduct?.id || '';
+              savedTo = 'products';
+              console.log(`✅ Новый товар создан: ${productId}`);
+            }
+          }
         } else {
-          const { data: newQueue } = await supabase
+          // ЦЕНА НЕ НАЙДЕНА → В очередь
+          console.log(`⏳ Цена не найдена, добавляем в очередь`);
+          
+          const effectiveBarcode = barcode || `auto-${Date.now()}`;
+          const effectiveName = productName || 'Неизвестный товар';
+          
+          // Проверяем существование в очереди
+          const { data: existingQueue, error: queueCheckError } = await supabase
             .from('vremenno_product_foto')
-            .insert([{
-              barcode: effectiveBarcode,
-              product_name: effectiveName,
-              category,
-              front_photo: frontPhoto || '',
-              barcode_photo: barcodePhoto || '',
-              quantity: 1,
-              created_by: userName || deviceId
-            }])
             .select('id')
-            .single();
+            .eq('barcode', effectiveBarcode)
+            .maybeSingle();
 
-          productId = newQueue?.id || '';
-          savedTo = 'queue';
+          if (queueCheckError) {
+            console.error('Error checking queue:', queueCheckError);
+            saveError = queueCheckError.message;
+          } else if (existingQueue) {
+            savedTo = 'queue_exists';
+            productId = existingQueue.id;
+            console.log(`⚠️ Уже в очереди: ${productId}`);
+          } else {
+            const { data: newQueue, error: queueInsertError } = await supabase
+              .from('vremenno_product_foto')
+              .insert([{
+                barcode: effectiveBarcode,
+                product_name: effectiveName,
+                category,
+                front_photo: frontPhoto || '',
+                barcode_photo: barcodePhoto || '',
+                quantity: 1,
+                created_by: userName || deviceId
+              }])
+              .select('id')
+              .single();
+
+            if (queueInsertError) {
+              console.error('Error inserting to queue:', queueInsertError);
+              saveError = queueInsertError.message;
+            } else {
+              productId = newQueue?.id || '';
+              savedTo = 'queue';
+              console.log(`📋 Добавлено в очередь: ${productId}`);
+            }
+          }
         }
+      } catch (dbError) {
+        console.error('Database operation failed:', dbError);
+        saveError = dbError instanceof Error ? dbError.message : 'Database error';
       }
     }
 
     const totalTime = Date.now() - startTime;
-    console.log(`=== DONE in ${totalTime}ms, saved to: ${savedTo} ===`);
+    console.log(`=== DONE in ${totalTime}ms, saved to: ${savedTo}, error: ${saveError || 'none'} ===`);
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: !saveError,
         barcode,
         name: productName,
         category,
@@ -254,7 +290,8 @@ serve(async (req) => {
         price: priceInfo?.salePrice || 0,
         savedTo,
         productId,
-        processingTime: totalTime
+        processingTime: totalTime,
+        error: saveError || undefined
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

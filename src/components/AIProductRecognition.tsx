@@ -591,6 +591,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const savedTo = scanData?.savedTo || '';
       const hasPrice = scanData?.hasPrice || false;
       const price = scanData?.price || 0;
+      const serverError = scanData?.error || '';
 
       // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
@@ -603,7 +604,20 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       // Показываем статус автосохранения
       if (scanError) {
-        setNotification('⚠️ Ошибка AI');
+        console.error('Function invoke error:', scanError);
+        setNotification('⚠️ Ошибка сети');
+        toast.error('Ошибка сети при сканировании');
+        onProductFound({
+          barcode: scannedBarcode,
+          name: scannedName,
+          category: scannedCategory,
+          frontPhoto: tempFrontPhoto,
+          barcodePhoto: tempBarcodePhoto
+        });
+      } else if (serverError) {
+        console.error('Server error:', serverError);
+        setNotification(`⚠️ Ошибка БД: ${serverError.substring(0, 30)}`);
+        toast.error(`Ошибка базы данных: ${serverError}`);
         onProductFound({
           barcode: scannedBarcode,
           name: scannedName,

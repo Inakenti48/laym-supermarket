@@ -6,10 +6,13 @@ import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Users, Edit2, Loader2, ClipboardList } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Users, Edit2, Loader2, ClipboardList, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { firebaseDb } from '@/lib/firebase';
+import { collection, getDocs, addDoc, updateDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
+import { FirebaseUserManagement } from './FirebaseUserManagement';
 
 interface Employee {
   id: string;
@@ -84,37 +87,49 @@ export const EmployeesTab = () => {
   useEffect(() => {
     loadEmployees();
 
-    // Подписка на реалтайм обновления сотрудников
-    const channel = supabase
-      .channel('employees_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'employees'
-        },
-        () => {
-          console.log('🔄 Employees updated on another device');
-          loadEmployees();
-        }
-      )
-      .subscribe();
+    // Firebase realtime подписка
+    const unsubscribe = onSnapshot(
+      collection(firebaseDb, 'employees'),
+      (snapshot) => {
+        const employeesList: Employee[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name || '',
+          position: doc.data().position || '',
+          work_conditions: doc.data().work_conditions || '',
+          schedule: doc.data().schedule || 'full',
+          hourly_rate: doc.data().hourly_rate || null,
+          login: doc.data().login || '',
+          created_at: doc.data().created_at || new Date().toISOString()
+        }));
+        setEmployees(employeesList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Firebase employees error:', error);
+        setLoading(false);
+      }
+    );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => unsubscribe();
   }, []);
 
   const loadEmployees = async () => {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setEmployees(data || []);
+      const q = query(collection(firebaseDb, 'employees'), orderBy('created_at', 'desc'));
+      const snapshot = await getDocs(q);
+      
+      const employeesList: Employee[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name || '',
+        position: doc.data().position || '',
+        work_conditions: doc.data().work_conditions || '',
+        schedule: doc.data().schedule || 'full',
+        hourly_rate: doc.data().hourly_rate || null,
+        login: doc.data().login || '',
+        created_at: doc.data().created_at || new Date().toISOString()
+      }));
+      
+      setEmployees(employeesList);
     } catch (error: any) {
       console.error('Error loading employees:', error);
       toast.error('Ошибка загрузки сотрудников');
@@ -149,19 +164,14 @@ export const EmployeesTab = () => {
       if (editingId) {
         const newLogin = customLogin || generateLogin();
         
-        const { error } = await supabase
-          .from('employees')
-          .update({
-            name,
-            position,
-            work_conditions: workConditions,
-            schedule,
-            hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
-            login: newLogin
-          })
-          .eq('id', editingId);
-
-        if (error) throw error;
+        await updateDoc(doc(firebaseDb, 'employees', editingId), {
+          name,
+          position,
+          work_conditions: workConditions,
+          schedule,
+          hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
+          login: newLogin
+        });
         
         // Обновляем данные в employees_auth
         const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
@@ -178,28 +188,22 @@ export const EmployeesTab = () => {
         toast.success('Сотрудник обновлён');
       } else {
         const login = customLogin || generateLogin();
-        const password = Math.random().toString(36).slice(-8); // Генерируем пароль
+        const password = Math.random().toString(36).slice(-8);
         
-        const { data: newEmployee, error } = await supabase
-          .from('employees')
-          .insert({
-            name,
-            position,
-            work_conditions: workConditions,
-            schedule,
-            hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
-            login,
-            created_by: null
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        const docRef = await addDoc(collection(firebaseDb, 'employees'), {
+          name,
+          position,
+          work_conditions: workConditions,
+          schedule,
+          hourly_rate: schedule === 'full' ? parseFloat(hourlyRate) : null,
+          login,
+          created_at: new Date().toISOString()
+        });
         
         // Сохраняем пароль в localStorage для входа сотрудников
         const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
         employeesAuth.push({ 
-          id: newEmployee.id, 
+          id: docRef.id, 
           login, 
           password, 
           name 
@@ -209,17 +213,16 @@ export const EmployeesTab = () => {
         toast.success(`Сотрудник добавлен!\nЛогин: ${login}\nПароль: ${password}`, { duration: 10000 });
       }
 
-      // Добавляем лог
-      await supabase.from('system_logs').insert({
-        user_id: null,
+      // Добавляем лог в Firebase
+      await addDoc(collection(firebaseDb, 'system_logs'), {
         user_name: currentUser?.username || 'Неизвестно',
         message: editingId 
           ? `Обновлён сотрудник: ${name}` 
-          : `Добавлен сотрудник: ${name} (${customLogin || generateLogin()})`
+          : `Добавлен сотрудник: ${name} (${customLogin || generateLogin()})`,
+        created_at: new Date().toISOString()
       });
 
       resetForm();
-      loadEmployees();
     } catch (error: any) {
       console.error('Error saving employee:', error);
       toast.error('Ошибка сохранения сотрудника');
@@ -271,159 +274,180 @@ export const EmployeesTab = () => {
 
   return (
     <div className="p-4 max-w-6xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5" />
-          <h2 className="text-lg font-semibold">Сотрудники</h2>
-        </div>
-        <Button onClick={() => setShowForm(!showForm)} size="sm">
-          <Plus className="w-4 h-4 mr-1" />
-          Добавить
-        </Button>
-      </div>
+      <Tabs defaultValue="employees" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="employees" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Сотрудники
+          </TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <UserCog className="h-4 w-4" />
+            Пользователи системы
+          </TabsTrigger>
+        </TabsList>
 
-      {showForm && (
-        <Card className="p-4 space-y-3">
-          <h3 className="font-semibold text-sm">{editingId ? 'Редактировать сотрудника' : 'Новый сотрудник'}</h3>
-          
-          <div className="space-y-2">
-            <Label className="text-xs">Имя</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Иван Иванов"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs">Должность</Label>
-            <Input
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              placeholder="Грузчик"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs">Условия работы</Label>
-            <Textarea
-              value={workConditions}
-              onChange={(e) => setWorkConditions(e.target.value)}
-              placeholder="Описание условий работы"
-              className="text-sm min-h-[80px]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs">График работы</Label>
-            <Select value={schedule} onValueChange={(v) => setSchedule(v as 'full' | 'piece')}>
-              <SelectTrigger className="text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">Полный день</SelectItem>
-                <SelectItem value="piece">Сдельная</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {schedule === 'full' && (
-            <div className="space-y-2">
-              <Label className="text-xs">Плата за час (₽)</Label>
-              <Input
-                type="number"
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(e.target.value)}
-                placeholder="200"
-                className="text-sm"
-              />
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label className="text-xs">Логин {!editingId && '(оставьте пустым для авто-генерации)'}</Label>
-            <Input
-              value={customLogin}
-              onChange={(e) => setCustomLogin(e.target.value)}
-              placeholder="emp123456"
-              className="text-sm font-mono"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <Button onClick={handleAddEmployee} size="sm" className="flex-1">
-              {editingId ? 'Сохранить' : 'Создать'}
-            </Button>
-            <Button onClick={resetForm} variant="outline" size="sm">
-              Отмена
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      <div className="space-y-2">
-        {employees.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">
-            Нет сотрудников
-          </Card>
-        ) : (
-          employees.map((employee) => (
-            <Card key={employee.id} className="p-3">
-              <div className="space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-sm">{employee.name}</h3>
-                    <p className="text-xs text-muted-foreground">{employee.position}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      onClick={() => {
-                        setSelectedEmployee(employee);
-                        setShowTaskDialog(true);
-                      }}
-                      className="text-xs"
-                      title="Добавить задание"
-                    >
-                      <ClipboardList className="h-3 w-3" />
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      onClick={() => handleEditEmployee(employee)}
-                      className="text-xs"
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Логин:</span>
-                    <span className="ml-1 font-mono">{employee.login}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">График:</span>
-                    <span className="ml-1">{employee.schedule === 'full' ? 'Полный день' : 'Сдельная'}</span>
-                  </div>
-                  {employee.hourly_rate && (
-                    <div>
-                      <span className="text-muted-foreground">Ставка:</span>
-                      <span className="ml-1">{employee.hourly_rate} ₽/час</span>
-                    </div>
-                  )}
-                </div>
-                
-                <p className="text-xs text-muted-foreground">{employee.work_conditions}</p>
+        <TabsContent value="employees" className="mt-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                <h2 className="text-lg font-semibold">Сотрудники</h2>
               </div>
-            </Card>
-          ))
-        )}
-      </div>
+              <Button onClick={() => setShowForm(!showForm)} size="sm">
+                <Plus className="w-4 h-4 mr-1" />
+                Добавить
+              </Button>
+            </div>
+
+            {showForm && (
+              <Card className="p-4 space-y-3">
+                <h3 className="font-semibold text-sm">{editingId ? 'Редактировать сотрудника' : 'Новый сотрудник'}</h3>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs">Имя</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Иван Иванов"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Должность</Label>
+                  <Input
+                    value={position}
+                    onChange={(e) => setPosition(e.target.value)}
+                    placeholder="Грузчик"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Условия работы</Label>
+                  <Textarea
+                    value={workConditions}
+                    onChange={(e) => setWorkConditions(e.target.value)}
+                    placeholder="Описание условий работы"
+                    className="text-sm min-h-[80px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">График работы</Label>
+                  <Select value={schedule} onValueChange={(v) => setSchedule(v as 'full' | 'piece')}>
+                    <SelectTrigger className="text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full">Полный день</SelectItem>
+                      <SelectItem value="piece">Сдельная</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {schedule === 'full' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Плата за час (₽)</Label>
+                    <Input
+                      type="number"
+                      value={hourlyRate}
+                      onChange={(e) => setHourlyRate(e.target.value)}
+                      placeholder="200"
+                      className="text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Логин {!editingId && '(оставьте пустым для авто-генерации)'}</Label>
+                  <Input
+                    value={customLogin}
+                    onChange={(e) => setCustomLogin(e.target.value)}
+                    placeholder="emp123456"
+                    className="text-sm font-mono"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleAddEmployee} size="sm" className="flex-1">
+                    {editingId ? 'Сохранить' : 'Создать'}
+                  </Button>
+                  <Button onClick={resetForm} variant="outline" size="sm">
+                    Отмена
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            <div className="space-y-2">
+              {employees.length === 0 ? (
+                <Card className="p-8 text-center text-muted-foreground">
+                  Нет сотрудников
+                </Card>
+              ) : (
+                employees.map((employee) => (
+                  <Card key={employee.id} className="p-3">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-semibold text-sm">{employee.name}</h3>
+                          <p className="text-xs text-muted-foreground">{employee.position}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedEmployee(employee);
+                              setShowTaskDialog(true);
+                            }}
+                            className="text-xs"
+                            title="Добавить задание"
+                          >
+                            <ClipboardList className="h-3 w-3" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={() => handleEditEmployee(employee)}
+                            className="text-xs"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Логин:</span>
+                          <span className="ml-1 font-mono">{employee.login}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">График:</span>
+                          <span className="ml-1">{employee.schedule === 'full' ? 'Полный день' : 'Сдельная'}</span>
+                        </div>
+                        {employee.hourly_rate && (
+                          <div>
+                            <span className="text-muted-foreground">Ставка:</span>
+                            <span className="ml-1">{employee.hourly_rate} ₽/час</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className="text-xs text-muted-foreground">{employee.work_conditions}</p>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="users" className="mt-4">
+          <FirebaseUserManagement />
+        </TabsContent>
+      </Tabs>
 
       {/* Диалог добавления задания */}
       <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>

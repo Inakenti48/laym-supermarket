@@ -289,7 +289,7 @@ export const DiagnosticsTab = () => {
             {/* Статус Firebase */}
             <div className="flex items-center justify-between pb-2 border-b border-orange-500/20">
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${firebaseStatus.available ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                <div className={`w-2 h-2 rounded-full ${firebaseStatus.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
                 <span className="text-sm font-medium">
                   Режим: {firebaseStatus.mode}
                 </span>
@@ -301,9 +301,9 @@ export const DiagnosticsTab = () => {
                   size="sm"
                   className="text-xs"
                 >
-                  {firebaseStatus.available ? '📦 Переключить на локальное' : '🔥 Включить Firebase'}
+                  {firebaseStatus.connected ? '📦 Переключить на локальное' : '🔥 Включить Firebase'}
                 </Button>
-                {!firebaseStatus.available && (
+                {!firebaseStatus.connected && (
                   <Button
                     onClick={handleRetryFirebase}
                     variant="ghost"

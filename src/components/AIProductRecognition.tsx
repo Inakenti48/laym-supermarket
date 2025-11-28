@@ -770,15 +770,15 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
               <span className="text-xs font-medium text-muted-foreground">
                 {getStepIndicator()}
               </span>
-            <div className="flex items-center gap-1 text-xs text-green-600">
-              <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
-              {cameraReady ? 'Готова' : 'Загрузка...'}
+              <div className="flex items-center gap-1 text-xs text-green-600">
+                <div className="w-2 h-2 rounded-full bg-green-600 animate-pulse" />
+                {cameraReady ? 'Готова' : 'Загрузка...'}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '500px' }}>
-          <video
+          <div className="relative rounded-b-lg overflow-hidden bg-black" style={{ minHeight: '500px' }}>
+            <video
             ref={videoRef}
             autoPlay
             playsInline

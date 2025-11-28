@@ -374,6 +374,66 @@ export const DashboardTab = () => {
         </Card>
       </div>
 
+      {/* Firebase Products Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            Товары из Firebase ({firebaseProducts.length})
+          </CardTitle>
+          <CardDescription>Все товары из базы данных Firebase</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {firebaseLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+              Загрузка товаров...
+            </div>
+          ) : firebaseProducts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              Нет товаров в Firebase
+            </div>
+          ) : (
+            <div className="max-h-[400px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Штрихкод</TableHead>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Категория</TableHead>
+                    <TableHead className="text-right">Закуп</TableHead>
+                    <TableHead className="text-right">Продажа</TableHead>
+                    <TableHead className="text-right">Кол-во</TableHead>
+                    <TableHead>Обновлено</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {firebaseProducts.slice(0, 50).map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">{product.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.category || '-'}</TableCell>
+                      <TableCell className="text-right">₽{product.purchasePrice?.toFixed(2) || '0'}</TableCell>
+                      <TableCell className="text-right">₽{product.retailPrice?.toFixed(2) || '0'}</TableCell>
+                      <TableCell className="text-right font-medium">{product.quantity || 0}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {product.lastUpdated ? new Date(product.lastUpdated).toLocaleDateString('ru-RU') : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {firebaseProducts.length > 50 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Показано 50 из {firebaseProducts.length} товаров
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Returns Section */}
       {recentReturns.length > 0 && (
         <Card>

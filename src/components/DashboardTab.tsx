@@ -311,14 +311,14 @@ export const DashboardTab = () => {
         </Card>
       </div>
 
-      {/* Firebase Products Table */}
+      {/* MySQL Products Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
-            Товары из Firebase ({firebaseProducts.length})
+            Товары из MySQL ({firebaseProducts.length})
           </CardTitle>
-          <CardDescription>Все товары из базы данных Firebase</CardDescription>
+          <CardDescription>Все товары из базы данных MySQL</CardDescription>
         </CardHeader>
         <CardContent>
           {firebaseLoading ? (
@@ -329,7 +329,7 @@ export const DashboardTab = () => {
           ) : firebaseProducts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              Нет товаров в Firebase
+              Нет товаров в MySQL
             </div>
           ) : (
             <div className="max-h-[400px] overflow-auto">

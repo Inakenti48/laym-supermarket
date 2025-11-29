@@ -1036,36 +1036,11 @@ export const InventoryTab = () => {
 
     setIsRecognizingExpiry(true);
     try {
-      // Используем последнее загруженное фото
-      const imageBase64 = photos[photos.length - 1];
-      
-      const { data: functionData, error: functionError } = await supabase.functions.invoke('recognize-expiry-date', {
-        body: { imageBase64 }
-      });
-
-      if (functionError) {
-        console.error('Ошибка функции:', functionError);
-        throw functionError;
-      }
-
-      if (!functionData?.success) {
-        throw new Error(functionData?.error || 'Не удалось распознать даты');
-      }
-
-      const { manufacturingDate, expiryDate, confidence } = functionData;
-
-      if (expiryDate) {
-        setCurrentProduct({ ...currentProduct, expiryDate });
-        toast.success(`✅ Срок годности: ${expiryDate}${manufacturingDate ? `, изготовлено: ${manufacturingDate}` : ''} (точность: ${Math.round(confidence * 100)}%)`);
-      } else if (manufacturingDate) {
-        toast.info(`ℹ️ Найдена только дата изготовления: ${manufacturingDate}`);
-      } else {
-        toast.warning('⚠️ Даты не найдены на изображении. Попробуйте сфотографировать упаковку более четко.');
-      }
-
+      // Функция распознавания дат временно недоступна (Supabase удален)
+      toast.warning('⚠️ Функция распознавания дат временно недоступна. Введите дату вручную.');
     } catch (error: any) {
       console.error('Ошибка распознавания срока годности:', error);
-      toast.error('Ошибка при распознавании дат. Попробуйте еще раз.');
+      toast.error('Ошибка при распознавании дат.');
     } finally {
       setIsRecognizingExpiry(false);
     }

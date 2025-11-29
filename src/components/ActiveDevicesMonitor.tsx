@@ -2,80 +2,49 @@ import { useState, useEffect } from 'react';
 import { Monitor, Users, Wifi } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
-interface ActiveDevice {
-  id: string;
-  user_id: string;
-  user_name: string;
-  device_name: string;
-  last_active: string;
-  can_save_single: boolean;
-  can_save_queue: boolean;
-}
+import { getDevices, subscribeToDevices, Device } from '@/lib/firebaseCollections';
 
 export const ActiveDevicesMonitor = () => {
-  const [activeDevices, setActiveDevices] = useState<ActiveDevice[]>([]);
+  const [activeDevices, setActiveDevices] = useState<Device[]>([]);
   const [totalDevices, setTotalDevices] = useState(0);
   const [onlineDevices, setOnlineDevices] = useState(0);
 
-  // Загрузка устройств
-  const loadDevices = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('devices')
-        .select('*')
-        .order('last_active', { ascending: false });
-
-      if (error) throw error;
-
-      const devices = data || [];
-      setActiveDevices(devices);
-      setTotalDevices(devices.length);
-
-      // Считаем онлайн устройства (активность за последние 5 минут)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const online = devices.filter(device => 
-        new Date(device.last_active) > fiveMinutesAgo
-      ).length;
-      setOnlineDevices(online);
-    } catch (error) {
-      console.error('Ошибка загрузки устройств:', error);
-    }
-  };
-
   useEffect(() => {
     // Первая загрузка
+    const loadDevices = async () => {
+      const devices = await getDevices();
+      updateDevicesState(devices);
+    };
     loadDevices();
 
-    // Подписка на изменения в реальном времени
-    const channel = supabase
-      .channel('devices-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'devices'
-        },
-        (payload) => {
-          console.log('🔄 Real-time update:', payload);
-          loadDevices();
-        }
-      )
-      .subscribe();
+    // Подписка на изменения в реальном времени через Firebase
+    const unsubscribe = subscribeToDevices((devices) => {
+      updateDevicesState(devices);
+    });
 
     // Обновляем каждую минуту для пересчета онлайн статуса
     const interval = setInterval(() => {
       loadDevices();
-    }, 60000); // 60 секунд
+    }, 60000);
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe();
       clearInterval(interval);
     };
   }, []);
+
+  const updateDevicesState = (devices: Device[]) => {
+    setActiveDevices(devices);
+    setTotalDevices(devices.length);
+
+    // Считаем онлайн устройства (активность за последние 5 минут)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const online = devices.filter(device => 
+      new Date(device.last_active) > fiveMinutesAgo
+    ).length;
+    setOnlineDevices(online);
+  };
 
   const isOnline = (lastActive: string) => {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);

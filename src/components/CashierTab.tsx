@@ -45,6 +45,7 @@ import {
   type ReceiptData 
 } from '@/lib/printer';
 import { supabase } from '@/integrations/supabase/client';
+import { addSale } from '@/lib/firebaseCollections';
 
 interface CartItem {
   id: string;

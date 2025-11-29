@@ -1,46 +1,38 @@
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getAllFirebaseProducts } from "./firebaseProducts";
+import { getSystemLogs, getSales, getCancellationRequests, getDevices } from "./firebaseCollections";
+import { getSuppliers } from "./suppliersDb";
 
 export const exportAllDatabaseData = async () => {
   try {
     toast.info("Начинаем экспорт данных...");
 
-    // Получаем товары из Firebase
-    const firebaseProducts = await getAllFirebaseProducts();
-
-    // Остальные данные из Supabase
-    const [suppliersRes, employeesRes, salesRes, cancellationsRes, logsRes, profilesRes, userRolesRes] = await Promise.all([
-      supabase.from('suppliers').select('*'),
-      supabase.from('employees').select('*'),
-      supabase.from('sales').select('*'),
-      supabase.from('cancellation_requests').select('*'),
-      supabase.from('system_logs').select('*'),
-      supabase.from('profiles').select('*'),
-      supabase.from('user_roles').select('*'),
+    // Получаем все данные из Firebase
+    const [firebaseProducts, suppliers, sales, cancellations, logs, devices] = await Promise.all([
+      getAllFirebaseProducts(),
+      getSuppliers(),
+      getSales(1000),
+      getCancellationRequests(),
+      getSystemLogs(1000),
+      getDevices()
     ]);
 
     const backupData = {
       exportDate: new Date().toISOString(),
-      dataSource: {
-        products: 'Firebase',
-        other: 'Supabase'
-      },
+      dataSource: 'Firebase',
       products: firebaseProducts,
-      suppliers: suppliersRes.data || [],
-      employees: employeesRes.data || [],
-      sales: salesRes.data || [],
-      cancellation_requests: cancellationsRes.data || [],
-      system_logs: logsRes.data || [],
-      profiles: profilesRes.data || [],
-      user_roles: userRolesRes.data || [],
+      suppliers: suppliers,
+      sales: sales,
+      cancellation_requests: cancellations,
+      system_logs: logs,
+      devices: devices,
       metadata: {
         totalProducts: firebaseProducts.length,
-        totalSuppliers: (suppliersRes.data || []).length,
-        totalEmployees: (employeesRes.data || []).length,
-        totalSales: (salesRes.data || []).length,
-        totalCancellations: (cancellationsRes.data || []).length,
-        totalLogs: (logsRes.data || []).length,
+        totalSuppliers: suppliers.length,
+        totalSales: sales.length,
+        totalCancellations: cancellations.length,
+        totalLogs: logs.length,
+        totalDevices: devices.length,
       }
     };
 
@@ -56,7 +48,7 @@ export const exportAllDatabaseData = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success(`Экспорт завершен! Всего записей: ${backupData.metadata.totalProducts} товаров (Firebase), ${backupData.metadata.totalSuppliers} поставщиков`);
+    toast.success(`Экспорт завершен! Всего записей: ${backupData.metadata.totalProducts} товаров, ${backupData.metadata.totalSuppliers} поставщиков`);
     
     return backupData;
   } catch (error) {
@@ -68,72 +60,36 @@ export const exportAllDatabaseData = async () => {
 
 export const exportDatabaseAsSQL = async () => {
   try {
-    toast.info("Создаем SQL дамп (только Supabase данные)...");
+    toast.info("Создаем JSON дамп данных...");
 
-    // Товары теперь в Firebase, поэтому не экспортируем их как SQL
-    const { data: suppliers } = await supabase.from('suppliers').select('*');
-    const { data: employees } = await supabase.from('employees').select('*');
+    // Товары и все данные теперь в Firebase
+    const [products, suppliers] = await Promise.all([
+      getAllFirebaseProducts(),
+      getSuppliers()
+    ]);
 
-    let sqlDump = `-- Database Backup - ${new Date().toISOString()}\n`;
-    sqlDump += `-- NOTE: Products are stored in Firebase, not included in SQL dump\n\n`;
+    let jsonDump = {
+      exportDate: new Date().toISOString(),
+      note: 'All data is stored in Firebase',
+      products: products,
+      suppliers: suppliers
+    };
 
-    // Suppliers
-    if (suppliers && suppliers.length > 0) {
-      sqlDump += `-- Suppliers (${suppliers.length} records)\n`;
-      suppliers.forEach(s => {
-        const values = [
-          `'${s.id}'`,
-          `'${s.name?.replace(/'/g, "''")}'`,
-          s.phone ? `'${s.phone}'` : 'NULL',
-          s.contact_person ? `'${s.contact_person?.replace(/'/g, "''")}'` : 'NULL',
-          s.address ? `'${s.address?.replace(/'/g, "''")}'` : 'NULL',
-          s.debt || 0,
-          `'${JSON.stringify(s.payment_history || []).replace(/'/g, "''")}'`,
-          s.created_by ? `'${s.created_by}'` : 'NULL',
-          `'${s.created_at}'`,
-          `'${s.updated_at}'`
-        ].join(', ');
-        sqlDump += `INSERT INTO suppliers (id, name, phone, contact_person, address, debt, payment_history, created_by, created_at, updated_at) VALUES (${values});\n`;
-      });
-      sqlDump += '\n';
-    }
-
-    // Employees
-    if (employees && employees.length > 0) {
-      sqlDump += `-- Employees (${employees.length} records)\n`;
-      employees.forEach(e => {
-        const values = [
-          `'${e.id}'`,
-          `'${e.name?.replace(/'/g, "''")}'`,
-          `'${e.position}'`,
-          e.hourly_rate || 'NULL',
-          e.schedule ? `'${e.schedule?.replace(/'/g, "''")}'` : 'NULL',
-          e.work_conditions ? `'${e.work_conditions?.replace(/'/g, "''")}'` : 'NULL',
-          e.login ? `'${e.login}'` : 'NULL',
-          e.user_id ? `'${e.user_id}'` : 'NULL',
-          e.created_by ? `'${e.created_by}'` : 'NULL',
-          `'${e.created_at}'`,
-          `'${e.updated_at}'`
-        ].join(', ');
-        sqlDump += `INSERT INTO employees (id, name, position, hourly_rate, schedule, work_conditions, login, user_id, created_by, created_at, updated_at) VALUES (${values});\n`;
-      });
-    }
-
-    // Create and download SQL file
-    const dataBlob = new Blob([sqlDump], { type: 'text/plain' });
+    // Create and download JSON file
+    const dataBlob = new Blob([JSON.stringify(jsonDump, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `database-backup-${new Date().toISOString().split('T')[0]}.sql`;
+    link.download = `database-backup-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success('SQL дамп создан успешно! (Товары в Firebase)');
+    toast.success('Дамп данных создан успешно!');
   } catch (error) {
-    console.error('Error creating SQL dump:', error);
-    toast.error('Ошибка при создании SQL дампа');
+    console.error('Error creating dump:', error);
+    toast.error('Ошибка при создании дампа');
     throw error;
   }
 };

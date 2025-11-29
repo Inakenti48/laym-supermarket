@@ -539,7 +539,10 @@ export const InventoryTab = () => {
   }, [queuePage]);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string } | string) => {
+    console.log('🔍 handleScan вызван с данными:', typeof data === 'string' ? data : JSON.stringify(data).substring(0, 200));
+    
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;
+    console.log('📦 barcodeData:', { barcode: barcodeData.barcode, name: barcodeData.name, mode: aiScanMode });
     
     // КРИТИЧНО: Автоматическое добавление к существующему товару
     if (barcodeData.autoAddToProducts && barcodeData.existingProductId) {
@@ -737,8 +740,9 @@ export const InventoryTab = () => {
           
           setPendingProducts(prev => [...prev, newPendingProduct]);
           
-          // Сохраняем в Firebase очередь для синхронизации между устройствами
+          // Сохраняем в MySQL очередь для синхронизации между устройствами
           try {
+            console.log('📦 Сохраняем в очередь MySQL:', sanitizedBarcode);
             await addToQueue({
               barcode: sanitizedBarcode,
               product_name: barcodeData.name || '',
@@ -747,9 +751,16 @@ export const InventoryTab = () => {
               front_photo: barcodeData.frontPhoto || undefined,
               barcode_photo: barcodeData.barcodePhoto || undefined,
               image_url: barcodeData.frontPhoto || barcodeData.barcodePhoto || undefined,
+              created_by: currentUserId,
             });
+            console.log('✅ Товар сохранён в MySQL очередь');
+            
+            // Обновляем счётчик очереди
+            const updatedQueue = await getQueueProducts();
+            setQueueTotal(updatedQueue.length);
           } catch (e) {
-            console.log('Ошибка сохранения в очередь Firebase:', e);
+            console.error('❌ Ошибка сохранения в очередь MySQL:', e);
+            toast.error('Ошибка сохранения в очередь');
           }
           
           toast.info(`📦 Товар добавлен в очередь: ${barcodeData.name || sanitizedBarcode}`, { 
@@ -772,6 +783,7 @@ export const InventoryTab = () => {
           setPhotos([]);
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
+          localStorage.removeItem('inventory_form_data');
           
           addLog(`AI-сканирование: ${barcodeData.name || sanitizedBarcode} - добавлен в очередь (без цен)`);
           return;
@@ -970,17 +982,52 @@ export const InventoryTab = () => {
       }
     }
 
-    setPendingProducts(prev => [...prev, newPendingProduct]);
+    // Сохраняем в MySQL очередь
+    try {
+      await addToQueue({
+        barcode: sanitizedBarcode,
+        product_name: barcodeData.name || '',
+        category: barcodeData.category || '',
+        quantity: barcodeData.quantity || 1,
+        front_photo: tempFrontPhoto || undefined,
+        barcode_photo: tempBarcodePhoto || barcodeData.capturedImage || undefined,
+        image_url: allPhotos[0] || undefined,
+        created_by: currentUserId,
+      });
+      
+      console.log('✅ Товар сохранён в MySQL очередь');
+      
+      // Обновляем локальный state
+      const updatedQueue = await getQueueProducts();
+      setQueueTotal(updatedQueue.length);
+      
+      if (barcodeData.name) {
+        toast.success(`📦 Добавлен в очередь: ${barcodeData.name}`);
+      } else if (sanitizedBarcode) {
+        toast.success(`📦 Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
+      }
+    } catch (err) {
+      console.error('❌ Ошибка сохранения в очередь:', err);
+      toast.error('Ошибка сохранения в очередь');
+    }
     
-    // Очищаем временные фото после добавления в очередь
+    // Очищаем форму и временные данные
+    setCurrentProduct({
+      barcode: '',
+      name: '',
+      category: '',
+      purchasePrice: '',
+      retailPrice: '',
+      quantity: '',
+      unit: 'шт',
+      expiryDate: '',
+      supplier: '',
+    });
     setTempFrontPhoto('');
     setTempBarcodePhoto('');
-    
-    if (barcodeData.name) {
-      toast.success(`📦 Добавлен в очередь: ${barcodeData.name}`);
-    } else if (sanitizedBarcode) {
-      toast.success(`📦 Штрихкод добавлен в очередь: ${sanitizedBarcode}`);
-    }
+    setCapturedImage('');
+    setPhotos([]);
+    localStorage.removeItem('inventory_form_data');
   };
 
   const acceptSuggestion = () => {

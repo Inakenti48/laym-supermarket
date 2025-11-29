@@ -125,10 +125,39 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box;
   }
 
-  body {
+  html, body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+    max-width: 100vw;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100vw;
+    min-height: 100vh;
+  }
+
+  /* Предотвращаем выход контента за границы */
+  img, video, iframe, table {
+    max-width: 100%;
+  }
+
+  /* Скрываем полосу прокрутки на мобильных */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Ограничиваем ширину контейнеров */
+  .container {
+    max-width: 100% !important;
   }
 
   /* При активном AI-скане скрываем глобальные тосты, чтобы они не перекрывали камеру */

@@ -1,38 +1,32 @@
 import { toast } from "sonner";
-import { getAllFirebaseProducts } from "./firebaseProducts";
-import { getSystemLogs, getSales, getCancellationRequests, getDevices } from "./firebaseCollections";
-import { getSuppliers } from "./suppliersDb";
+import { getAllProducts, getAllSuppliers, getAllSales, getAllLogs, getCancellationRequests } from "./mysqlDatabase";
 
 export const exportAllDatabaseData = async () => {
   try {
-    toast.info("Начинаем экспорт данных...");
+    toast.info("Начинаем экспорт данных из MySQL...");
 
-    // Получаем все данные из Firebase
-    const [firebaseProducts, suppliers, sales, cancellations, logs, devices] = await Promise.all([
-      getAllFirebaseProducts(),
-      getSuppliers(),
-      getSales(1000),
+    const [products, suppliers, sales, cancellations, logs] = await Promise.all([
+      getAllProducts(),
+      getAllSuppliers(),
+      getAllSales(),
       getCancellationRequests(),
-      getSystemLogs(1000),
-      getDevices()
+      getAllLogs()
     ]);
 
     const backupData = {
       exportDate: new Date().toISOString(),
-      dataSource: 'Firebase',
-      products: firebaseProducts,
+      dataSource: 'MySQL',
+      products: products,
       suppliers: suppliers,
       sales: sales,
       cancellation_requests: cancellations,
       system_logs: logs,
-      devices: devices,
       metadata: {
-        totalProducts: firebaseProducts.length,
+        totalProducts: products.length,
         totalSuppliers: suppliers.length,
         totalSales: sales.length,
         totalCancellations: cancellations.length,
         totalLogs: logs.length,
-        totalDevices: devices.length,
       }
     };
 
@@ -42,13 +36,13 @@ export const exportAllDatabaseData = async () => {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `database-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `mysql-backup-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success(`Экспорт завершен! Всего записей: ${backupData.metadata.totalProducts} товаров, ${backupData.metadata.totalSuppliers} поставщиков`);
+    toast.success(`Экспорт завершен! ${backupData.metadata.totalProducts} товаров, ${backupData.metadata.totalSuppliers} поставщиков`);
     
     return backupData;
   } catch (error) {
@@ -60,27 +54,25 @@ export const exportAllDatabaseData = async () => {
 
 export const exportDatabaseAsSQL = async () => {
   try {
-    toast.info("Создаем JSON дамп данных...");
+    toast.info("Создаем дамп данных из MySQL...");
 
-    // Товары и все данные теперь в Firebase
     const [products, suppliers] = await Promise.all([
-      getAllFirebaseProducts(),
-      getSuppliers()
+      getAllProducts(),
+      getAllSuppliers()
     ]);
 
-    let jsonDump = {
+    const jsonDump = {
       exportDate: new Date().toISOString(),
-      note: 'All data is stored in Firebase',
+      note: 'MySQL Database Dump',
       products: products,
       suppliers: suppliers
     };
 
-    // Create and download JSON file
     const dataBlob = new Blob([JSON.stringify(jsonDump, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `database-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `mysql-dump-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

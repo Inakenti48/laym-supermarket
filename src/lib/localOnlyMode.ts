@@ -1,31 +1,30 @@
-// Режим работы: Firebase вместо Supabase
+// MySQL режим работы
 import { initLocalDB, saveProductLocally, getAllLocalData } from './localDatabase';
 import { initPriceCache, findPriceByBarcode, findPriceByName } from './localPriceCache';
-import { saveFirebaseProduct, findFirebaseProductByBarcode, getAllFirebaseProducts } from './firebaseProducts';
+import { getAllProducts, getProductByBarcode, insertProduct, updateProduct } from './mysqlDatabase';
 import { StoredProduct } from './storage';
 
-// Флаг локального режима (теперь = Firebase режим)
-let localOnlyMode = true;
+// Флаг MySQL режима (всегда true теперь)
+let mysqlMode = true;
 
-export const isLocalOnlyMode = () => localOnlyMode;
+export const isLocalOnlyMode = () => mysqlMode;
 export const setLocalOnlyMode = (enabled: boolean) => {
-  localOnlyMode = enabled;
+  mysqlMode = enabled;
   localStorage.setItem('local_only_mode', enabled ? 'true' : 'false');
-  console.log(enabled ? '🔥 Firebase режим включен' : '☁️ Supabase режим включен');
+  console.log(enabled ? '🗃️ MySQL режим включен' : '☁️ Локальный режим');
 };
 
 // Инициализация при загрузке
 export const initLocalMode = () => {
-  const saved = localStorage.getItem('local_only_mode');
-  localOnlyMode = saved !== 'false'; // По умолчанию Firebase режим
-  return localOnlyMode;
+  mysqlMode = true; // Всегда MySQL
+  return mysqlMode;
 };
 
 // Инициализация всех систем
 export const initAllLocalSystems = async () => {
   await initLocalDB();
   await initPriceCache();
-  console.log('✅ Firebase + кэш цен инициализированы');
+  console.log('✅ MySQL + кэш цен инициализированы');
 };
 
 // Интерфейс для локального товара
@@ -44,55 +43,55 @@ export interface LocalProduct {
   updatedAt: string;
 }
 
-// Получить все товары из Firebase
+// Получить все товары из MySQL
 export const getLocalProducts = async (): Promise<LocalProduct[]> => {
   try {
-    const products = await getAllFirebaseProducts();
+    const products = await getAllProducts();
     return products.map(p => ({
       id: p.id,
       barcode: p.barcode || '',
       name: p.name || '',
-      purchasePrice: p.purchasePrice || 0,
-      salePrice: p.retailPrice || 0,
+      purchasePrice: p.purchase_price || 0,
+      salePrice: p.sale_price || 0,
       quantity: p.quantity || 0,
       category: p.category,
-      expiryDate: p.expiryDate,
-      photos: p.photos,
-      addedBy: p.addedBy,
-      createdAt: p.lastUpdated,
-      updatedAt: p.lastUpdated,
+      expiryDate: p.expiry_date,
+      photos: [],
+      addedBy: p.created_by,
+      createdAt: p.created_at || '',
+      updatedAt: p.updated_at || '',
     }));
   } catch (err) {
-    console.warn('⚠️ Firebase недоступен, возвращаем пустой массив');
+    console.warn('⚠️ MySQL недоступен, возвращаем пустой массив');
     return [];
   }
 };
 
-// Найти товар по штрихкоду в Firebase
+// Найти товар по штрихкоду в MySQL
 export const findLocalProductByBarcode = async (barcode: string): Promise<LocalProduct | null> => {
   try {
-    const product = await findFirebaseProductByBarcode(barcode);
+    const product = await getProductByBarcode(barcode);
     if (!product) return null;
     return {
       id: product.id,
       barcode: product.barcode,
       name: product.name,
-      purchasePrice: product.purchasePrice,
-      salePrice: product.retailPrice,
+      purchasePrice: product.purchase_price,
+      salePrice: product.sale_price,
       quantity: product.quantity,
       category: product.category,
-      expiryDate: product.expiryDate,
-      photos: product.photos,
-      addedBy: product.addedBy,
-      createdAt: product.lastUpdated,
-      updatedAt: product.lastUpdated,
+      expiryDate: product.expiry_date,
+      photos: [],
+      addedBy: product.created_by,
+      createdAt: product.created_at || '',
+      updatedAt: product.updated_at || '',
     };
   } catch {
     return null;
   }
 };
 
-// Сохранить или обновить товар в Firebase
+// Сохранить или обновить товар в MySQL
 export const saveOrUpdateLocalProduct = async (product: {
   barcode: string;
   name: string;
@@ -108,43 +107,64 @@ export const saveOrUpdateLocalProduct = async (product: {
   const userId = product.addedBy || 'system';
   
   try {
-    const savedProduct = await saveFirebaseProduct({
-      barcode: product.barcode,
-      name: product.name,
-      category: product.category || '',
-      purchasePrice: product.purchasePrice,
-      retailPrice: product.salePrice,
-      quantity: product.quantity,
-      unit: 'шт',
-      expiryDate: product.expiryDate,
-      photos: product.photos || [],
-      paymentType: 'full',
-      paidAmount: 0,
-      debtAmount: 0,
-      addedBy: userId,
-    }, userId);
-    
-    console.log('🔥 Товар сохранён в Firebase:', product.barcode);
-    
-    return {
-      isNew: !existing,
-      product: {
-        id: savedProduct.id,
-        barcode: savedProduct.barcode,
-        name: savedProduct.name,
-        purchasePrice: savedProduct.purchasePrice,
-        salePrice: savedProduct.retailPrice,
-        quantity: savedProduct.quantity,
-        category: savedProduct.category,
-        expiryDate: savedProduct.expiryDate,
-        photos: savedProduct.photos,
-        addedBy: savedProduct.addedBy,
-        createdAt: savedProduct.lastUpdated,
-        updatedAt: savedProduct.lastUpdated,
-      }
-    };
-  } catch (err: any) {
-    console.error('❌ Ошибка сохранения в Firebase:', err);
+    if (existing) {
+      await updateProduct(product.barcode, {
+        name: product.name,
+        category: product.category,
+        purchase_price: product.purchasePrice,
+        sale_price: product.salePrice,
+        quantity: existing.quantity + product.quantity,
+        expiry_date: product.expiryDate
+      });
+      
+      return {
+        isNew: false,
+        product: {
+          ...existing,
+          name: product.name,
+          purchasePrice: product.purchasePrice,
+          salePrice: product.salePrice,
+          quantity: existing.quantity + product.quantity,
+          category: product.category,
+          expiryDate: product.expiryDate,
+          updatedAt: new Date().toISOString()
+        }
+      };
+    } else {
+      const result = await insertProduct({
+        barcode: product.barcode,
+        name: product.name,
+        category: product.category || '',
+        purchase_price: product.purchasePrice,
+        sale_price: product.salePrice,
+        quantity: product.quantity,
+        unit: 'шт',
+        expiry_date: product.expiryDate,
+        created_by: userId
+      });
+      
+      console.log('🗃️ Товар сохранён в MySQL:', product.barcode);
+      
+      return {
+        isNew: true,
+        product: {
+          id: result.id || crypto.randomUUID(),
+          barcode: product.barcode,
+          name: product.name,
+          purchasePrice: product.purchasePrice,
+          salePrice: product.salePrice,
+          quantity: product.quantity,
+          category: product.category,
+          expiryDate: product.expiryDate,
+          photos: product.photos || [],
+          addedBy: userId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      };
+    }
+  } catch (err: unknown) {
+    console.error('❌ Ошибка сохранения в MySQL:', err);
     throw err;
   }
 };
@@ -176,12 +196,12 @@ export const saveToLocalQueue = async (item: {
 };
 
 // Получить товары из локальной очереди
-export const getLocalQueueProducts = async (): Promise<any[]> => {
+export const getLocalQueueProducts = async (): Promise<unknown[]> => {
   const db = await initLocalDB();
   const items = await db.getAll('products');
   return items
-    .filter(item => item.data.isQueue)
-    .map(item => ({
+    .filter((item: { data: { isQueue?: boolean } }) => item.data.isQueue)
+    .map((item: { id: string; data: Record<string, unknown>; createdAt: number }) => ({
       id: item.id,
       ...item.data,
       createdAt: new Date(item.createdAt).toISOString(),
@@ -216,7 +236,7 @@ export const getLocalStats = async (): Promise<{
   const queue = await getLocalQueueProducts();
   
   return {
-    totalProducts: products.filter(p => !('isQueue' in p)).length,
+    totalProducts: products.length,
     queueProducts: queue.length,
     totalQuantity: products.reduce((sum, p) => sum + (p.quantity || 0), 0),
   };

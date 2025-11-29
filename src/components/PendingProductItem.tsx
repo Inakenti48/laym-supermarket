@@ -1,4 +1,4 @@
-import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save, Plus } from 'lucide-react';
+import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save, Plus, ImageOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,6 +7,116 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { useState, useEffect, useRef } from 'react';
+
+// Компонент миниатюры фото с обработкой ошибок
+const PhotoThumbnail = ({ 
+  src, 
+  label, 
+  color, 
+  onClick 
+}: { 
+  src: string; 
+  label?: string; 
+  color?: 'green' | 'blue'; 
+  onClick: () => void;
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const borderColor = color === 'green' ? 'border-green-500' : color === 'blue' ? 'border-blue-500' : 'border-border';
+  const bgColor = color === 'green' ? 'bg-green-500' : color === 'blue' ? 'bg-blue-500' : 'bg-muted';
+
+  if (hasError || !src) {
+    return (
+      <div 
+        className={`relative w-14 h-14 rounded border-2 ${borderColor} bg-muted flex items-center justify-center cursor-pointer`}
+        onClick={onClick}
+      >
+        {label && (
+          <div className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded`}>{label}</div>
+        )}
+        <ImageOff className="h-5 w-5 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
+      onClick={onClick}
+    >
+      {isLoading && (
+        <div className={`absolute inset-0 w-14 h-14 rounded border-2 ${borderColor} bg-muted animate-pulse`} />
+      )}
+      <img 
+        src={src} 
+        alt={label || 'Фото'} 
+        className={`w-14 h-14 object-cover rounded border-2 ${borderColor} ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        onLoad={() => setIsLoading(false)}
+        onError={() => {
+          setHasError(true);
+          setIsLoading(false);
+        }}
+      />
+      {label && (
+        <div className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded`}>{label}</div>
+      )}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
+        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </div>
+  );
+};
+
+// Компонент увеличенного фото
+const EnlargedPhoto = ({ 
+  src, 
+  label, 
+  labelColor 
+}: { 
+  src: string; 
+  label?: string; 
+  labelColor?: 'green' | 'blue';
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const bgColor = labelColor === 'green' ? 'bg-green-500' : labelColor === 'blue' ? 'bg-blue-500' : 'bg-muted';
+
+  if (hasError || !src) {
+    return (
+      <div className="w-full h-64 bg-muted rounded flex flex-col items-center justify-center gap-2">
+        <ImageOff className="h-12 w-12 text-muted-foreground" />
+        <span className="text-muted-foreground">Фото недоступно</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full">
+      {isLoading && (
+        <div className="absolute inset-0 bg-muted rounded animate-pulse flex items-center justify-center">
+          <span className="text-muted-foreground">Загрузка...</span>
+        </div>
+      )}
+      <img 
+        src={src} 
+        alt="Увеличенное фото" 
+        className={`w-full h-auto max-h-[80vh] object-contain rounded ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        onLoad={() => setIsLoading(false)}
+        onError={() => {
+          setHasError(true);
+          setIsLoading(false);
+        }}
+      />
+      {label && !isLoading && !hasError && (
+        <div className={`absolute top-2 left-2 ${bgColor} text-white px-2 py-1 rounded z-10`}>
+          {label}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface PendingProduct {
   id: string;
@@ -226,46 +336,34 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                 {product.quantity && <p className="leading-relaxed">Кол-во: {product.quantity} {product.unit}</p>}
                 {product.supplier && <p className="leading-relaxed">Поставщик: {product.supplier}</p>}
               </div>
-              {(product.frontPhoto || product.barcodePhoto || product.photos.length > 0) && (
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  {product.frontPhoto && (
-                    <div 
-                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
-                      onClick={() => handlePhotoClick(product.frontPhoto!)}
-                    >
-                      <img src={product.frontPhoto} alt="Лицевая" className="w-14 h-14 object-cover rounded border-2 border-green-500" />
-                      <div className="absolute -top-1 -left-1 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded">Л</div>
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
-                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </div>
-                  )}
-                  {product.barcodePhoto && (
-                    <div 
-                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
-                      onClick={() => handlePhotoClick(product.barcodePhoto!)}
-                    >
-                      <img src={product.barcodePhoto} alt="Штрихкод" className="w-14 h-14 object-cover rounded border-2 border-blue-500" />
-                      <div className="absolute -top-1 -left-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded">Ш</div>
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
-                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </div>
-                  )}
-                  {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (
-                    <div 
-                      key={idx}
-                      className="relative cursor-pointer hover:opacity-80 transition-opacity group"
-                      onClick={() => handlePhotoClick(photo)}
-                    >
-                      <img src={photo} alt={`Фото ${idx + 1}`} className="w-14 h-14 object-cover rounded border" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
-                        <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {product.frontPhoto && (
+                  <PhotoThumbnail 
+                    src={product.frontPhoto} 
+                    label="Л" 
+                    color="green" 
+                    onClick={() => handlePhotoClick(product.frontPhoto!)} 
+                  />
+                )}
+                {product.barcodePhoto && (
+                  <PhotoThumbnail 
+                    src={product.barcodePhoto} 
+                    label="Ш" 
+                    color="blue" 
+                    onClick={() => handlePhotoClick(product.barcodePhoto!)} 
+                  />
+                )}
+                {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (
+                  <PhotoThumbnail 
+                    key={idx}
+                    src={photo} 
+                    onClick={() => handlePhotoClick(photo)} 
+                  />
+                ))}
+                {!product.frontPhoto && !product.barcodePhoto && product.photos.length === 0 && (
+                  <div className="text-xs text-muted-foreground">Нет фото</div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -311,12 +409,18 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
 
       {/* Dialog для увеличенного просмотра фото */}
       <Dialog open={enlargedPhoto !== null} onOpenChange={(open) => !open && setEnlargedPhoto(null)}>
-        <DialogContent className="max-w-4xl w-full p-2">
-          <div className="relative">
-            <img 
+        <DialogContent className="max-w-4xl w-full p-2 sm:p-4">
+          <div className="relative min-h-[200px] flex items-center justify-center">
+            <EnlargedPhoto 
               src={enlargedPhoto || ''} 
-              alt="Увеличенное фото" 
-              className="w-full h-auto max-h-[80vh] object-contain rounded"
+              label={
+                enlargedPhoto === product.frontPhoto ? 'Лицевая сторона' : 
+                enlargedPhoto === product.barcodePhoto ? 'Штрихкод' : undefined
+              }
+              labelColor={
+                enlargedPhoto === product.frontPhoto ? 'green' : 
+                enlargedPhoto === product.barcodePhoto ? 'blue' : undefined
+              }
             />
             
             {/* Навигация между фото */}
@@ -326,7 +430,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                   <Button
                     size="icon"
                     variant="secondary"
-                    className="absolute left-2 top-1/2 -translate-y-1/2"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-10"
                     onClick={handlePrevPhoto}
                   >
                     <ChevronLeft className="h-6 w-6" />
@@ -336,7 +440,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                   <Button
                     size="icon"
                     variant="secondary"
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-10"
                     onClick={handleNextPhoto}
                   >
                     <ChevronRight className="h-6 w-6" />
@@ -344,22 +448,10 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                 )}
                 
                 {/* Индикатор текущего фото */}
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm z-10">
                   {currentPhotoIndex + 1} / {allPhotos.length}
                 </div>
               </>
-            )}
-
-            {/* Метки для типа фото */}
-            {enlargedPhoto === product.frontPhoto && (
-              <div className="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded">
-                Лицевая сторона
-              </div>
-            )}
-            {enlargedPhoto === product.barcodePhoto && (
-              <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded">
-                Штрихкод
-              </div>
             )}
           </div>
         </DialogContent>

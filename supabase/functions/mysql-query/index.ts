@@ -164,6 +164,36 @@ serve(async (req) => {
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
 
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS tasks (
+            id VARCHAR(36) PRIMARY KEY,
+            employee_id VARCHAR(36),
+            employee_name VARCHAR(255),
+            title VARCHAR(500),
+            description TEXT,
+            date DATE,
+            completed BOOLEAN DEFAULT FALSE,
+            photos JSON,
+            needs_more_photos BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS task_reports (
+            id VARCHAR(36) PRIMARY KEY,
+            task_id VARCHAR(36),
+            employee_id VARCHAR(36),
+            employee_name VARCHAR(255),
+            title VARCHAR(500),
+            photos JSON,
+            completed_at TIMESTAMP,
+            status VARCHAR(50) DEFAULT 'pending',
+            admin_note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
         result = { success: true, message: 'All tables created successfully' };
         break;
 
@@ -500,6 +530,85 @@ serve(async (req) => {
 
       case 'delete_queue_item':
         await client.execute("UPDATE pending_products SET status = 'rejected' WHERE id = ?", [data.id]);
+        result = { success: true };
+        break;
+
+      // ==================== TASKS ====================
+      case 'get_tasks':
+        const tasksQuery = data.employee_id 
+          ? 'SELECT * FROM tasks WHERE employee_id = ? ORDER BY created_at DESC'
+          : 'SELECT * FROM tasks ORDER BY created_at DESC';
+        const tasksParams = data.employee_id ? [data.employee_id] : [];
+        const tasksData = await client.query(tasksQuery, tasksParams);
+        result = { success: true, data: tasksData.map((t: any) => ({
+          id: t.id,
+          employeeId: t.employee_id,
+          employeeName: t.employee_name,
+          title: t.title,
+          description: t.description,
+          date: t.date,
+          completed: t.completed,
+          photos: t.photos ? JSON.parse(t.photos) : [],
+          needsMorePhotos: t.needs_more_photos,
+          createdAt: t.created_at
+        })) };
+        break;
+
+      case 'save_task':
+        const task = data.task;
+        await client.execute(
+          `INSERT INTO tasks (id, employee_id, employee_name, title, description, date, completed, photos, needs_more_photos, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [task.id, task.employeeId, task.employeeName, task.title, task.description, task.date, task.completed, JSON.stringify(task.photos || []), task.needsMorePhotos || false, task.createdAt]
+        );
+        result = { success: true };
+        break;
+
+      case 'update_task':
+        const taskUpdates: string[] = [];
+        const taskValues: any[] = [];
+        const tu = data.updates;
+        if (tu.completed !== undefined) { taskUpdates.push('completed = ?'); taskValues.push(tu.completed); }
+        if (tu.photos !== undefined) { taskUpdates.push('photos = ?'); taskValues.push(JSON.stringify(tu.photos)); }
+        if (tu.needsMorePhotos !== undefined) { taskUpdates.push('needs_more_photos = ?'); taskValues.push(tu.needsMorePhotos); }
+        if (taskUpdates.length > 0) {
+          taskValues.push(data.id);
+          await client.execute(`UPDATE tasks SET ${taskUpdates.join(', ')} WHERE id = ?`, taskValues);
+        }
+        result = { success: true };
+        break;
+
+      // ==================== TASK REPORTS ====================
+      case 'get_task_reports':
+        const reportsData = await client.query('SELECT * FROM task_reports ORDER BY completed_at DESC');
+        result = { success: true, data: reportsData.map((r: any) => ({
+          id: r.id,
+          taskId: r.task_id,
+          employeeId: r.employee_id,
+          employeeName: r.employee_name,
+          title: r.title,
+          photos: r.photos ? JSON.parse(r.photos) : [],
+          completedAt: r.completed_at,
+          status: r.status,
+          adminNote: r.admin_note
+        })) };
+        break;
+
+      case 'save_task_report':
+        const report = data.report;
+        await client.execute(
+          `INSERT INTO task_reports (id, task_id, employee_id, employee_name, title, photos, completed_at, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [report.id, report.taskId, report.employeeId, report.employeeName, report.title, JSON.stringify(report.photos || []), report.completedAt, report.status]
+        );
+        result = { success: true };
+        break;
+
+      case 'update_task_report':
+        await client.execute(
+          'UPDATE task_reports SET status = ?, admin_note = ? WHERE id = ?',
+          [data.status, data.admin_note || null, data.id]
+        );
         result = { success: true };
         break;
 

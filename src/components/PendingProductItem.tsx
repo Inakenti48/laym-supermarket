@@ -8,6 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { QuickSupplierDialog } from './QuickSupplierDialog';
 import { useState, useEffect, useRef } from 'react';
 
+// Функция для нормализации URL фото (добавляет префикс base64 если нужно)
+const normalizePhotoUrl = (src: string): string => {
+  if (!src) return '';
+  // Если уже полный URL или data URL - возвращаем как есть
+  if (src.startsWith('http') || src.startsWith('data:')) {
+    return src;
+  }
+  // Если похоже на base64 без префикса - добавляем
+  if (src.startsWith('/9j/') || src.startsWith('iVBOR') || src.length > 100) {
+    return `data:image/jpeg;base64,${src}`;
+  }
+  return src;
+};
+
 // Компонент миниатюры фото с обработкой ошибок
 const PhotoThumbnail = ({ 
   src, 
@@ -25,8 +39,10 @@ const PhotoThumbnail = ({
 
   const borderColor = color === 'green' ? 'border-green-500' : color === 'blue' ? 'border-blue-500' : 'border-border';
   const bgColor = color === 'green' ? 'bg-green-500' : color === 'blue' ? 'bg-blue-500' : 'bg-muted';
+  
+  const normalizedSrc = normalizePhotoUrl(src);
 
-  if (hasError || !src) {
+  if (hasError || !normalizedSrc) {
     return (
       <div 
         className={`relative w-14 h-14 rounded border-2 ${borderColor} bg-muted flex items-center justify-center cursor-pointer`}
@@ -49,7 +65,7 @@ const PhotoThumbnail = ({
         <div className={`absolute inset-0 w-14 h-14 rounded border-2 ${borderColor} bg-muted animate-pulse`} />
       )}
       <img 
-        src={src} 
+        src={normalizedSrc} 
         alt={label || 'Фото'} 
         className={`w-14 h-14 object-cover rounded border-2 ${borderColor} ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
@@ -82,8 +98,9 @@ const EnlargedPhoto = ({
   const [isLoading, setIsLoading] = useState(true);
 
   const bgColor = labelColor === 'green' ? 'bg-green-500' : labelColor === 'blue' ? 'bg-blue-500' : 'bg-muted';
+  const normalizedSrc = normalizePhotoUrl(src);
 
-  if (hasError || !src) {
+  if (hasError || !normalizedSrc) {
     return (
       <div className="w-full h-64 bg-muted rounded flex flex-col items-center justify-center gap-2">
         <ImageOff className="h-12 w-12 text-muted-foreground" />
@@ -100,7 +117,7 @@ const EnlargedPhoto = ({
         </div>
       )}
       <img 
-        src={src} 
+        src={normalizedSrc} 
         alt="Увеличенное фото" 
         className={`w-full h-auto max-h-[80vh] object-contain rounded ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}

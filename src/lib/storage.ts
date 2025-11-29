@@ -1,4 +1,4 @@
-// Firebase версия storage (без Supabase)
+// Гибридное хранение: Локально (IndexedDB) + Firebase
 import { retryOperation } from './retryUtils';
 import {
   getAllFirebaseProducts,
@@ -18,6 +18,11 @@ import {
   CancellationRequest as FirebaseCancellationRequest,
   saveProductImageFirebase
 } from './firebaseCollections';
+import {
+  initLocalDB,
+  saveProductLocally,
+  getAllLocalData
+} from './localDatabase';
 
 export interface StoredProduct {
   id: string;
@@ -54,35 +59,122 @@ export const saveProductImage = async (
   return saveProductImageFirebase(barcode, productName, imageBase64);
 };
 
-// === FIREBASE ФУНКЦИИ ДЛЯ ТОВАРОВ ===
+// === ГИБРИДНЫЕ ФУНКЦИИ: ЛОКАЛЬНО + FIREBASE ===
+
+// Инициализация локальной БД при старте
+let localDbInitialized = false;
+const ensureLocalDb = async () => {
+  if (!localDbInitialized) {
+    await initLocalDB();
+    localDbInitialized = true;
+  }
+};
 
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
-  console.log('📦 Загрузка товаров из Firebase...');
-  return getAllFirebaseProducts();
+  await ensureLocalDb();
+  
+  try {
+    // Пробуем Firebase
+    console.log('📦 Загрузка товаров из Firebase...');
+    const products = await Promise.race([
+      getAllFirebaseProducts(),
+      new Promise<StoredProduct[]>((_, reject) => 
+        setTimeout(() => reject(new Error('Firebase timeout')), 5000)
+      )
+    ]);
+    
+    // Сохраняем локально для офлайн доступа
+    if (products.length > 0) {
+      localStorage.setItem('cached_products', JSON.stringify(products));
+      localStorage.setItem('cached_products_time', Date.now().toString());
+    }
+    
+    return products;
+  } catch (error) {
+    console.warn('⚠️ Firebase недоступен, загружаем из кэша...');
+    
+    // Fallback на локальный кэш
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    // Fallback на IndexedDB
+    const localData = await getAllLocalData();
+    return localData.products as StoredProduct[];
+  }
 };
 
 export const findProductByBarcode = async (barcode: string): Promise<StoredProduct | null> => {
   if (!barcode) return null;
-  return findFirebaseProductByBarcode(barcode);
+  
+  try {
+    return await findFirebaseProductByBarcode(barcode);
+  } catch (error) {
+    console.warn('⚠️ Firebase недоступен, ищем локально...');
+    
+    // Fallback на локальный кэш
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      const products: StoredProduct[] = JSON.parse(cached);
+      return products.find(p => p.barcode === barcode) || null;
+    }
+    return null;
+  }
 };
 
 export const saveProduct = async (
   product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, 
   userId: string
 ): Promise<StoredProduct> => {
-  return await retryOperation(
+  await ensureLocalDb();
+  
+  // СНАЧАЛА сохраняем локально (IndexedDB + localStorage)
+  const localId = await saveProductLocally(product);
+  console.log('💾 Товар сохранен локально:', localId);
+  
+  // Обновляем локальный кэш
+  const cached = localStorage.getItem('cached_products');
+  const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
+  const newProduct: StoredProduct = {
+    ...product,
+    id: localId,
+    lastUpdated: new Date().toISOString(),
+    priceHistory: [{
+      date: new Date().toISOString(),
+      purchasePrice: product.purchasePrice,
+      retailPrice: product.retailPrice,
+      changedBy: userId
+    }]
+  };
+  
+  // Проверяем, есть ли уже товар с таким штрихкодом
+  const existingIndex = products.findIndex(p => p.barcode === product.barcode);
+  if (existingIndex >= 0) {
+    products[existingIndex] = { ...products[existingIndex], ...newProduct, quantity: products[existingIndex].quantity + product.quantity };
+  } else {
+    products.push(newProduct);
+  }
+  localStorage.setItem('cached_products', JSON.stringify(products));
+  
+  // ПОТОМ пробуем синхронизировать с Firebase (в фоне)
+  retryOperation(
     async () => {
-      console.log('💾 Сохранение товара в Firebase...');
+      console.log('☁️ Синхронизация с Firebase...');
       return saveFirebaseProductBase(product, userId);
     },
     {
       maxAttempts: 5,
       initialDelay: 1000,
       onRetry: (attempt, error) => {
-        console.log(`🔄 Повторная попытка сохранения товара "${product.name}" (попытка ${attempt})...`, error);
+        console.log(`🔄 Повторная попытка синхронизации "${product.name}" (попытка ${attempt})...`);
       }
     }
-  );
+  ).catch(err => {
+    console.warn('⚠️ Не удалось синхронизировать с Firebase, данные сохранены локально:', err);
+  });
+  
+  return newProduct;
 };
 
 export const getAllProducts = async (): Promise<StoredProduct[]> => {
@@ -90,7 +182,19 @@ export const getAllProducts = async (): Promise<StoredProduct[]> => {
 };
 
 export const getExpiringProducts = async (daysBeforeExpiry: number = 3): Promise<StoredProduct[]> => {
-  return getFirebaseExpiringProducts(daysBeforeExpiry);
+  try {
+    return await getFirebaseExpiringProducts(daysBeforeExpiry);
+  } catch (error) {
+    console.warn('⚠️ Firebase недоступен, проверяем локально...');
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      const products: StoredProduct[] = JSON.parse(cached);
+      const now = new Date();
+      const limitDate = new Date(now.getTime() + daysBeforeExpiry * 24 * 60 * 60 * 1000);
+      return products.filter(p => p.expiryDate && new Date(p.expiryDate) <= limitDate);
+    }
+    return [];
+  }
 };
 
 export const isProductExpired = (product: StoredProduct): boolean => {
@@ -101,14 +205,50 @@ export const isProductExpired = (product: StoredProduct): boolean => {
 };
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
-  return updateFirebaseProductQuantity(barcode, quantityChange);
+  // Обновляем локальный кэш
+  const cached = localStorage.getItem('cached_products');
+  if (cached) {
+    const products: StoredProduct[] = JSON.parse(cached);
+    const index = products.findIndex(p => p.barcode === barcode);
+    if (index >= 0) {
+      products[index].quantity += quantityChange;
+      localStorage.setItem('cached_products', JSON.stringify(products));
+    }
+  }
+  
+  // Синхронизируем с Firebase
+  try {
+    await updateFirebaseProductQuantity(barcode, quantityChange);
+  } catch (error) {
+    console.warn('⚠️ Не удалось синхронизировать количество с Firebase:', error);
+  }
 };
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
-  return removeFirebaseExpiredProduct(barcode);
+  // Удаляем из локального кэша
+  const cached = localStorage.getItem('cached_products');
+  let removedProduct: StoredProduct | null = null;
+  
+  if (cached) {
+    const products: StoredProduct[] = JSON.parse(cached);
+    const index = products.findIndex(p => p.barcode === barcode);
+    if (index >= 0) {
+      removedProduct = products[index];
+      products.splice(index, 1);
+      localStorage.setItem('cached_products', JSON.stringify(products));
+    }
+  }
+  
+  // Синхронизируем с Firebase
+  try {
+    return await removeFirebaseExpiredProduct(barcode);
+  } catch (error) {
+    console.warn('⚠️ Не удалось удалить из Firebase:', error);
+    return removedProduct;
+  }
 };
 
-// === ДОПОЛНИТЕЛЬНЫЕ FIREBASE ФУНКЦИИ ДЛЯ КОМПОНЕНТОВ ===
+// === ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ КОМПОНЕНТОВ (с локальным кэшем) ===
 
 // Upsert товара (вставка или обновление по штрихкоду)
 export const upsertProduct = async (
@@ -125,6 +265,60 @@ export const upsertProduct = async (
     created_by?: string;
   }
 ): Promise<{ success: boolean; isUpdate: boolean; newQuantity?: number }> => {
+  // СНАЧАЛА обновляем локальный кэш
+  const cached = localStorage.getItem('cached_products');
+  const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
+  const existingIndex = products.findIndex(p => p.barcode === productData.barcode);
+  
+  let newQuantity = productData.quantity;
+  let isUpdate = false;
+  
+  if (existingIndex >= 0) {
+    isUpdate = true;
+    newQuantity = products[existingIndex].quantity + productData.quantity;
+    products[existingIndex] = {
+      ...products[existingIndex],
+      name: productData.name,
+      category: productData.category || products[existingIndex].category,
+      supplier: productData.supplier || products[existingIndex].supplier,
+      purchasePrice: productData.purchase_price,
+      retailPrice: productData.sale_price,
+      quantity: newQuantity,
+      expiryDate: productData.expiry_date || products[existingIndex].expiryDate,
+      lastUpdated: new Date().toISOString()
+    };
+  } else {
+    const newProduct: StoredProduct = {
+      id: crypto.randomUUID(),
+      barcode: productData.barcode,
+      name: productData.name,
+      category: productData.category || '',
+      supplier: productData.supplier || undefined,
+      unit: 'шт',
+      purchasePrice: productData.purchase_price,
+      retailPrice: productData.sale_price,
+      quantity: productData.quantity,
+      expiryDate: productData.expiry_date || undefined,
+      paymentType: 'full',
+      paidAmount: productData.purchase_price * productData.quantity,
+      debtAmount: 0,
+      addedBy: productData.created_by || '',
+      photos: [],
+      lastUpdated: new Date().toISOString(),
+      priceHistory: [{
+        date: new Date().toISOString(),
+        purchasePrice: productData.purchase_price,
+        retailPrice: productData.sale_price,
+        changedBy: productData.created_by || ''
+      }]
+    };
+    products.push(newProduct);
+  }
+  
+  localStorage.setItem('cached_products', JSON.stringify(products));
+  console.log('💾 Товар сохранен локально:', productData.barcode);
+  
+  // ПОТОМ синхронизируем с Firebase (в фоне)
   try {
     const existing = await findFirebaseProductByBarcode(productData.barcode);
     
@@ -137,7 +331,6 @@ export const upsertProduct = async (
       
       if (!snapshot.empty) {
         const docRef = snapshot.docs[0].ref;
-        const newQuantity = existing.quantity + productData.quantity;
         
         await updateDoc(docRef, {
           name: productData.name,
@@ -181,8 +374,8 @@ export const upsertProduct = async (
     
     return { success: true, isUpdate: false, newQuantity: productData.quantity };
   } catch (error) {
-    console.error('❌ Ошибка upsert товара:', error);
-    return { success: false, isUpdate: false };
+    console.warn('⚠️ Firebase недоступен, данные сохранены локально:', error);
+    return { success: true, isUpdate, newQuantity };
   }
 };
 

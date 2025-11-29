@@ -111,7 +111,8 @@ export const deleteQueueItem = async (id: string): Promise<void> => {
 
 export const subscribeToQueue = (callback: (items: QueueProduct[]) => void): (() => void) => {
   getQueueProducts().then(callback);
-  const interval = setInterval(() => getQueueProducts().then(callback), 10000);
+  // Синхронизация каждые 5 секунд для быстрого обновления между устройствами
+  const interval = setInterval(() => getQueueProducts().then(callback), 5000);
   return () => clearInterval(interval);
 };
 

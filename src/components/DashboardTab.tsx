@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft, RefreshCw, Wifi, WifiOff, Bell } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,6 +8,8 @@ import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useProductsSync } from '@/hooks/useProductsSync';
+import { useAdminNotifications } from '@/hooks/useAdminNotifications';
+import { Badge } from '@/components/ui/badge';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -17,6 +19,9 @@ export const DashboardTab = () => {
   
   // MySQL realtime синхронизация товаров
   const { products: firebaseProducts, loading: firebaseLoading, refetch } = useProductsSync();
+  
+  // Уведомления о новых товарах в очереди (для админа)
+  const { queueCount, newItems } = useAdminNotifications();
 
   // Перезагрузка при изменении Firebase товаров
   useEffect(() => {
@@ -133,6 +138,14 @@ export const DashboardTab = () => {
       description: `${stats.lowStockCount} товаров с низким остатком`,
       icon: Package,
       color: 'text-secondary'
+    },
+    {
+      title: 'В очереди',
+      value: queueCount.toString(),
+      description: 'Товаров ожидают проверки',
+      icon: Bell,
+      color: queueCount > 0 ? 'text-warning' : 'text-muted-foreground',
+      highlight: queueCount > 0
     },
     {
       title: 'Продажи сегодня',

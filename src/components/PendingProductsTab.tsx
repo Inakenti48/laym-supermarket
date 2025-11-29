@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Save, Trash2 } from 'lucide-react';
+import { Package, Save, Trash2, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
@@ -227,71 +227,104 @@ export const PendingProductsTab = () => {
     }
   };
 
-  const handleTransferAllReady = async (autoMode = false) => {
-    if (totalCount === 0) {
-      if (!autoMode) toast.info('Очередь пуста');
+  // Одобрить все - массовый перенос товаров с ценами
+  const handleApproveAll = async () => {
+    if (pendingProducts.length === 0) {
+      toast.info('Очередь пуста');
       return;
     }
 
-    if (!autoMode) {
-      const confirmTransfer = window.confirm(
-        `Запустить перенос ВСЕХ готовых товаров?\n\n` +
-        `Незаполненные товары останутся в очереди.`
-      );
+    // Фильтруем товары с заполненными ценами
+    const readyProducts = pendingProducts.filter(p =>
+      p.barcode && p.name && p.purchasePrice && p.retailPrice &&
+      (p.frontPhoto || p.barcodePhoto || p.photos.length > 0)
+    );
 
-      if (!confirmTransfer) return;
+    if (readyProducts.length === 0) {
+      toast.error('Нет товаров с заполненными ценами для переноса');
+      return;
     }
 
-    try {
-      if (!autoMode) {
-        toast.loading('🔄 Запуск переноса...', { id: 'transfer' });
-      }
-      
-      console.log('🚀 Запуск переноса готовых товаров...');
-      
-      const queueItems = await getQueueProducts();
+    const confirmApprove = window.confirm(
+      `Одобрить и перенести ${readyProducts.length} товаров с ценами?\n\n` +
+      `Товары без цен останутся в очереди.`
+    );
 
-      if (!queueItems || queueItems.length === 0) {
-        toast.info('Нет товаров для переноса', { id: 'transfer' });
-        return;
-      }
+    if (!confirmApprove) return;
+
+    try {
+      toast.loading('🔄 Перенос товаров...', { id: 'approve-all' });
 
       const loginUser = await getCurrentLoginUser();
       const userId = loginUser?.id;
-      
+
       if (!userId) {
-        toast.error('Ошибка: не удалось определить пользователя', { id: 'transfer' });
+        toast.error('Не удалось получить ID пользователя', { id: 'approve-all' });
         return;
       }
 
-      let transferred = 0;
-      let skipped = 0;
+      let successCount = 0;
+      let errorCount = 0;
 
-      for (const item of queueItems) {
-        // Проверяем, готов ли товар (есть фото)
-        const isReady = item.barcode && item.product_name && 
-                       (item.front_photo || item.barcode_photo || item.image_url);
+      for (const product of readyProducts) {
+        try {
+          const supplier = suppliers.find(s => s.name === product.supplier);
 
-        if (!isReady) {
-          skipped++;
-          continue;
+          const productData = {
+            barcode: product.barcode,
+            name: product.name,
+            category: product.category || 'Без категории',
+            purchasePrice: parseFloat(product.purchasePrice),
+            retailPrice: parseFloat(product.retailPrice),
+            quantity: parseFloat(product.quantity) || 1,
+            unit: 'шт' as const,
+            expiryDate: product.expiryDate || undefined,
+            supplier: product.supplier,
+            supplierPhone: supplier?.phone,
+            paymentType: 'full' as const,
+            paidAmount: parseFloat(product.purchasePrice) * (parseFloat(product.quantity) || 1),
+            debtAmount: 0,
+            addedBy: userId,
+            photos: [],
+          };
+
+          await saveProduct(productData, userId);
+
+          // Сохраняем фотографии
+          const allPhotos = [
+            ...(product.frontPhoto ? [product.frontPhoto] : []),
+            ...(product.barcodePhoto ? [product.barcodePhoto] : []),
+            ...product.photos
+          ];
+
+          for (const photo of allPhotos) {
+            await saveProductImage(product.barcode, product.name, photo, userId);
+          }
+
+          await deleteQueueItem(product.id);
+          successCount++;
+        } catch (error) {
+          console.error(`Ошибка переноса товара ${product.name}:`, error);
+          errorCount++;
         }
-
-        // Для переноса нужны цены - пропускаем если их нет
-        skipped++;
       }
 
-      setCurrentPage(1);
-      
+      // Обновляем список
+      const items = await getQueueProducts();
+      setTotalCount(items.length);
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+      setPendingProducts(pageItems.map(convertToPendingProduct));
+
+      addLog(`Массовое одобрение: перенесено ${successCount}, ошибок ${errorCount}`);
+
       toast.success(
-        `✅ Перенос завершен!\nПеренесено: ${transferred} | Пропущено: ${skipped}`,
-        { id: 'transfer', duration: 5000 }
+        `✅ Перенесено: ${successCount}${errorCount > 0 ? ` | Ошибок: ${errorCount}` : ''}`,
+        { id: 'approve-all', duration: 5000 }
       );
-      
-      console.log(`✅ Перенос завершен. Перенесено: ${transferred}, Пропущено: ${skipped}`);
     } catch (error: any) {
-      console.error('Ошибка переноса:', error);
-      toast.error('Ошибка при переносе товаров', { id: 'transfer' });
+      console.error('Ошибка массового одобрения:', error);
+      toast.error('Ошибка при переносе товаров', { id: 'approve-all' });
     }
   };
 
@@ -428,15 +461,16 @@ export const PendingProductsTab = () => {
               Очередь товаров ({totalCount})
             </h3>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              onClick={() => handleTransferAllReady()}
-              disabled={totalCount === 0}
+              onClick={handleApproveAll}
+              disabled={pendingProducts.length === 0}
+              className="bg-green-600 hover:bg-green-700"
             >
-              <Save className="h-4 w-4 mr-2" />
-              Перенести готовые
+              <CheckCheck className="h-4 w-4 mr-2" />
+              Одобрить все
             </Button>
             <Button
               variant="outline"

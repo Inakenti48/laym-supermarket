@@ -32,7 +32,8 @@ export const DashboardTab = () => {
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
-    totalProducts: 0,
+    totalProductsCount: 0, // Количество уникальных товаров
+    totalQuantity: 0, // Общее количество штук
     totalPurchaseCost: 0,
     salesToday: 0,
     activeEmployees: 0,
@@ -53,7 +54,8 @@ export const DashboardTab = () => {
           return; // Ждём загрузки
         }
       
-      const totalProducts = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+      const totalProductsCount = products.length; // Уникальных товаров в базе
+      const totalQuantity = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
       const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchasePrice || 0) * (p.quantity || 0)), 0);
 
       // Подсчет товаров с низким остатком (менее 10 шт)
@@ -90,7 +92,8 @@ export const DashboardTab = () => {
 
         setStats({
           totalRevenue,
-          totalProducts,
+          totalProductsCount,
+          totalQuantity,
           totalPurchaseCost,
           salesToday,
           activeEmployees,
@@ -133,9 +136,9 @@ export const DashboardTab = () => {
       color: 'text-primary'
     },
     {
-      title: 'Товаров в наличии',
-      value: stats.totalProducts.toString(),
-      description: `${stats.lowStockCount} товаров с низким остатком`,
+      title: 'Товаров в базе',
+      value: stats.totalProductsCount.toString(),
+      description: `Всего ${stats.totalQuantity} шт. на складе`,
       icon: Package,
       color: 'text-secondary'
     },

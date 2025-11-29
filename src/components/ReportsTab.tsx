@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PhotoReportsTab } from './PhotoReportsTab';
 import { Card } from '@/components/ui/card';
-import { FileText, Image, TrendingUp, X } from 'lucide-react';
+import { FileText, Image, TrendingUp, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { getAllProducts } from '@/lib/storage';
 import { getSuppliers } from '@/lib/suppliersDb';
+import { getPendingProducts } from '@/lib/mysqlDatabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
 import {
   Table,
   TableBody,
@@ -21,27 +23,36 @@ export const ReportsTab = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [products, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        console.log('📊 Загрузка данных для отчётов...');
-        const [productsData, suppliersData] = await Promise.all([
-          getAllProducts(),
-          getSuppliers()
-        ]);
-        console.log(`✅ Загружено товаров: ${productsData.length}, поставщиков: ${suppliersData.length}`);
-        setProducts(productsData);
-        setSuppliers(suppliersData);
-      } catch (error) {
-        console.error('❌ Ошибка загрузки данных отчётов:', error);
-      } finally {
-        setLoading(false);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      console.log('📊 Загрузка данных для отчётов...');
+      const [productsData, suppliersData, pendingData] = await Promise.all([
+        getAllProducts(),
+        getSuppliers(),
+        getPendingProducts()
+      ]);
+      console.log(`✅ Загружено: товаров=${productsData.length}, очередь=${pendingData.length}, поставщиков=${suppliersData.length}`);
+      setProducts(productsData);
+      setSuppliers(suppliersData);
+      setPendingCount(pendingData.length);
+      
+      if (productsData.length === 0 && pendingData.length > 0) {
+        toast.info(`Товары в очереди: ${pendingData.length}. Утвердите их в разделе "Очередь товаров"`, { duration: 5000 });
       }
-    };
+    } catch (error) {
+      console.error('❌ Ошибка загрузки данных отчётов:', error);
+      toast.error('Ошибка загрузки данных');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadData();
 
     // MySQL polling для обновления данных
@@ -119,6 +130,29 @@ export const ReportsTab = () => {
             </div>
           ) : (
             <>
+          {/* Предупреждение если товары в очереди */}
+          {products.length === 0 && pendingCount > 0 && (
+            <Card className="p-4 border-warning bg-warning/10 mb-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-warning" />
+                <div>
+                  <p className="font-medium">Товары ожидают утверждения</p>
+                  <p className="text-sm text-muted-foreground">
+                    {pendingCount} товаров в очереди. Перейдите в раздел "Очередь товаров" для утверждения.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Кнопка обновления */}
+          <div className="flex justify-end mb-4">
+            <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Обновить
+            </Button>
+          </div>
+
           {/* Общая статистика */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">

@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Фиксированные пользователи
-const USERS = [
+// Фиксированные системные пользователи (fallback)
+const SYSTEM_USERS = [
   { login: '8080', role: 'admin', name: 'Администратор', user_id: '00000000-0000-0000-0000-000000000001' },
   { login: '1020', role: 'cashier1', name: 'Кассир 1', user_id: '00000000-0000-0000-0000-000000000002' },
   { login: '2030', role: 'cashier2', name: 'Кассир 2', user_id: '00000000-0000-0000-0000-000000000003' },
@@ -17,6 +18,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  let client: Client | null = null;
 
   try {
     const { loginHash } = await req.json();
@@ -30,13 +33,62 @@ serve(async (req) => {
 
     console.log('🔐 Проверка входа');
 
-    // Ищем пользователя
+    // Сначала проверяем системных пользователей
     let foundUser = null;
-    for (const user of USERS) {
+    for (const user of SYSTEM_USERS) {
       const userHash = await hashSHA256(user.login);
       if (userHash === loginHash) {
-        foundUser = user;
+        foundUser = { ...user, source: 'system' };
         break;
+      }
+    }
+
+    // Если не нашли в системных - ищем в MySQL
+    if (!foundUser) {
+      try {
+        client = await new Client().connect({
+          hostname: Deno.env.get('MYSQL_HOST'),
+          port: parseInt(Deno.env.get('MYSQL_PORT') || '3306'),
+          username: Deno.env.get('MYSQL_USER'),
+          password: Deno.env.get('MYSQL_PASSWORD'),
+          db: Deno.env.get('MYSQL_DATABASE'),
+        });
+
+        // Получаем всех активных сотрудников с логинами
+        const employees = await client.query(
+          'SELECT id, name, role, login FROM employees WHERE login IS NOT NULL AND active = true'
+        );
+
+        for (const emp of employees) {
+          if (emp.login) {
+            const empHash = await hashSHA256(emp.login);
+            if (empHash === loginHash) {
+              // Маппинг ролей сотрудников
+              let role = 'warehouse';
+              if (emp.role === 'admin' || emp.role === 'администратор') role = 'admin';
+              else if (emp.role === 'cashier' || emp.role === 'кассир' || emp.role === 'cashier1') role = 'cashier1';
+              else if (emp.role === 'cashier2' || emp.role === 'кассир 2') role = 'cashier2';
+              else if (emp.role === 'warehouse' || emp.role === 'склад') role = 'warehouse';
+
+              foundUser = {
+                login: emp.login,
+                role: role,
+                name: emp.name,
+                user_id: emp.id,
+                source: 'mysql'
+              };
+              break;
+            }
+          }
+        }
+
+        await client.close();
+        client = null;
+      } catch (dbError) {
+        console.error('⚠️ MySQL недоступен, используем только системных пользователей:', dbError);
+        if (client) {
+          try { await client.close(); } catch {}
+        }
       }
     }
 
@@ -48,9 +100,8 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Логин верный:', foundUser.name);
+    console.log('✅ Логин верный:', foundUser.name, 'роль:', foundUser.role, 'источник:', foundUser.source);
 
-    // Генерируем ID сессии без обращения к БД
     const sessionId = crypto.randomUUID();
 
     return new Response(
@@ -67,6 +118,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('💥 Ошибка:', error);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
     return new Response(
       JSON.stringify({ success: false, error: 'Ошибка сервера' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

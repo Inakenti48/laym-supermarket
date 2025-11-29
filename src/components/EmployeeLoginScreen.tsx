@@ -3,8 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User } from 'lucide-react';
+import { User, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getAllEmployees } from '@/lib/mysqlDatabase';
 
 interface Props {
   onLogin: (employeeId: string, employeeName: string) => void;
@@ -13,6 +14,7 @@ interface Props {
 export const EmployeeLoginScreen = ({ onLogin }: Props) => {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!login.trim() || !password.trim()) {
@@ -20,18 +22,27 @@ export const EmployeeLoginScreen = ({ onLogin }: Props) => {
       return;
     }
 
-    // Проверяем в localStorage
-    const employeesAuth = JSON.parse(localStorage.getItem('employees_auth') || '[]');
-    const employee = employeesAuth.find((e: any) => 
-      e.login === login && e.password === password
-    );
+    setIsLoading(true);
 
-    if (employee) {
-      // Используем данные из localStorage
-      onLogin(employee.id, employee.name);
-      toast.success(`Добро пожаловать, ${employee.name}!`);
-    } else {
-      toast.error('Неверный логин или пароль');
+    try {
+      // Получаем сотрудников из MySQL
+      const employees = await getAllEmployees();
+      
+      const employee = employees.find((e: any) => 
+        e.login === login && e.password_hash === password && e.active
+      );
+
+      if (employee) {
+        onLogin(employee.id, employee.name);
+        toast.success(`Добро пожаловать, ${employee.name}!`);
+      } else {
+        toast.error('Неверный логин или пароль');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Ошибка подключения к базе данных');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -54,6 +65,7 @@ export const EmployeeLoginScreen = ({ onLogin }: Props) => {
               onChange={(e) => setLogin(e.target.value)}
               placeholder="Ваш логин"
               autoComplete="username"
+              disabled={isLoading}
             />
           </div>
 
@@ -66,12 +78,20 @@ export const EmployeeLoginScreen = ({ onLogin }: Props) => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Ваш пароль"
               autoComplete="current-password"
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleLogin()}
+              disabled={isLoading}
             />
           </div>
 
-          <Button onClick={handleLogin} className="w-full">
-            Войти
+          <Button onClick={handleLogin} className="w-full" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Вход...
+              </>
+            ) : (
+              'Войти'
+            )}
           </Button>
         </CardContent>
       </Card>

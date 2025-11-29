@@ -3,159 +3,108 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
-import { findProductByBarcode, updateProductQuantity } from '@/lib/storage';
-
-interface CancellationItem {
-  name: string;
-  quantity: number;
-  price: number;
-}
-
-interface CancellationRequest {
-  id: string;
-  product_name: string;
-  barcode: string;
-  status: string;
-  reason: string;
-  quantity: number;
-  requested_by: string;
-  created_at: string;
-  updated_at: string;
-}
+import { updateFirebaseProductQuantity } from '@/lib/firebaseProducts';
+import { 
+  getCancellationRequests, 
+  updateCancellationRequest, 
+  subscribeToCancellations,
+  CancellationRequest,
+  addSystemLog
+} from '@/lib/firebaseCollections';
 
 export const CancellationsTab = () => {
   const currentUser = getCurrentLoginUserSync();
   const [requests, setRequests] = useState<CancellationRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadRequests();
     
-    // Подписка на реалтайм обновления
-    const channel = supabase
-      .channel('cancellation_requests_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'cancellation_requests'
-        },
-        () => {
-          loadRequests();
-        }
-      )
-      .subscribe();
+    // Подписка на realtime обновления
+    const unsubscribe = subscribeToCancellations((data) => {
+      setRequests(data);
+      setLoading(false);
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => unsubscribe();
   }, []);
 
   const loadRequests = async () => {
     try {
-      const { data, error } = await supabase
-        .from('cancellation_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRequests(data || []);
+      const data = await getCancellationRequests();
+      setRequests(data);
     } catch (error: any) {
       console.error('Error loading cancellation requests:', error);
-      toast.error('Ошибка загрузки запросов на отмену');
+      toast.error('Ошибка загрузки заявок');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async (id: string, barcode: string, quantity: number) => {
+  const handleApprove = async (request: CancellationRequest) => {
+    if (!currentUser) return;
+    
+    setProcessingId(request.id);
     try {
-      // Обновляем статус запроса
-      const { error: updateError } = await supabase
-        .from('cancellation_requests')
-        .update({ status: 'approved', updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (updateError) throw updateError;
-
-      // Возвращаем товары в базу Firebase (увеличиваем количество)
-      const product = await findProductByBarcode(barcode);
-
-      if (product) {
-        await updateProductQuantity(barcode, quantity);
+      // Возвращаем товары на склад
+      for (const item of request.items) {
+        await updateFirebaseProductQuantity(item.barcode, item.quantity);
       }
 
-      // Добавляем лог
-      await supabase.from('system_logs').insert({
-        user_id: null,
-        user_name: currentUser?.username || 'Неизвестно',
-        message: `Подтверждена отмена товара: ${barcode} (${quantity} шт)`
+      await updateCancellationRequest(request.id, 'approved');
+
+      await addSystemLog({
+        action: `Заявка на отмену одобрена`,
+        user_id: currentUser.id,
+        user_name: currentUser.username || currentUser.cashierName,
+        details: `Товары: ${request.items.map(i => i.name).join(', ')}`
       });
 
-      toast.success('Отмена товара подтверждена, товары возвращены в базу');
-      loadRequests();
+      toast.success('Заявка одобрена, товары возвращены на склад');
     } catch (error: any) {
-      console.error('Error approving cancellation:', error);
-      toast.error('Ошибка подтверждения отмены');
+      console.error('Error approving request:', error);
+      toast.error('Ошибка при одобрении заявки');
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  const handleReject = async (id: string) => {
+  const handleReject = async (request: CancellationRequest) => {
+    if (!currentUser) return;
+    
+    setProcessingId(request.id);
     try {
-      const { error } = await supabase
-        .from('cancellation_requests')
-        .update({ status: 'rejected', updated_at: new Date().toISOString() })
-        .eq('id', id);
+      await updateCancellationRequest(request.id, 'rejected');
 
-      if (error) throw error;
-
-      // Добавляем лог
-      await supabase.from('system_logs').insert({
-        user_id: null,
-        user_name: currentUser?.username || 'Неизвестно',
-        message: `Отклонена отмена товара`
+      await addSystemLog({
+        action: `Заявка на отмену отклонена`,
+        user_id: currentUser.id,
+        user_name: currentUser.username || currentUser.cashierName,
+        details: `Кассир: ${request.cashier}`
       });
 
-      toast.success('Отмена товара отклонена');
-      loadRequests();
+      toast.info('Заявка отклонена');
     } catch (error: any) {
-      console.error('Error rejecting cancellation:', error);
-      toast.error('Ошибка отклонения отмены');
+      console.error('Error rejecting request:', error);
+      toast.error('Ошибка при отклонении заявки');
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  const handleApproveAll = async () => {
-    const pending = requests.filter(r => r.status === 'pending');
-    
-    try {
-      for (const request of pending) {
-        await handleApprove(request.id, request.barcode, request.quantity);
-      }
-      toast.success(`Подтверждено отмен: ${pending.length}`);
-    } catch (error: any) {
-      console.error('Error approving all:', error);
-      toast.error('Ошибка массового подтверждения');
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800"><Clock className="h-3 w-3" /> Ожидает</span>;
+      case 'approved':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-green-100 text-green-800"><CheckCircle2 className="h-3 w-3" /> Одобрено</span>;
+      case 'rejected':
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-100 text-red-800"><XCircle className="h-3 w-3" /> Отклонено</span>;
+      default:
+        return null;
     }
-  };
-
-  const pendingRequests = requests.filter(r => r.status === 'pending');
-  const processedRequests = requests.filter(r => r.status !== 'pending');
-
-  const getTimeRemaining = (createdAt: string): string => {
-    const now = new Date().getTime();
-    const requestTime = new Date(createdAt).getTime();
-    const elapsed = now - requestTime;
-    const remaining = (24 * 60 * 60 * 1000) - elapsed;
-    
-    if (remaining <= 0) return 'Истёк';
-    
-    const hours = Math.floor(remaining / (60 * 60 * 1000));
-    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
-    
-    return `${hours}ч ${minutes}м`;
   };
 
   if (loading) {
@@ -166,109 +115,107 @@ export const CancellationsTab = () => {
     );
   }
 
+  const pendingRequests = requests.filter(r => r.status === 'pending');
+  const processedRequests = requests.filter(r => r.status !== 'pending');
+
   return (
-    <div className="p-4 max-w-6xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Запросы на отмену товаров</h2>
-        {pendingRequests.length > 0 && (
-          <Button onClick={handleApproveAll} size="sm">
-            Подтвердить все ({pendingRequests.length})
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Clock className="w-4 h-4" />
-          В ожидании ({pendingRequests.length})
+    <div className="space-y-6">
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Clock className="h-5 w-5 text-yellow-500" />
+          Ожидающие рассмотрения ({pendingRequests.length})
         </h3>
+
         {pendingRequests.length === 0 ? (
-          <Card className="p-4 text-center text-sm text-muted-foreground">
-            Нет запросов на отмену
-          </Card>
+          <div className="text-center py-8 text-muted-foreground">
+            Нет заявок на рассмотрение
+          </div>
         ) : (
-          pendingRequests.map((request) => (
-            <Card key={request.id} className="p-3 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Товар: {request.product_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Штрихкод: {request.barcode}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Запрос: {new Date(request.created_at).toLocaleString('ru-RU')}
-                  </p>
-                  <p className="text-xs text-amber-600 font-medium">
-                    Истекает через: {getTimeRemaining(request.created_at)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1 text-xs bg-muted/50 p-2 rounded">
-                <p className="font-medium">Детали отмены:</p>
-                <div className="flex justify-between">
-                  <span>Количество:</span>
-                  <span>{request.quantity} шт</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Причина:</span>
-                  <span>{request.reason}</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => handleApprove(request.id, request.barcode, request.quantity)}
-                  className="flex-1"
-                  size="sm"
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                  Подтвердить отмену
-                </Button>
-                <Button
-                  onClick={() => handleReject(request.id)}
-                  variant="destructive"
-                  className="flex-1"
-                  size="sm"
-                >
-                  <XCircle className="w-4 h-4 mr-1" />
-                  Отклонить
-                </Button>
-              </div>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {processedRequests.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Обработанные</h3>
-          {processedRequests.map((request) => (
-            <Card key={request.id} className="p-3 bg-muted/50">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    {request.status === 'approved' ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-red-600" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium">{request.product_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {request.status === 'approved' ? 'Подтверждено' : 'Отклонено'}
-                      </p>
+          <div className="space-y-4">
+            {pendingRequests.map((request) => (
+              <Card key={request.id} className="p-4 border-yellow-200">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <div className="font-medium">Заявка от {request.cashier}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(request.created_at).toLocaleString('ru-RU')}
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-2 pl-6">
-                    Количество: {request.quantity} шт | Штрихкод: {request.barcode}
+                  {getStatusBadge(request.status)}
+                </div>
+
+                <div className="mb-3">
+                  <div className="text-sm font-medium mb-2">Товары:</div>
+                  <div className="space-y-1">
+                    {request.items.map((item, idx) => (
+                      <div key={idx} className="text-sm flex justify-between">
+                        <span>{item.name} x{item.quantity}</span>
+                        <span className="text-muted-foreground">{item.price}₽</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleApprove(request)}
+                    disabled={processingId === request.id}
+                    size="sm"
+                    className="flex-1"
+                  >
+                    {processingId === request.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Одобрить
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => handleReject(request)}
+                    disabled={processingId === request.id}
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Отклонить
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">
+          История заявок ({processedRequests.length})
+        </h3>
+
+        {processedRequests.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            История пуста
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {processedRequests.map((request) => (
+              <div key={request.id} className="p-3 bg-muted/50 rounded-lg flex justify-between items-center">
+                <div>
+                  <div className="text-sm font-medium">
+                    {request.items.map(i => i.name).join(', ')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {request.cashier} • {new Date(request.created_at).toLocaleString('ru-RU')}
+                  </div>
+                </div>
+                {getStatusBadge(request.status)}
               </div>
-            </Card>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

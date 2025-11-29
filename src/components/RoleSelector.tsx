@@ -96,10 +96,10 @@ export const RoleSelector = ({ onSelectRole, onEmployeeLogin }: RoleSelectorProp
             disabled={initLoading}
             variant="ghost"
             size="sm"
-            className="w-full text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+            className="w-full text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
           >
             <Flame className="h-4 w-4 mr-2" />
-            {initLoading ? 'Создание...' : 'Инициализировать Firebase'}
+            {initLoading ? 'Создание...' : 'Инициализировать MySQL'}
           </Button>
         </div>
       </div>

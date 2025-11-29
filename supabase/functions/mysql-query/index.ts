@@ -698,6 +698,217 @@ serve(async (req) => {
         result = { success: true };
         break;
 
+      // ==================== SCAN QUEUE (concurrent scanning) ====================
+      case 'init_scan_queue_table':
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS scan_queue (
+            id VARCHAR(36) PRIMARY KEY,
+            barcode VARCHAR(255),
+            name VARCHAR(500),
+            purchase_price DECIMAL(10,2) DEFAULT 0,
+            sale_price DECIMAL(10,2) DEFAULT 0,
+            quantity INT DEFAULT 1,
+            category VARCHAR(255),
+            supplier VARCHAR(255),
+            expiry_date DATE,
+            image_url TEXT,
+            scanned_by VARCHAR(255) NOT NULL,
+            device_id VARCHAR(100),
+            status ENUM('pending', 'processing', 'completed', 'error') DEFAULT 'pending',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP NULL,
+            INDEX idx_status (status),
+            INDEX idx_scanned_by (scanned_by),
+            INDEX idx_created (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        result = { success: true, message: 'Scan queue table created' };
+        break;
+
+      case 'add_to_scan_queue':
+        const scanQueueId = crypto.randomUUID();
+        const sq = data;
+        await client.execute(
+          `INSERT INTO scan_queue (id, barcode, name, purchase_price, sale_price, quantity, category, supplier, expiry_date, image_url, scanned_by, device_id, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+          [scanQueueId, sq.barcode || null, sq.name || null, sq.purchase_price || 0, sq.sale_price || 0, sq.quantity || 1, sq.category || null, sq.supplier || null, sq.expiry_date || null, sq.image_url || null, sq.scanned_by, sq.device_id || null]
+        );
+        result = { success: true, data: { id: scanQueueId } };
+        break;
+
+      case 'get_scan_queue':
+        const statusFilter = data?.status || 'pending';
+        const scanQueue = await client.query(
+          'SELECT * FROM scan_queue WHERE status = ? ORDER BY created_at ASC LIMIT 100',
+          [statusFilter]
+        );
+        result = { success: true, data: scanQueue };
+        break;
+
+      case 'get_all_scan_queue':
+        const allScanQueue = await client.query(
+          'SELECT * FROM scan_queue ORDER BY created_at DESC LIMIT 200'
+        );
+        result = { success: true, data: allScanQueue };
+        break;
+
+      case 'process_scan_queue':
+        // Атомарно захватываем следующий элемент очереди для обработки
+        await client.execute('START TRANSACTION');
+        try {
+          // Получаем и блокируем первый pending элемент
+          const [nextItem]: any[] = await client.query(
+            "SELECT * FROM scan_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE"
+          );
+          
+          if (!nextItem) {
+            await client.execute('COMMIT');
+            result = { success: true, data: null, message: 'No pending items' };
+            break;
+          }
+
+          // Помечаем как processing
+          await client.execute(
+            "UPDATE scan_queue SET status = 'processing' WHERE id = ?",
+            [nextItem.id]
+          );
+
+          // Добавляем товар в products
+          const newProductId = crypto.randomUUID();
+          try {
+            await client.execute(
+              `INSERT INTO products (id, barcode, name, purchase_price, sale_price, quantity, category, image_url, expiry_date, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE
+               quantity = quantity + VALUES(quantity),
+               name = COALESCE(VALUES(name), name),
+               purchase_price = COALESCE(VALUES(purchase_price), purchase_price),
+               sale_price = COALESCE(VALUES(sale_price), sale_price)`,
+              [newProductId, nextItem.barcode, nextItem.name, nextItem.purchase_price, nextItem.sale_price, nextItem.quantity, nextItem.category, nextItem.image_url, nextItem.expiry_date, nextItem.scanned_by]
+            );
+
+            // Помечаем как completed
+            await client.execute(
+              "UPDATE scan_queue SET status = 'completed', processed_at = NOW() WHERE id = ?",
+              [nextItem.id]
+            );
+
+            await client.execute('COMMIT');
+            result = { success: true, data: { processed: nextItem, productId: newProductId } };
+          } catch (insertError: any) {
+            // Ошибка при вставке - помечаем как error
+            await client.execute(
+              "UPDATE scan_queue SET status = 'error', error_message = ? WHERE id = ?",
+              [insertError.message, nextItem.id]
+            );
+            await client.execute('COMMIT');
+            result = { success: false, error: insertError.message, data: { item: nextItem } };
+          }
+        } catch (txError) {
+          await client.execute('ROLLBACK');
+          throw txError;
+        }
+        break;
+
+      case 'process_all_scan_queue':
+        // Обрабатываем все pending элементы по очереди
+        let processed = 0;
+        let errors = 0;
+        
+        while (true) {
+          await client.execute('START TRANSACTION');
+          try {
+            const [item]: any[] = await client.query(
+              "SELECT * FROM scan_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE"
+            );
+            
+            if (!item) {
+              await client.execute('COMMIT');
+              break;
+            }
+
+            await client.execute(
+              "UPDATE scan_queue SET status = 'processing' WHERE id = ?",
+              [item.id]
+            );
+
+            try {
+              const prodId = crypto.randomUUID();
+              await client.execute(
+                `INSERT INTO products (id, barcode, name, purchase_price, sale_price, quantity, category, image_url, expiry_date, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                 quantity = quantity + VALUES(quantity),
+                 name = COALESCE(VALUES(name), name),
+                 purchase_price = COALESCE(VALUES(purchase_price), purchase_price),
+                 sale_price = COALESCE(VALUES(sale_price), sale_price)`,
+                [prodId, item.barcode, item.name, item.purchase_price, item.sale_price, item.quantity, item.category, item.image_url, item.expiry_date, item.scanned_by]
+              );
+
+              await client.execute(
+                "UPDATE scan_queue SET status = 'completed', processed_at = NOW() WHERE id = ?",
+                [item.id]
+              );
+              processed++;
+            } catch (e: any) {
+              await client.execute(
+                "UPDATE scan_queue SET status = 'error', error_message = ? WHERE id = ?",
+                [e.message, item.id]
+              );
+              errors++;
+            }
+
+            await client.execute('COMMIT');
+          } catch (e) {
+            await client.execute('ROLLBACK');
+            break;
+          }
+        }
+        
+        result = { success: true, data: { processed, errors } };
+        break;
+
+      case 'update_scan_queue_item':
+        const sqUpdates: string[] = [];
+        const sqValues: any[] = [];
+        if (data.barcode !== undefined) { sqUpdates.push('barcode = ?'); sqValues.push(data.barcode); }
+        if (data.name !== undefined) { sqUpdates.push('name = ?'); sqValues.push(data.name); }
+        if (data.purchase_price !== undefined) { sqUpdates.push('purchase_price = ?'); sqValues.push(data.purchase_price); }
+        if (data.sale_price !== undefined) { sqUpdates.push('sale_price = ?'); sqValues.push(data.sale_price); }
+        if (data.quantity !== undefined) { sqUpdates.push('quantity = ?'); sqValues.push(data.quantity); }
+        if (data.category !== undefined) { sqUpdates.push('category = ?'); sqValues.push(data.category); }
+        if (data.status !== undefined) { sqUpdates.push('status = ?'); sqValues.push(data.status); }
+        if (sqUpdates.length > 0) {
+          sqValues.push(data.id);
+          await client.execute(`UPDATE scan_queue SET ${sqUpdates.join(', ')} WHERE id = ?`, sqValues);
+        }
+        result = { success: true };
+        break;
+
+      case 'delete_scan_queue_item':
+        await client.execute('DELETE FROM scan_queue WHERE id = ?', [data.id]);
+        result = { success: true };
+        break;
+
+      case 'clear_completed_scan_queue':
+        await client.execute("DELETE FROM scan_queue WHERE status IN ('completed', 'error') AND created_at < DATE_SUB(NOW(), INTERVAL 1 DAY)");
+        result = { success: true };
+        break;
+
+      case 'get_scan_queue_stats':
+        const stats = await client.query(`
+          SELECT 
+            status, 
+            COUNT(*) as count,
+            COUNT(DISTINCT scanned_by) as users
+          FROM scan_queue 
+          WHERE created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)
+          GROUP BY status
+        `);
+        result = { success: true, data: stats };
+        break;
+
       // ==================== TEST ====================
       case 'test_connection':
         const [testResult] = await client.query('SELECT 1 as test');

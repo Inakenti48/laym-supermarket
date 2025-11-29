@@ -76,40 +76,20 @@ export const InventoryTab = () => {
   const [queueTotal, setQueueTotal] = useState(0);
   const ITEMS_PER_PAGE = 50;
   
-  // Вычисляем права доступа на основе текущей роли (динамически)
-  const canSaveSingle = (userRole === 'admin' || userRole === 'inventory') || (localStorage.getItem('can_save_single') !== 'false');
-  const canSaveQueue = (userRole === 'admin' || userRole === 'inventory') || (localStorage.getItem('can_save_queue') !== 'false');
+  // Вычисляем права доступа на основе текущей роли
+  const canSaveSingle = userRole === 'admin' || userRole === 'inventory';
+  const canSaveQueue = userRole === 'admin' || userRole === 'inventory';
 
-  const [currentProduct, setCurrentProduct] = useState(() => {
-    const saved = localStorage.getItem('inventory_form_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return {
-          barcode: '',
-          name: '',
-          category: '',
-          purchasePrice: '',
-          retailPrice: '',
-          quantity: '',
-          unit: 'шт',
-          expiryDate: '',
-          supplier: '',
-        };
-      }
-    }
-    return {
-      barcode: '',
-      name: '',
-      category: '',
-      purchasePrice: '',
-      retailPrice: '',
-      quantity: '',
-      unit: 'шт',
-      expiryDate: '',
-      supplier: '',
-    };
+  const [currentProduct, setCurrentProduct] = useState({
+    barcode: '',
+    name: '',
+    category: '',
+    purchasePrice: '',
+    retailPrice: '',
+    quantity: '',
+    unit: 'шт',
+    expiryDate: '',
+    supplier: '',
   });
 
   // Функция автоопределения категории по названию товара
@@ -158,11 +138,6 @@ export const InventoryTab = () => {
     
     return 'Другое';
   };
-
-  // Сохраняем состояние формы при изменении
-  useEffect(() => {
-    localStorage.setItem('inventory_form_data', JSON.stringify(currentProduct));
-  }, [currentProduct]);
 
   // Автозаполнение категории при изменении названия
   useEffect(() => {
@@ -268,7 +243,6 @@ export const InventoryTab = () => {
         setTempFrontPhoto('');
         setTempBarcodePhoto('');
         setSuggestedProduct(null);
-        localStorage.removeItem('inventory_form_data');
 
       } catch (error: any) {
         console.error('❌ Ошибка автосохранения:', error);
@@ -393,7 +367,6 @@ export const InventoryTab = () => {
         setTempFrontPhoto('');
         setTempBarcodePhoto('');
         setSuggestedProduct(null);
-        localStorage.removeItem('inventory_form_data');
 
       } catch (error: any) {
         console.error('❌ Ошибка добавления в очередь:', error);
@@ -457,9 +430,6 @@ export const InventoryTab = () => {
     unit: currentProduct.unit,
     expiryDate: currentProduct.expiryDate
   }, isAdmin);
-
-  // Подписка на изменения формы отключена (Supabase таблица убрана)
-  // Синхронизация форм теперь через localStorage
 
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -783,7 +753,6 @@ export const InventoryTab = () => {
           setPhotos([]);
           setTempFrontPhoto('');
           setTempBarcodePhoto('');
-          localStorage.removeItem('inventory_form_data');
           
           addLog(`AI-сканирование: ${barcodeData.name || sanitizedBarcode} - добавлен в очередь (без цен)`);
           return;
@@ -1027,7 +996,6 @@ export const InventoryTab = () => {
     setTempBarcodePhoto('');
     setCapturedImage('');
     setPhotos([]);
-    localStorage.removeItem('inventory_form_data');
   };
 
   const acceptSuggestion = () => {
@@ -1498,7 +1466,6 @@ export const InventoryTab = () => {
       setTempFrontPhoto('');
       setTempBarcodePhoto('');
       setSuggestedProduct(null);
-      localStorage.removeItem('inventory_form_data');
       
     } catch (error: any) {
       console.error('❌ КРИТИЧЕСКАЯ ОШИБКА:', error);

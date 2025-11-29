@@ -460,30 +460,54 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       }
       const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      // AI распознавание отключено (Supabase удален)
-      console.log('⚠️ AI распознавание отключено - используем локальный режим');
+      // Вызываем edge функцию fast-scan-product для AI распознавания
+      console.log('🤖 Вызов AI распознавания через Gemini...');
       
-      // Генерируем временный штрихкод если не найден
-      const tempBarcode = `TEMP-${Date.now()}`;
-      const scannedBarcode = tempBarcode;
-      const scannedName = '';
-      const scannedCategory = '';
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frontPhoto: compressedFront,
+          barcodePhoto: compressedBarcode,
+          deviceId,
+          userName
+        })
+      });
       
-      // ЛОКАЛЬНЫЙ поиск цены (избегаем таймаут базы)
-      console.log('🔍 Локальный поиск цены...');
-      let priceInfo = findPriceByBarcode(scannedBarcode);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ AI ошибка:', response.status, errorText);
+        
+        if (response.status === 429) {
+          toast.error('⚠️ Превышен лимит запросов, подождите немного');
+          throw new Error('rate_limit');
+        }
+        throw new Error(`AI error: ${response.status}`);
+      }
+      
+      const aiResult = await response.json();
+      console.log('✅ AI результат:', aiResult);
+      
+      const scannedBarcode = aiResult.barcode || '';
+      const scannedName = aiResult.name || '';
+      const scannedCategory = aiResult.category || '';
+      
+      // Поиск цены в локальном кэше
+      console.log('🔍 Поиск цены для штрихкода:', scannedBarcode);
+      let priceInfo = scannedBarcode ? findPriceByBarcode(scannedBarcode) : null;
       if (!priceInfo && scannedName) {
         priceInfo = findPriceByName(scannedName);
       }
       console.log('💰 Найдена цена:', priceInfo);
       
-      let savedTo = '';
+      let savedTo = aiResult.savedTo || '';
       let saveError = '';
       
-      // FIREBASE РЕЖИМ - сохраняем в Firebase
-      console.log('🔥 Firebase режим: сохранение');
-      
-      if (priceInfo && priceInfo.purchasePrice > 0) {
+      // Если AI уже сохранил - не дублируем
+      if (savedTo) {
+        console.log('✅ AI уже сохранил товар в:', savedTo);
+      } else if (priceInfo && priceInfo.purchasePrice > 0) {
         try {
           const result = await saveOrUpdateLocalProduct({
             barcode: scannedBarcode,
@@ -498,10 +522,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         } catch (err: any) {
           saveError = err.message;
         }
-      } else {
+      } else if (scannedBarcode) {
         try {
           await addToQueue({
-            barcode: scannedBarcode || `auto-${Date.now()}`,
+            barcode: scannedBarcode,
             product_name: scannedName || 'Неизвестный товар',
             category: scannedCategory,
             front_photo: tempFrontPhoto,

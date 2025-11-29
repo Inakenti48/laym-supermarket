@@ -459,61 +459,8 @@ export const InventoryTab = () => {
     expiryDate: currentProduct.expiryDate
   }, isAdmin);
 
-  // Подписка на изменения product_form_state для real-time синхронизации полей
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const channel = supabase
-      .channel('product_form_sync')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'product_form_state'
-        },
-        async (payload) => {
-          console.log('📡 Form state change detected:', payload);
-          
-          // Игнорируем свои собственные изменения
-          if (payload.new && 'user_id' in payload.new && payload.new.user_id === currentUserId) {
-            return;
-          }
-
-          // Применяем изменения из другой сессии ТОЛЬКО если поля заполнены
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const formData = payload.new as any;
-            
-            // Создаем обновление только с заполненными полями
-            const updates: Partial<typeof currentProduct> = {};
-            if (formData.barcode !== null && formData.barcode !== undefined) updates.barcode = formData.barcode;
-            if (formData.name !== null && formData.name !== undefined) updates.name = formData.name;
-            if (formData.category !== null && formData.category !== undefined) updates.category = formData.category;
-            if (formData.purchase_price !== null && formData.purchase_price !== undefined) updates.purchasePrice = formData.purchase_price.toString();
-            if (formData.retail_price !== null && formData.retail_price !== undefined) updates.retailPrice = formData.retail_price.toString();
-            if (formData.quantity !== null && formData.quantity !== undefined) updates.quantity = formData.quantity.toString();
-            if (formData.unit !== null && formData.unit !== undefined) updates.unit = formData.unit;
-            if (formData.expiry_date !== null && formData.expiry_date !== undefined) updates.expiryDate = formData.expiry_date;
-            if (formData.supplier !== null && formData.supplier !== undefined) updates.supplier = formData.supplier;
-
-            // Применяем обновления только если есть что обновлять
-            if (Object.keys(updates).length > 0) {
-              setCurrentProduct(prev => ({
-                ...prev,
-                ...updates
-              }));
-
-              toast.info(`🔄 Данные обновлены из другой сессии (${formData.user_name})`);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isAdmin]);
+  // Подписка на изменения формы отключена (Supabase таблица убрана)
+  // Синхронизация форм теперь через localStorage
 
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -589,75 +536,33 @@ export const InventoryTab = () => {
     };
     loadPendingProducts(queuePage);
 
-    const suppliersChannel = supabase
-      .channel('suppliers_changes_inventory')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers'
-        },
-        () => {
-          loadSuppliers();
-        }
-      )
-      .subscribe();
-
-    // Подписка на реалтайм обновления временных фото товаров
-    const tempPhotosChannel = supabase
-      .channel('temp_photos_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'vremenno_product_foto'
-        },
-        (payload) => {
-          console.log('🔄 New pending product added on another device');
-          const newItem = payload.new as any;
-          const newProduct: PendingProduct = {
-            id: newItem.id,
-            barcode: newItem.barcode,
-            name: newItem.product_name,
-            category: '',
-            purchasePrice: '',
-            retailPrice: '',
-            quantity: '1',
-            unit: 'шт',
-            photos: [newItem.image_url],
-            frontPhoto: newItem.image_url,
-          };
-          setPendingProducts(prev => {
-            // Проверяем, не существует ли уже такой товар
-            if (prev.some(p => p.id === newProduct.id)) {
-              return prev;
-            }
-            return [newProduct, ...prev];
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'vremenno_product_foto'
-        },
-        (payload) => {
-          console.log('🔄 Pending product deleted on another device');
-          const deletedId = payload.old.id;
-          setPendingProducts(prev => prev.filter(p => p.id !== deletedId));
-        }
-      )
-      .subscribe();
+    // Подписка на Firebase очередь вместо Supabase
+    const { subscribeToQueue } = require('@/lib/firebaseCollections');
+    
+    const unsubscribeQueue = subscribeToQueue((items: any[]) => {
+      const from = (queuePage - 1) * ITEMS_PER_PAGE;
+      const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+      const products = pageItems.map((item: any) => ({
+        id: item.id,
+        barcode: item.barcode || '',
+        name: item.product_name || '',
+        category: item.category || '',
+        purchasePrice: '',
+        retailPrice: '',
+        quantity: (item.quantity || 1).toString(),
+        unit: 'шт',
+        photos: item.image_url ? [item.image_url] : [],
+        frontPhoto: item.front_photo || item.image_url,
+        barcodePhoto: item.barcode_photo,
+      }));
+      setPendingProducts(products);
+      setQueueTotal(items.length);
+    });
 
     return () => {
-      supabase.removeChannel(suppliersChannel);
-      supabase.removeChannel(tempPhotosChannel);
+      unsubscribeQueue();
     };
-  }, []);
+  }, [queuePage]);
 
   const handleScan = async (data: { barcode: string; name?: string; category?: string; photoUrl?: string; capturedImage?: string; quantity?: number; frontPhoto?: string; barcodePhoto?: string; expiryDate?: string; manufacturingDate?: string; autoAddToProducts?: boolean; existingProductId?: string } | string) => {
     const barcodeData = typeof data === 'string' ? { barcode: data } : data;

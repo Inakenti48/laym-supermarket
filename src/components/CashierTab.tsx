@@ -44,7 +44,6 @@ import {
   DRAWER_COMMANDS,
   type ReceiptData 
 } from '@/lib/printer';
-import { supabase } from '@/integrations/supabase/client';
 import { addSale } from '@/lib/firebaseCollections';
 
 interface CartItem {
@@ -186,102 +185,81 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Подписка на реалтайм обновления товаров
+  // Подписка на реалтайм обновления товаров через Firebase
   useEffect(() => {
-    if (!cacheReady) return; // Ждем первой загрузки
+    if (!cacheReady) return;
     
-    console.log('📡 Подписываемся на обновления товаров...');
+    console.log('📡 Подписываемся на обновления товаров через Firebase...');
     
-    const channel = supabase
-      .channel('products_changes_cashier')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products'
-        },
-        (payload) => {
-          console.log('🔄 Получено обновление товаров:', payload.eventType);
+    // Используем Firebase onSnapshot для реалтайм обновлений
+    const { collection, onSnapshot } = require('firebase/firestore');
+    const { firebaseDb } = require('@/lib/firebase');
+    
+    const unsubscribe = onSnapshot(
+      collection(firebaseDb, 'products'),
+      (snapshot: any) => {
+        snapshot.docChanges().forEach((change: any) => {
+          const data = change.doc.data();
+          const product = {
+            id: change.doc.id,
+            barcode: data.barcode || '',
+            name: data.name || '',
+            category: data.category || '',
+            purchasePrice: Number(data.purchasePrice) || 0,
+            retailPrice: Number(data.salePrice) || 0,
+            quantity: Number(data.quantity) || 0,
+            unit: data.unit || 'шт',
+            expiryDate: data.expiryDate,
+            supplier: data.supplier,
+            paymentType: data.paymentType || 'full',
+            paidAmount: Number(data.paidAmount) || 0,
+            debtAmount: Number(data.debtAmount) || 0,
+            addedBy: data.addedBy || '',
+            lastUpdated: data.updatedAt || data.createdAt,
+            priceHistory: data.priceHistory || [],
+            photos: data.photos || []
+          };
           
-          // ОПТИМИЗАЦИЯ: Обновляем только измененный товар в кеше
-          if (payload.eventType === 'INSERT' && payload.new) {
-            const newProduct = {
-              id: payload.new.id,
-              barcode: payload.new.barcode,
-              name: payload.new.name,
-              category: payload.new.category,
-              purchasePrice: Number(payload.new.purchase_price),
-              retailPrice: Number(payload.new.sale_price),
-              quantity: payload.new.quantity,
-              unit: payload.new.unit,
-              expiryDate: payload.new.expiry_date,
-              supplier: payload.new.supplier,
-              paymentType: payload.new.payment_type,
-              paidAmount: Number(payload.new.paid_amount),
-              debtAmount: Number(payload.new.debt_amount),
-              addedBy: payload.new.created_by,
-              lastUpdated: payload.new.updated_at,
-              priceHistory: payload.new.price_history || [],
-              photos: []
-            };
-            
-            productsCache.current = [newProduct, ...productsCache.current];
-            if (newProduct.barcode) {
-              productsBarcodeMap.current.set(newProduct.barcode.toLowerCase(), newProduct);
-            }
-            productsNameMap.current.set(newProduct.name.toLowerCase(), newProduct);
-            
-            console.log(`✅ Добавлен товар в кеш: ${newProduct.name}`);
-          } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const updatedProduct = {
-              id: payload.new.id,
-              barcode: payload.new.barcode,
-              name: payload.new.name,
-              category: payload.new.category,
-              purchasePrice: Number(payload.new.purchase_price),
-              retailPrice: Number(payload.new.sale_price),
-              quantity: payload.new.quantity,
-              unit: payload.new.unit,
-              expiryDate: payload.new.expiry_date,
-              supplier: payload.new.supplier,
-              paymentType: payload.new.payment_type,
-              paidAmount: Number(payload.new.paid_amount),
-              debtAmount: Number(payload.new.debt_amount),
-              addedBy: payload.new.created_by,
-              lastUpdated: payload.new.updated_at,
-              priceHistory: payload.new.price_history || [],
-              photos: []
-            };
-            
-            const index = productsCache.current.findIndex(p => p.id === payload.new.id);
-            if (index !== -1) {
-              productsCache.current[index] = updatedProduct;
-              if (updatedProduct.barcode) {
-                productsBarcodeMap.current.set(updatedProduct.barcode.toLowerCase(), updatedProduct);
+          if (change.type === 'added') {
+            const exists = productsCache.current.some(p => p.id === product.id);
+            if (!exists) {
+              productsCache.current = [product, ...productsCache.current];
+              if (product.barcode) {
+                productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
               }
-              productsNameMap.current.set(updatedProduct.name.toLowerCase(), updatedProduct);
-              console.log(`✅ Обновлен товар в кеше: ${updatedProduct.name}`);
+              productsNameMap.current.set(product.name.toLowerCase(), product);
+              console.log(`✅ Добавлен товар в кеш: ${product.name}`);
             }
-          } else if (payload.eventType === 'DELETE' && payload.old) {
-            productsCache.current = productsCache.current.filter(p => p.id !== payload.old.id);
-            if (payload.old.barcode) {
-              productsBarcodeMap.current.delete(payload.old.barcode.toLowerCase());
+          } else if (change.type === 'modified') {
+            const index = productsCache.current.findIndex(p => p.id === product.id);
+            if (index !== -1) {
+              productsCache.current[index] = product;
+              if (product.barcode) {
+                productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
+              }
+              productsNameMap.current.set(product.name.toLowerCase(), product);
+              console.log(`✅ Обновлен товар в кеше: ${product.name}`);
             }
-            productsNameMap.current.delete(payload.old.name.toLowerCase());
-            console.log(`✅ Удален товар из кеша: ${payload.old.name}`);
+          } else if (change.type === 'removed') {
+            productsCache.current = productsCache.current.filter(p => p.id !== product.id);
+            if (product.barcode) {
+              productsBarcodeMap.current.delete(product.barcode.toLowerCase());
+            }
+            productsNameMap.current.delete(product.name.toLowerCase());
+            console.log(`✅ Удален товар из кеша: ${product.name}`);
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Статус подписки:', status);
-      });
+        });
+      },
+      (error: any) => {
+        console.error('❌ Ошибка Firebase realtime:', error);
+      }
+    );
 
     return () => {
       console.log('📡 Отписываемся от обновлений товаров');
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
-  }, [searchQuery, cacheReady]);
+  }, [cacheReady]);
 
   // Поиск товаров по названию с дебаунсингом
   const [searchResults, setSearchResults] = React.useState<any[]>([]);
@@ -647,35 +625,23 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
       change: showCalculator ? change : 0
     };
 
-    // Сохраняем продажу в базу данных с указанием кассы
+    // Сохраняем продажу в Firebase
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      
-      const { error: saleError } = await supabase
-        .from('sales')
-        .insert({
-          total,
-          items: cart.map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            barcode: item.barcode
-          })),
-          payment_method: showCalculator ? 'cash' : 'card',
-          cashier_name: user?.cashierName || 'Кассир',
-          cashier_role: cashierRole, // Указываем роль кассы (cashier или cashier2)
-          created_by: authUser?.id,
-          created_at: new Date().toISOString()
-        });
-
-      if (saleError) {
-        console.error('Ошибка сохранения продажи:', saleError);
-        toast.error('Ошибка сохранения продажи в базу');
-      } else {
-        console.log(`✅ Продажа сохранена с кассы: ${cashierRole}`);
-      }
+      await addSale({
+        total,
+        items: cart.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          barcode: item.barcode || ''
+        })),
+        payment_method: showCalculator ? 'cash' : 'card',
+        cashier: user?.cashierName || 'Кассир',
+      });
+      console.log(`✅ Продажа сохранена с кассы: ${cashierRole}`);
     } catch (error) {
-      console.error('Критическая ошибка при сохранении продажи:', error);
+      console.error('Ошибка сохранения продажи:', error);
+      toast.error('Ошибка сохранения продажи в базу');
     }
 
     addLog(`Продажа завершена: ${total}₽ (${cart.length} товаров) - Касса: ${cashierRole === 'cashier' ? '1' : '2'}`);
@@ -831,39 +797,32 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                     toast.success(`✅ "${product.name}" добавлен в корзину`);
                     setShowAIScanner(false);
                   } else {
-                    // ТОВАР НЕ НАЙДЕН - ДОБАВЛЯЕМ В ОСНОВНУЮ БАЗУ PRODUCTS
-                    console.log('📦 Товар не найден, добавляем в базу products...');
+                    // ТОВАР НЕ НАЙДЕН - ДОБАВЛЯЕМ В FIREBASE
+                    console.log('📦 Товар не найден, добавляем в Firebase...');
                     try {
                       const checkBarcode = data.barcode?.trim() || `auto-${Date.now()}`;
                       const checkName = data.name?.trim() || 'Неизвестный товар';
                       
-                      // Проверяем нет ли уже в базе products
-                      const { data: existingProduct } = await supabase
-                        .from('products')
-                        .select('id, name')
-                        .or(`barcode.eq.${checkBarcode},name.ilike.${checkName}`)
-                        .maybeSingle();
+                      // Проверяем нет ли уже в кэше
+                      const existingInCache = productsBarcodeMap.current.get(checkBarcode.toLowerCase()) ||
+                                             productsNameMap.current.get(checkName.toLowerCase());
                       
-                      if (existingProduct) {
-                        toast.warning(`⚠️ "${existingProduct.name}" уже есть в базе`, { duration: 3000 });
+                      if (existingInCache) {
+                        toast.warning(`⚠️ "${existingInCache.name}" уже есть в базе`, { duration: 3000 });
                       } else {
-                        // Добавляем в основную базу products
-                        const { data: newProduct, error: insertError } = await supabase
-                          .from('products')
-                          .insert([{
-                            barcode: checkBarcode,
-                            name: checkName,
-                            category: data.category || '',
-                            purchase_price: 0,
-                            sale_price: 0,
-                            quantity: 1,
-                            unit: 'шт'
-                          }])
-                          .select()
-                          .single();
+                        // Добавляем в Firebase через upsertProduct
+                        const { upsertProduct } = await import('@/lib/storage');
+                        const result = await upsertProduct({
+                          barcode: checkBarcode,
+                          name: checkName,
+                          category: data.category || '',
+                          purchase_price: 0,
+                          sale_price: 0,
+                          quantity: 1,
+                        });
                         
-                        if (insertError) {
-                          console.error('Ошибка добавления в базу:', insertError);
+                        if (!result.success) {
+                          console.error('Ошибка добавления в Firebase');
                           toast.error('❌ Ошибка добавления в базу');
                         } else {
                           toast.success(`✅ "${checkName}" добавлен в базу`, { 
@@ -871,21 +830,19 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                             description: 'Цены = 0, заполните позже в Инвентаре'
                           });
                           // Обновляем кэш вручную
-                          if (newProduct) {
-                            const productForCache = {
-                              id: newProduct.id,
-                              barcode: newProduct.barcode,
-                              name: newProduct.name,
-                              category: newProduct.category,
-                              purchasePrice: 0,
-                              retailPrice: 0,
-                              quantity: 1,
-                              unit: 'шт'
-                            };
-                            productsCache.current.push(productForCache);
-                            productsBarcodeMap.current.set(checkBarcode.toLowerCase(), productForCache);
-                            productsNameMap.current.set(checkName.toLowerCase(), productForCache);
-                          }
+                          const productForCache = {
+                            id: `new-${Date.now()}`,
+                            barcode: checkBarcode,
+                            name: checkName,
+                            category: data.category || '',
+                            purchasePrice: 0,
+                            retailPrice: 0,
+                            quantity: 1,
+                            unit: 'шт'
+                          };
+                          productsCache.current.push(productForCache);
+                          productsBarcodeMap.current.set(checkBarcode.toLowerCase(), productForCache);
+                          productsNameMap.current.set(checkName.toLowerCase(), productForCache);
                         }
                       }
                     } catch (err) {

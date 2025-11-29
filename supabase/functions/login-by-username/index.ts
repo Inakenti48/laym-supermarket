@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Фиксированные пользователи
+const USERS = [
+  { login: '8080', role: 'admin', name: 'Администратор', user_id: '00000000-0000-0000-0000-000000000001' },
+  { login: '1020', role: 'cashier', name: 'Кассир 1', user_id: '00000000-0000-0000-0000-000000000002' },
+  { login: '2030', role: 'cashier', name: 'Кассир 2', user_id: '00000000-0000-0000-0000-000000000003' },
+  { login: '3040', role: 'warehouse', name: 'Склад', user_id: '00000000-0000-0000-0000-000000000004' },
+];
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -14,7 +22,6 @@ serve(async (req) => {
   try {
     const { loginHash } = await req.json();
 
-    // Валидация входных данных
     if (!loginHash) {
       return new Response(
         JSON.stringify({ success: false, error: 'Хеш логина обязателен' }),
@@ -22,34 +29,12 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     console.log('🔐 Проверка входа по хешу');
-
-    // Вычисляем MD5 хеши всех логинов в БД и сравниваем
-    const { data: allUsers, error: fetchError } = await supabase
-      .from('user_roles')
-      .select('user_id, role, login');
-
-    if (fetchError || !allUsers) {
-      console.error('❌ Ошибка получения пользователей:', fetchError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Ошибка проверки' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Ищем пользователя с совпадающим хешем
     let foundUser = null;
-    for (const user of allUsers) {
-      // Пропускаем пользователей без логина
-      if (!user.login) {
-        continue;
-      }
-      
-      const userHash = await hashMD5(user.login);
+    for (const user of USERS) {
+      const userHash = await hashSHA256(user.login);
       if (userHash === loginHash) {
         foundUser = user;
         break;
@@ -63,7 +48,11 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Логин верный, создаем сессию');
+    console.log('✅ Логин верный:', foundUser.name);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Удаляем старые сессии пользователя
     await supabase
@@ -96,13 +85,13 @@ serve(async (req) => {
 
     console.log('✅ Сессия создана:', sessionData.id);
 
-    // Возвращаем готовую сессию
     return new Response(
       JSON.stringify({ 
         success: true, 
         userId: foundUser.user_id,
         role: foundUser.role,
         login: foundUser.login,
+        name: foundUser.name,
         sessionId: sessionData.id
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -117,16 +106,12 @@ serve(async (req) => {
   }
 });
 
-// SHA-256 хеширование (вместо MD5, так как более безопасно)
-async function hashMD5(text: string): Promise<string> {
+// SHA-256 хеширование
+async function hashSHA256(text: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
-  
-  // Используем SHA-256 вместо MD5 (более безопасно)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
-  // Берем первые 32 символа для совместимости
   return hashHex.substring(0, 32);
 }

@@ -1,12 +1,12 @@
-// MySQL режим работы (без localStorage)
+// MySQL режим работы
 import { initPriceCache, findPriceByBarcode, findPriceByName } from './localPriceCache';
 import { getAllProducts, getProductByBarcode, insertProduct, updateProduct } from './mysqlDatabase';
 import { StoredProduct } from './storage';
 
-// MySQL режим всегда включен
+// MySQL режим
 export const isLocalOnlyMode = () => true;
 export const setLocalOnlyMode = (_enabled: boolean) => {
-  console.log('🗃️ MySQL режим (всегда включен)');
+  console.log('🗃️ MySQL режим');
 };
 
 // Инициализация при загрузке
@@ -14,11 +14,14 @@ export const initLocalMode = () => {
   return true;
 };
 
-// Инициализация всех систем
-export const initAllLocalSystems = async () => {
+// Инициализация систем
+export const initAllSystems = async () => {
   await initPriceCache();
   console.log('✅ MySQL + кэш цен инициализированы');
 };
+
+// Алиас для обратной совместимости
+export const initAllLocalSystems = initAllSystems;
 
 // Интерфейс для товара
 export interface LocalProduct {

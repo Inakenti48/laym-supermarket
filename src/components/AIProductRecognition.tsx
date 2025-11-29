@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { getAllProducts, findProductByBarcode } from '@/lib/storage';
+// AI распознавание через Gemini
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
@@ -305,21 +305,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     };
   };
 
-  const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry' | 'dual'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    // Локальный поиск товара (AI функции отключены)
-    console.log('🔍 Локальный поиск товара...');
-    const allProducts = await getAllProducts();
-    
-    // Возвращаем пустой результат - AI распознавание отключено
-    console.log('⚠️ AI распознавание отключено (Supabase удален)');
-    
-    return {
-      barcode: '',
-      name: '',
-      category: '',
-      photoUrl: imageBase64
-    };
-  };
+  // AI распознавание реализовано в handleAIScan через Gemini
 
   const handleManualCapture = async () => {
     if (isProcessing) return;
@@ -374,48 +360,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         return; // ВАЖНО: выходим БЕЗ распознавания
       }
       
-      // Если режим распознавания срока годности
-      if (mode === 'expiry') {
-        setNotification('⚠️ Функция недоступна');
-        toast.warning('⚠️ AI распознавание дат временно недоступно. Введите даты вручную.', { position: 'top-center' });
-        setTimeout(() => setNotification(''), 1500);
-        setIsProcessing(false);
-        return;
-      }
-      
-      const result = await recognizeProduct(image, mode);
-      
-      if (mode === 'barcode') {
-        if (result.barcode) {
-          setNotification('✅ Готово!');
-          
-          const productKey = result.barcode;
-          const currentQty = recognizedProducts.get(productKey) || 0;
-          const newQty = currentQty + quantity;
-          setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
-          
-          onProductFound({ ...result, capturedImage: image, quantity: newQty });
-          setTimeout(() => setNotification(''), 800);
-        } else {
-          setNotification('❌ Не найден');
-          setTimeout(() => setNotification(''), 1000);
-        }
-      } else {
-        if (result.name || result.category) {
-          setNotification('✅ Готово!');
-          
-          const productKey = result.barcode || result.name || '';
-          const currentQty = recognizedProducts.get(productKey) || 0;
-          const newQty = currentQty + quantity;
-          setRecognizedProducts(new Map(recognizedProducts.set(productKey, newQty)));
-          
-          onProductFound({ ...result, capturedImage: image, quantity: newQty });
-          setTimeout(() => setNotification(''), 800);
-        } else {
-          setNotification('❌ Не распознан');
-          setTimeout(() => setNotification(''), 1000);
-        }
-      }
+      // Другие режимы (expiry, barcode, product) - используйте AI dual режим
+      setNotification('⚠️ Используйте AI режим');
+      toast.warning('Используйте AI сканирование (режим dual)', { position: 'top-center' });
+      setTimeout(() => setNotification(''), 1500);
     } catch (err: any) {
       console.error('Recognition error:', err);
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
@@ -493,7 +441,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const scannedName = aiResult.name || '';
       const scannedCategory = aiResult.category || '';
       
-      // Поиск цены в локальном кэше
+      // Поиск цены в кэше CSV
       console.log('🔍 Поиск цены для штрихкода:', scannedBarcode);
       let priceInfo = scannedBarcode ? findPriceByBarcode(scannedBarcode) : null;
       if (!priceInfo && scannedName) {

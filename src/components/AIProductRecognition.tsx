@@ -437,18 +437,39 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const scannedName = aiResult.name || '';
       const scannedCategory = aiResult.category || '';
       
+      // Ждем загрузки кэша если не загружен
+      if (!priceCacheLoaded) {
+        console.log('⏳ Ожидание загрузки кэша цен...');
+        await initPriceCache();
+      }
+      
       // Поиск цены в кэше CSV
-      console.log('🔍 Поиск цены для штрихкода:', scannedBarcode);
+      console.log('🔍 Поиск цены для штрихкода:', scannedBarcode, 'Размер кэша:', getCacheSize());
       let priceInfo = scannedBarcode ? findPriceByBarcode(scannedBarcode) : null;
+      console.log('🔍 Результат поиска по штрихкоду:', priceInfo ? `найдено: ${priceInfo.name}, цена: ${priceInfo.purchasePrice}` : 'не найдено');
+      
       if (!priceInfo && scannedName) {
         priceInfo = findPriceByName(scannedName);
+        console.log('🔍 Результат поиска по имени:', priceInfo ? `найдено: ${priceInfo.name}, цена: ${priceInfo.purchasePrice}` : 'не найдено');
       }
-      console.log('💰 Найдена цена:', priceInfo);
+      
+      const hasPrices = priceInfo && priceInfo.purchasePrice > 0;
+      console.log('💰 Цена найдена:', hasPrices, priceInfo);
       
       let savedTo = aiResult.savedTo || '';
       
       // Сохраняем в MySQL с загрузкой фото в S3
-      console.log('💾 Сохраняем в MySQL...', { scannedBarcode, priceInfo });
+      const purchasePrice = priceInfo?.purchasePrice || 0;
+      const salePrice = purchasePrice > 0 ? Math.round(purchasePrice * 1.3) : 0;
+      
+      console.log('💾 Сохраняем в MySQL...', { 
+        scannedBarcode, 
+        hasPrices,
+        purchasePrice,
+        salePrice,
+        destination: hasPrices ? 'products (база)' : 'queue (очередь)'
+      });
+      
       try {
         // Используем processScannedProduct - загружает фото в S3, потом сохраняет
         const { processScannedProduct } = await import('@/lib/productScanner');
@@ -460,8 +481,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           {
             name: priceInfo?.name || scannedName || 'Неизвестный товар',
             category: priceInfo?.category || scannedCategory,
-            purchase_price: priceInfo?.purchasePrice || 0,
-            sale_price: priceInfo?.purchasePrice ? Math.round(priceInfo.purchasePrice * 1.3) : 0,
+            purchase_price: purchasePrice,
+            sale_price: salePrice,
             quantity: 1,
           },
           userName
@@ -470,6 +491,11 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         if (saveResult.success) {
           savedTo = saveResult.addedToQueue ? 'queue' : 'products';
           console.log('✅ Сохранено:', savedTo, saveResult.message);
+          
+          // Предупреждение если цены были, но товар попал в очередь
+          if (hasPrices && saveResult.addedToQueue) {
+            console.warn('⚠️ ВНИМАНИЕ: Товар с ценами попал в очередь! Проверьте логику.');
+          }
         } else {
           console.error('❌ Ошибка сохранения:', saveResult.message);
           toast.error(`Ошибка сохранения: ${saveResult.message}`);

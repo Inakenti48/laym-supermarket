@@ -44,21 +44,14 @@ export const ReportsTab = () => {
     };
     loadData();
 
-    // Подписка на Firebase realtime обновления товаров
-    const { collection, onSnapshot } = require('firebase/firestore');
-    const { firebaseDb } = require('@/lib/firebase');
-    
-    const unsubscribe = onSnapshot(
-      collection(firebaseDb, 'products'),
-      () => {
-        console.log('🔄 Products updated - reloading reports');
-        loadData();
-      },
-      (error: any) => console.error('Firebase error:', error)
-    );
+    // MySQL polling для обновления данных
+    const interval = setInterval(() => {
+      console.log('🔄 Products updated - reloading reports');
+      loadData();
+    }, 60000); // Каждую минуту
 
     return () => {
-      unsubscribe();
+      clearInterval(interval);
     };
   }, [activeTab]);
 

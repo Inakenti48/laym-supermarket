@@ -321,6 +321,20 @@ export const clearAllFirebaseProducts = async () => ({ success: true, message: '
 export const enableFirebaseSync = () => console.log('MySQL sync enabled');
 export const disableFirebaseSync = () => {};
 export const isFirebaseEnabled = () => true;
+export const initFirebaseUsers = async () => ({ success: true, message: 'MySQL mode - no Firebase users needed' });
+
+// Session management
+export interface AppSession {
+  role: string;
+  userName?: string;
+  userId?: string;
+  login?: string;
+}
+
+export const getCurrentSession = (): AppSession | null => {
+  const saved = localStorage.getItem('app_session');
+  return saved ? JSON.parse(saved) : null;
+};
 
 // Re-export PendingProduct type
 export type { MySQLPendingProduct as PendingProduct };

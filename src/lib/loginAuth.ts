@@ -1,206 +1,155 @@
-// Кастомная система аутентификации по логину (ТОЛЬКО Supabase)
-import { supabase } from '@/integrations/supabase/client';
+// Система аутентификации по логину (без Supabase)
 
-const SESSION_ID_KEY = 'session_id';
+const SESSION_KEY = 'app_session';
+const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/login-by-username`;
 
 export interface AppSession {
-  id?: string;
   userId: string;
   role: string;
   login: string;
+  name?: string;
   loginTime: number;
-  expiresAt: string;
 }
 
-// Вход только по логину (проверка и сессия создаются сразу в Supabase)
+// MD5/SHA256 хеширование для передачи логина
+async function hashLogin(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
+}
+
+// Вход по логину
 export const loginByUsername = async (login: string): Promise<{ 
   success: boolean; 
   error?: string;
   userId?: string;
   role?: string;
   login?: string;
+  name?: string;
 }> => {
   try {
-    console.log('🔐 Начало входа:', login);
-    
     // Валидация
     if (!login || !/^\d{4}$/.test(login)) {
       return { success: false, error: 'Логин должен состоять из 4 цифр' };
     }
 
-    // Хешируем логин
-    const loginHash = await hashMD5(login);
-    console.log('🔑 Хеш:', loginHash);
+    const loginHash = await hashLogin(login);
 
-    // Вызываем edge function - она сразу создает сессию!
-    console.log('📡 Вызов функции...');
-
-    // Таймаут 10 секунд
-    const timeoutMs = 10000;
-    let data: any = null;
-    let error: any = null;
+    // Вызываем edge function напрямую через fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const result = await Promise.race([
-        supabase.functions.invoke('login-by-username', {
-          body: { loginHash }
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), timeoutMs)
-        ),
-      ]);
-      ({ data, error } = result as { data: any; error: any });
+      const response = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginHash }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await response.json();
+
+      if (!data.success) {
+        return { success: false, error: data.error || 'Неверный логин' };
+      }
+
+      // Сохраняем сессию локально
+      const session: AppSession = {
+        userId: data.userId,
+        role: data.role,
+        login: data.login,
+        name: data.name,
+        loginTime: Date.now()
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+      return { 
+        success: true, 
+        userId: data.userId, 
+        role: data.role,
+        login: data.login,
+        name: data.name
+      };
     } catch (e) {
-      if ((e as Error).message === 'timeout') {
-        console.error('⏱️ Таймаут при обращении к серверу входа');
+      if ((e as Error).name === 'AbortError') {
         return { success: false, error: 'Сервер не отвечает, попробуйте позже' };
       }
       throw e;
     }
-
-    console.log('📥 Ответ:', { data, error });
-
-    if (error || !data || !data.success) {
-      console.error('❌ Ошибка:', data?.error || error);
-      return { success: false, error: data?.error || 'Неверный логин' };
-    }
-    
-    // Сохраняем ID сессии (он уже создан в Supabase)
-    console.log('💾 Сохраняем сессию:', data.sessionId);
-    if (data.sessionId) {
-      localStorage.setItem(SESSION_ID_KEY, data.sessionId);
-    }
-
-    console.log('✅ Вход успешен');
-    return { 
-      success: true, 
-      userId: data.userId, 
-      role: data.role,
-      login: data.login
-    };
   } catch (error: any) {
-    console.error('💥 Критическая ошибка:', error);
+    console.error('Login error:', error);
     return { success: false, error: 'Ошибка входа' };
   }
 };
 
-// MD5 хеширование (для защиты логина при передаче)
-async function hashMD5(text: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex.substring(0, 32);
-}
-
-// Получить текущую сессию из Supabase
-export const getCurrentSession = async (): Promise<AppSession | null> => {
-  const sessionId = localStorage.getItem(SESSION_ID_KEY);
-  if (!sessionId) return null;
+// Получить текущую сессию из localStorage
+export const getCurrentSession = (): AppSession | null => {
+  const saved = localStorage.getItem(SESSION_KEY);
+  if (!saved) return null;
   
   try {
-    const { data, error } = await supabase
-      .from('user_sessions')
-      .select('*')
-      .eq('id', sessionId)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-
-    if (error || !data) {
-      // Сессия не найдена или истекла
-      localStorage.removeItem(SESSION_ID_KEY);
-      return null;
-    }
-
-    // Обновляем время последней активности асинхронно (не ждем)
-    supabase
-      .from('user_sessions')
-      .update({ last_activity: new Date().toISOString() })
-      .eq('id', sessionId);
-
-    return {
-      id: data.id,
-      userId: data.user_id,
-      role: data.role,
-      login: data.login,
-      loginTime: new Date(data.created_at).getTime(),
-      expiresAt: data.expires_at
-    };
+    return JSON.parse(saved);
   } catch {
     return null;
   }
 };
 
-// Получить текущего пользователя ТОЛЬКО из Supabase
+// Получить текущего пользователя
 export const getCurrentLoginUser = async () => {
-  try {
-    const session = await getCurrentSession();
-    if (!session) {
-      // Если нет сессии, используем системного пользователя
-      return {
-        id: '00000000-0000-0000-0000-000000000001',
-        role: 'system',
-        login: 'system'
-      };
-    }
-    
-    return {
-      id: session.userId,
-      role: session.role,
-      login: session.login
-    };
-  } catch {
-    // При ошибке используем системного пользователя
+  const session = getCurrentSession();
+  if (!session) {
     return {
       id: '00000000-0000-0000-0000-000000000001',
       role: 'system',
       login: 'system'
     };
   }
-};
-
-// Синхронная версия для совместимости - возвращает системного пользователя
-// Используется в компонентах, где нужен немедленный доступ
-export const getCurrentLoginUserSync = () => {
-  // Всегда возвращаем системного пользователя для синхронных вызовов
-  // Настоящие данные нужно получать через асинхронную версию
+  
   return {
-    id: '00000000-0000-0000-0000-000000000001',
-    role: 'system',
-    login: 'system',
-    username: 'Система',
-    cashierName: 'Система'
+    id: session.userId,
+    role: session.role,
+    login: session.login
   };
 };
 
-// Выход с удалением сессии из Supabase
-export const logoutUser = async () => {
-  const sessionId = localStorage.getItem(SESSION_ID_KEY);
-  
-  if (sessionId) {
-    // Удаляем сессию из Supabase
-    try {
-      await supabase
-        .from('user_sessions')
-        .delete()
-        .eq('id', sessionId);
-    } catch (error) {
-      console.error('Error deleting session:', error);
-    }
+// Синхронная версия
+export const getCurrentLoginUserSync = () => {
+  const session = getCurrentSession();
+  if (!session) {
+    return {
+      id: '00000000-0000-0000-0000-000000000001',
+      role: 'system',
+      login: 'system',
+      username: 'Система',
+      cashierName: 'Система'
+    };
   }
   
-  localStorage.removeItem(SESSION_ID_KEY);
+  return {
+    id: session.userId,
+    role: session.role,
+    login: session.login,
+    username: session.name || session.login,
+    cashierName: session.name || session.login
+  };
+};
+
+// Выход
+export const logoutUser = async () => {
+  localStorage.removeItem(SESSION_KEY);
 };
 
 // Проверка авторизации
 export const isAuthenticated = async (): Promise<boolean> => {
-  const session = await getCurrentSession();
-  return session !== null;
+  return getCurrentSession() !== null;
 };
 
 // Проверка роли
 export const hasRole = async (requiredRole: string): Promise<boolean> => {
-  const user = await getCurrentLoginUser();
-  return user?.role === requiredRole;
+  const session = getCurrentSession();
+  return session?.role === requiredRole;
 };

@@ -1,4 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+// Импорт CSV без Supabase - через MySQL edge function
+import { bulkInsertProducts } from './mysqlDatabase';
 
 export const bulkImportFromCSV = async (csvFiles: string[]) => {
   try {
@@ -42,32 +43,27 @@ export const bulkImportFromCSV = async (csvFiles: string[]) => {
 
     console.log(`📦 Parsed ${allProducts.length} products from CSV files`);
 
-    // Отправляем на edge function партиями по 500
-    const batchSize = 500;
+    // Отправляем на MySQL партиями по 100
+    const batchSize = 100;
     let totalInserted = 0;
     let totalErrors = 0;
 
     for (let i = 0; i < allProducts.length; i += batchSize) {
       const batch = allProducts.slice(i, i + batchSize);
       
-      console.log(`📤 Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allProducts.length / batchSize)}`);
+      console.log(`📤 Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allProducts.length / batchSize)}`);
       
-      const { data, error } = await supabase.functions.invoke('bulk-import-products', {
-        body: { csvData: batch }
-      });
+      const result = await bulkInsertProducts(batch);
 
-      if (error) {
-        console.error(`❌ Error importing batch ${i}-${i + batch.length}:`, error);
-        totalErrors += batch.length;
+      if (result.success) {
+        totalInserted += result.count || 0;
       } else {
-        totalInserted += data.inserted || 0;
-        totalErrors += data.errors || 0;
-        console.log(`✓ Imported batch ${i}-${i + batch.length}: ${data.inserted} inserted`);
+        totalErrors += batch.length;
       }
       
-      // Небольшая задержка между партиями
+      // Задержка между партиями
       if (i + batchSize < allProducts.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
 

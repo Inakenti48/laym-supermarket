@@ -71,19 +71,31 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
   message: string 
 }> {
   try {
-    const hasPrice = product.purchase_price && product.sale_price && 
-                     product.purchase_price > 0 && product.sale_price > 0;
+    // Проверяем наличие цен - достаточно закупочной цены > 0
+    const purchasePrice = product.purchase_price || 0;
+    const salePrice = product.sale_price || (purchasePrice > 0 ? Math.round(purchasePrice * 1.3) : 0);
+    const hasPrice = purchasePrice > 0 && salePrice > 0;
+    
+    console.log('📦 addScannedProduct проверка:', {
+      barcode: product.barcode,
+      name: product.name,
+      purchasePrice,
+      salePrice,
+      hasPrice,
+      destination: hasPrice ? 'products' : 'queue'
+    });
     
     if (hasPrice && product.name) {
       // Если есть цены - сразу добавляем в основную базу
+      console.log('✅ Товар с ценой -> сохраняем в базу products');
       const existing = await getProductByBarcode(product.barcode);
       
       await insertProduct({
         barcode: product.barcode,
         name: product.name,
         category: product.category || '',
-        purchase_price: product.purchase_price,
-        sale_price: product.sale_price,
+        purchase_price: purchasePrice,
+        sale_price: salePrice,
         quantity: product.quantity || 1,
         unit: 'шт',
         expiry_date: product.expiry_date,
@@ -97,11 +109,12 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
       };
     } else {
       // Без цен - в очередь для дозаполнения
+      console.log('📋 Товар без цены -> добавляем в очередь pending_products');
       await createPendingProduct({
         barcode: product.barcode,
         name: product.name || '',
-        purchase_price: product.purchase_price || 0,
-        sale_price: product.sale_price || 0,
+        purchase_price: purchasePrice,
+        sale_price: salePrice,
         quantity: product.quantity || 1,
         category: product.category,
         expiry_date: product.expiry_date,

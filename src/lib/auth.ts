@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+// Firebase версия auth (без Supabase)
 
 export type UserRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'employee';
 
@@ -13,17 +13,6 @@ const STORAGE_KEY = 'inventory_user';
 const LOGS_KEY = 'system_logs';
 const LOGIN_TIME_KEY = 'last_login_time';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 часа в миллисекундах
-
-// SHA-256 hash function
-async function sha256(message: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Pre-hashed admin password (8080)
-const ADMIN_PASSWORD_HASH = 'c6ee9e33cf5c6715a1d148fd73f7318884b41adcb916021e2bc0e800a5c5dd97';
 
 export const login = async (
   username: string, 
@@ -65,78 +54,7 @@ export const login = async (
     // Сохраняем время входа
     localStorage.setItem(LOGIN_TIME_KEY, Date.now().toString());
     
-    // Создаем сессию в Supabase для работы с базой данных
-    try {
-      // Используем специальный email для системных пользователей
-      const email = `${role}-${username}@system.local`;
-      const password = `${username}-${role}-system-password-2025`;
-      
-      console.log('🔐 Создание сессии Supabase для:', email);
-      
-      // Сначала выходим из текущей сессии, если есть
-      await supabase.auth.signOut();
-      
-      // Пытаемся войти
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (signInError) {
-        console.log('👤 Пользователь не найден, создаем нового...');
-        // Если пользователь не существует, создаем его
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              role: role,
-              username: username,
-              cashier_name: cashierName
-            }
-          }
-        });
-        
-        if (signUpError) {
-          console.error('❌ Ошибка создания пользователя Supabase:', signUpError);
-          throw signUpError;
-        }
-        
-        console.log('✅ Пользователь создан:', signUpData.user?.id);
-        
-        // После создания пользователя с auto-confirm сессия уже создана
-        if (signUpData.session) {
-          console.log('✅ Сессия создана автоматически после регистрации');
-        } else {
-          console.warn('⚠️ Сессия не создана после регистрации, проверьте настройки auto-confirm');
-        }
-      } else {
-        console.log('✅ Вход в Supabase выполнен:', signInData.user?.id);
-      }
-      
-      // Проверяем, что сессия действительно создана
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error('❌ Ошибка получения сессии:', sessionError);
-        throw sessionError;
-      }
-      
-      if (!session) {
-        console.error('❌ Сессия не создана');
-        throw new Error('Не удалось создать сессию. Проверьте настройки Supabase Auth.');
-      }
-      
-      console.log('✅ Сессия Supabase активна:', session.user.id);
-    } catch (error: any) {
-      console.error('❌ Критическая ошибка авторизации Supabase:', error);
-      console.error('Детали ошибки:', {
-        message: error.message,
-        code: error.code,
-        status: error.status
-      });
-      // Не блокируем вход - пользователь сможет работать офлайн
-      console.warn('⚠️ Работа продолжена в локальном режиме');
-    }
+    console.log('✅ Вход выполнен (Firebase режим):', role);
     
     // Log without showing actual login credentials
     let logMessage = 'Вход в систему: ';
@@ -174,13 +92,6 @@ export const logout = async (preserveFormData: boolean = false) => {
       logMessage += `Сотрудник (ID: ${user.employeeId})`;
     }
     addLog(logMessage);
-  }
-  
-  // Выходим из Supabase
-  try {
-    await supabase.auth.signOut();
-  } catch (error) {
-    console.error('Ошибка выхода из Supabase:', error);
   }
   
   // Очищаем только данные сессии, но НЕ очищаем данные форм

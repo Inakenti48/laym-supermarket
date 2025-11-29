@@ -5,13 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ArrowLeft, Printer, Plus } from 'lucide-react';
 import { printReceiptBrowser } from '@/lib/printer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { getAllProducts, updateProductById, deleteProduct } from '@/lib/storage';
+import { getProductReturns, addProductReturn, ProductReturn as FirebaseReturn } from '@/lib/firebaseCollections';
 
 interface ProductReturn {
   id: string;
@@ -39,9 +39,6 @@ export const ProductReturnsTab = () => {
   useEffect(() => {
     loadReturns();
     loadSuppliers();
-    
-    // Firebase realtime подписка на возвраты не нужна - они в Supabase
-    // Просто загружаем данные при монтировании
   }, []);
 
   const loadSuppliers = async () => {
@@ -52,13 +49,16 @@ export const ProductReturnsTab = () => {
   const loadReturns = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('product_returns')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setReturns(data || []);
+      const data = await getProductReturns();
+      setReturns(data.map(r => ({
+        id: r.id,
+        product_name: r.product_name,
+        purchase_price: 0, // Firebase doesn't store this
+        quantity: r.quantity,
+        supplier: undefined,
+        note: r.reason,
+        created_at: r.created_at
+      })));
     } catch (error) {
       console.error('Error loading returns:', error);
       toast.error('Ошибка загрузки возвратов');
@@ -77,18 +77,14 @@ export const ProductReturnsTab = () => {
 
     setLoading(true);
     try {
-      // Добавляем возврат
-      const { error } = await supabase
-        .from('product_returns')
-        .insert({
-          product_name: formData.productName,
-          purchase_price: parseFloat(formData.purchasePrice),
-          quantity: parseInt(formData.quantity),
-          supplier: formData.supplier || null,
-          note: formData.note || null,
-        });
-
-      if (error) throw error;
+      // Добавляем возврат в Firebase
+      await addProductReturn({
+        barcode: '',
+        product_name: formData.productName,
+        quantity: parseInt(formData.quantity),
+        reason: formData.note || formData.supplier || 'Возврат',
+        returned_by: 'Склад'
+      });
 
       // Находим товар по названию в Firebase и удаляем/уменьшаем
       const allProducts = await getAllProducts();
@@ -99,13 +95,11 @@ export const ProductReturnsTab = () => {
         const newQuantity = product.quantity - returnQty;
 
         if (newQuantity <= 0) {
-          // Удаляем товар полностью
           const deleted = await deleteProduct(product.barcode);
           if (deleted) {
             console.log('✅ Товар полностью удален из Firebase');
           }
         } else {
-          // Уменьшаем количество
           const updated = await updateProductById(product.id, { quantity: newQuantity });
           if (updated) {
             console.log('✅ Количество товара уменьшено в Firebase');
@@ -259,10 +253,7 @@ export const ProductReturnsTab = () => {
                 <TableRow>
                   <TableHead>Дата</TableHead>
                   <TableHead>Товар</TableHead>
-                  <TableHead>Цена</TableHead>
                   <TableHead>Кол-во</TableHead>
-                  <TableHead>Сумма</TableHead>
-                  <TableHead>Поставщик</TableHead>
                   <TableHead>Примечание</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -274,12 +265,7 @@ export const ProductReturnsTab = () => {
                       {new Date(returnItem.created_at).toLocaleDateString('ru-RU')}
                     </TableCell>
                     <TableCell>{returnItem.product_name}</TableCell>
-                    <TableCell>₽{returnItem.purchase_price.toFixed(2)}</TableCell>
                     <TableCell>{returnItem.quantity}</TableCell>
-                    <TableCell>
-                      ₽{(returnItem.purchase_price * returnItem.quantity).toFixed(2)}
-                    </TableCell>
-                    <TableCell>{returnItem.supplier || '-'}</TableCell>
                     <TableCell className="max-w-xs truncate">
                       {returnItem.note || '-'}
                     </TableCell>

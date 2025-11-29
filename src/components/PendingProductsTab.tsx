@@ -15,7 +15,7 @@ import {
   subscribeToQueue,
   QueueProduct 
 } from '@/lib/firebaseCollections';
-import { supabase } from '@/integrations/supabase/client';
+import { subscribeToSuppliers } from '@/lib/firebaseCollections';
 
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);

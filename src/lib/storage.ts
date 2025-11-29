@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+// Firebase версия storage (без Supabase)
 import { retryOperation } from './retryUtils';
 import {
   getAllFirebaseProducts,
@@ -15,7 +15,8 @@ import {
   getCancellationRequests as getFirebaseCancellations,
   createCancellationRequest as createFirebaseCancellation,
   updateCancellationRequest as updateFirebaseCancellation,
-  CancellationRequest as FirebaseCancellationRequest
+  CancellationRequest as FirebaseCancellationRequest,
+  saveProductImageFirebase
 } from './firebaseCollections';
 
 export interface StoredProduct {
@@ -43,91 +44,14 @@ export interface StoredProduct {
   }>;
 }
 
-// Сохранение фото товара в ImageKit и базу product_images
+// Сохранение фото товара в Firebase (base64)
 export const saveProductImage = async (
   barcode: string, 
   productName: string, 
   imageBase64: string,
   userId?: string
 ): Promise<boolean> => {
-  return await retryOperation(
-    async () => {
-      // Загружаем в ImageKit через edge function
-      const { data: uploadResult, error: uploadError } = await supabase.functions.invoke(
-        'upload-to-imagekit',
-        {
-          body: {
-            base64Image: imageBase64,
-            fileName: `${barcode || 'no-barcode'}-${Date.now()}.jpg`,
-            folder: '/products'
-          }
-        }
-      );
-
-      if (uploadError || !uploadResult?.success) {
-        console.error('ImageKit upload error:', uploadError || uploadResult?.error);
-        throw new Error(uploadError?.message || uploadResult?.error || 'Failed to upload to ImageKit');
-      }
-
-      const imageUrl = uploadResult.url;
-      const fileId = uploadResult.fileId;
-
-      // Проверяем, есть ли уже запись для этого товара
-      const { data: existing } = await supabase
-        .from('product_images')
-        .select('id')
-        .eq('barcode', barcode)
-        .eq('product_name', productName)
-        .maybeSingle();
-
-      if (existing) {
-        // Обновляем существующую запись
-        const updateData: any = {
-          image_url: imageUrl,
-          storage_path: fileId,
-          updated_at: new Date().toISOString()
-        };
-
-        const { error: updateError } = await supabase
-          .from('product_images')
-          .update(updateData)
-          .eq('id', existing.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Создаем новую запись
-        const insertData: any = {
-          barcode,
-          product_name: productName,
-          image_url: imageUrl,
-          storage_path: fileId
-        };
-        
-        if (userId) {
-          insertData.created_by = userId;
-        }
-
-        const { error: dbError } = await supabase
-          .from('product_images')
-          .insert(insertData);
-
-        if (dbError) throw dbError;
-      }
-
-      console.log('✅ Фото сохранено в ImageKit:', imageUrl);
-      return true;
-    },
-    {
-      maxAttempts: 5,
-      initialDelay: 1000,
-      onRetry: (attempt) => {
-        console.log(`🔄 Повторная попытка сохранения фото (попытка ${attempt})...`);
-      }
-    }
-  ).catch((err) => {
-    console.error('Failed to save product image:', err);
-    return false;
-  });
+  return saveProductImageFirebase(barcode, productName, imageBase64);
 };
 
 // === FIREBASE ФУНКЦИИ ДЛЯ ТОВАРОВ ===
@@ -205,7 +129,6 @@ export const upsertProduct = async (
     const existing = await findFirebaseProductByBarcode(productData.barcode);
     
     if (existing) {
-      // Обновляем существующий товар
       const q = query(
         collection(firebaseDb, 'products'),
         where('barcode', '==', productData.barcode)
@@ -226,13 +149,11 @@ export const upsertProduct = async (
           expiryDate: productData.expiry_date || existing.expiryDate || null,
           updatedAt: new Date().toISOString()
         });
-
         
         return { success: true, isUpdate: true, newQuantity };
       }
     }
     
-    // Создаём новый товар
     const newId = crypto.randomUUID();
     await setDoc(doc(firebaseDb, 'products', newId), {
       barcode: productData.barcode,
@@ -257,7 +178,6 @@ export const upsertProduct = async (
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-
     
     return { success: true, isUpdate: false, newQuantity: productData.quantity };
   } catch (error) {
@@ -394,7 +314,6 @@ export const updateCancellationRequest = async (id: string, status: 'approved' |
   await updateFirebaseCancellation(id, status);
   
   if (status === 'approved') {
-    // Получаем заявку для восстановления товаров
     const requests = await getFirebaseCancellations();
     const request = requests.find(r => r.id === id);
     if (request) {
@@ -406,8 +325,6 @@ export const updateCancellationRequest = async (id: string, status: 'approved' |
 };
 
 export const cleanupOldCancellations = async (): Promise<void> => {
-  // Firebase автоматически не очищает старые записи
-  // Можно добавить логику очистки позже если нужно
   console.log('cleanupOldCancellations: Not implemented for Firebase');
 };
 

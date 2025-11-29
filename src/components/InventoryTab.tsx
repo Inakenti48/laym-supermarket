@@ -21,7 +21,6 @@ import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage, ups
 import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
 import { addToQueue, getQueueProducts, subscribeToQueue, deleteQueueItem } from '@/lib/firebaseCollections';
 import { useFormSync } from '@/hooks/useFormSync';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';

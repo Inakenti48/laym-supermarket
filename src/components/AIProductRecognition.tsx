@@ -341,22 +341,25 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         } else if (!tempBarcodePhoto) {
           // Шаг 2: Захватываем ШТРИХКОД и АВТОМАТИЧЕСКИ запускаем распознавание
           console.log('📸 Захвачен штрихкод (фото 2/2) - автозапуск распознавания');
-          setTempBarcodePhoto(image);
+          const barcodeImg = image;
+          const frontImg = tempFrontPhoto;
+          setTempBarcodePhoto(barcodeImg);
           setDualPhotoStep('ready');
           setNotification('✅ Фото 2/2 - запуск AI...');
           toast.success('📸 Запускаю AI распознавание...', { position: 'top-center' });
+          setIsProcessing(false);
           
-          // АВТОМАТИЧЕСКИ запускаем распознавание без ожидания нажатия кнопки
+          // АВТОМАТИЧЕСКИ запускаем с ПРЯМОЙ передачей фото (не через state!)
           setTimeout(() => {
-            handleAIScan();
-          }, 100);
-          return; // Выходим, handleAIScan сам управляет isProcessing
+            handleAIScanWithPhotos(frontImg, barcodeImg);
+          }, 50);
+          return;
         } else {
           // Если оба фото уже есть, игнорируем дополнительные нажатия
           console.log('⚠️ Обе фотографии уже захвачены, игнорируем нажатие');
           toast.warning('Обе фотографии уже захвачены. Нажмите кнопку распознавания.', { position: 'top-center' });
+          setIsProcessing(false);
         }
-        setIsProcessing(false);
         return; // ВАЖНО: выходим БЕЗ распознавания
       }
       
@@ -379,36 +382,29 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
   // Удалили автоматическое сканирование - только ручной захват
 
-  const handleAIScan = async () => {
-    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
-      console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
-      toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
+  // Функция AI сканирования с прямой передачей фото (обход async state)
+  const handleAIScanWithPhotos = async (frontPhoto: string, barcodePhoto: string) => {
+    if (isProcessing) {
+      console.log('⚠️ handleAIScanWithPhotos заблокирован: уже обрабатывается');
       return;
     }
     
-    console.log('🚀 handleAIScan НАЧАЛО: AI распознавание двух фото');
-    console.log('📸 Размеры фото:', {
-      front: tempFrontPhoto.length,
-      barcode: tempBarcodePhoto.length
-    });
+    console.log('🚀 handleAIScanWithPhotos: AI распознавание с переданными фото');
+    console.log('📸 Размеры фото:', { front: frontPhoto.length, barcode: barcodePhoto.length });
     
     setIsProcessing(true);
     setNotification('⚡ Быстрое AI сканирование...');
     
     try {
-      // Сжимаем изображения перед отправкой
-      console.log('📦 Сжатие изображений...');
-      const compressedFront = await compressForAI(tempFrontPhoto);
-      const compressedBarcode = await compressForAI(tempBarcodePhoto);
+      const compressedFront = await compressForAI(frontPhoto);
+      const compressedBarcode = await compressForAI(barcodePhoto);
       
-      // Получаем deviceId для синхронизации между устройствами
       const deviceId = localStorage.getItem('device_id') || `device-${Date.now()}`;
       if (!localStorage.getItem('device_id')) {
         localStorage.setItem('device_id', deviceId);
       }
       const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      // Вызываем edge функцию fast-scan-product для AI распознавания
       console.log('🤖 Вызов AI распознавания через Gemini...');
       
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -452,41 +448,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       let savedTo = aiResult.savedTo || '';
       let saveError = '';
       
-      // Если AI уже сохранил - не дублируем
-      if (savedTo) {
-        console.log('✅ AI уже сохранил товар в:', savedTo);
-      } else if (priceInfo && priceInfo.purchasePrice > 0) {
-        try {
-          const result = await saveOrUpdateLocalProduct({
-            barcode: scannedBarcode,
-            name: priceInfo.name || scannedName,
-            purchasePrice: priceInfo.purchasePrice,
-            salePrice: Math.round(priceInfo.purchasePrice * 1.3),
-            quantity: 1,
-            category: priceInfo.category || scannedCategory,
-            addedBy: userName,
-          });
-          savedTo = result.isNew ? 'products' : 'products_updated';
-        } catch (err: any) {
-          saveError = err.message;
-        }
-      } else if (scannedBarcode) {
-        try {
-          await addToQueue({
-            barcode: scannedBarcode,
-            product_name: scannedName || 'Неизвестный товар',
-            category: scannedCategory,
-            front_photo: tempFrontPhoto,
-            barcode_photo: tempBarcodePhoto,
-            quantity: 1,
-            created_by: userName,
-          });
-          savedTo = 'queue';
-        } catch (err: any) {
-          saveError = err.message;
-        }
-      }
-
       // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
       
@@ -497,64 +458,49 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setIsProcessing(false);
       
       // Показываем статус
-      if (saveError) {
-        console.error('Save error:', saveError);
-        setNotification(`⚠️ Ошибка: ${saveError.substring(0, 30)}`);
-        toast.error(`Ошибка сохранения: ${saveError}`);
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-      } else if (savedTo === 'products' || savedTo === 'products_updated') {
-        const price = priceInfo?.purchasePrice || 0;
+      if (savedTo === 'products' || savedTo === 'products_updated') {
+        const price = aiResult.price || priceInfo?.purchasePrice || 0;
         setNotification(`✅ ${scannedName} → база (${price}₽)`);
         toast.success(`✅ "${scannedName}" сохранён с ценой ${price}₽`, { duration: 2000 });
-        // ВАЖНО: передаём данные в форму
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-      } else if (savedTo === 'queue') {
-        setNotification(`📋 ${scannedName} → очередь`);
-        toast.info(`📋 "${scannedName}" в очереди (нет цены)`, { duration: 2000 });
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-      } else if (savedTo === 'queue_exists') {
-        setNotification(`⚠️ ${scannedName} уже в очереди`);
+      } else if (savedTo === 'queue' || savedTo === 'queue_exists') {
+        setNotification(`📋 ${scannedName || scannedBarcode} → очередь`);
+        toast.info(`📋 "${scannedName || scannedBarcode}" добавлен в очередь`, { duration: 2000 });
       } else {
-        setNotification('📸 Сканировано');
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
+        setNotification(`⚠️ Товар не сохранён`);
       }
       
-      setTimeout(() => setNotification(''), 2500);
-    } catch (err: any) {
-      console.error('Ошибка при AI-сканировании:', err);
-      setNotification('❌ Ошибка AI, заполните данные вручную');
-      setTimeout(() => setNotification(''), 1500);
+      onProductFound({
+        barcode: scannedBarcode,
+        name: scannedName,
+        category: scannedCategory,
+        frontPhoto,
+        barcodePhoto
+      });
       
-      // Даже при ошибке сбрасываем для следующего товара
-      setDualPhotoStep('none');
-      setTempFrontPhoto('');
-      setTempBarcodePhoto('');
+      setTimeout(() => setNotification(''), 2000);
+      
+    } catch (error: any) {
+      console.error('❌ AI scan error:', error);
       setIsProcessing(false);
+      setNotification('');
+      
+      if (error.message?.includes('rate_limit')) {
+        toast.error('Слишком много запросов, подождите');
+      } else {
+        toast.error('Ошибка AI распознавания');
+      }
     }
+  };
+
+  const handleAIScan = async () => {
+    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
+      console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
+      toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
+      return;
+    }
+    
+    // Делегируем в функцию с прямой передачей
+    await handleAIScanWithPhotos(tempFrontPhoto, tempBarcodePhoto);
   };
 
   const handleConfirmExistingProduct = async () => {

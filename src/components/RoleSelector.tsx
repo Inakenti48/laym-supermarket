@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useState } from 'react';
-import { initFirebaseUsers } from '@/lib/firebase';
+import { initFirebaseUsers } from '@/lib/mysqlCollections';
 import { toast } from 'sonner';
 
 interface RoleSelectorProps {

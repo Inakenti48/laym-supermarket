@@ -27,6 +27,7 @@ import { CameraScanner } from './CameraScanner';
 import { BackgroundScanner } from './BackgroundScanner';
 import { AIProductRecognition } from './AIProductRecognition';
 import { CartItem } from './CashierCartItem';
+import { getAllFirebaseProducts } from '@/lib/mysqlCollections';
 import {
   findProductByBarcode, 
   isProductExpired, 
@@ -185,52 +186,25 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Подписка на реалтайм обновления товаров через Firebase
+  // Подписка на реалтайм обновления товаров через MySQL (polling)
   useEffect(() => {
     if (!cacheReady) return;
     
-    console.log('📡 Подписываемся на обновления товаров через Firebase...');
+    console.log('📡 Подписываемся на обновления товаров через MySQL...');
     
-    // Используем Firebase onSnapshot для реалтайм обновлений
-    const { collection, onSnapshot } = require('firebase/firestore');
-    const { firebaseDb } = require('@/lib/firebase');
-    
-    const unsubscribe = onSnapshot(
-      collection(firebaseDb, 'products'),
-      (snapshot: any) => {
-        snapshot.docChanges().forEach((change: any) => {
-          const data = change.doc.data();
-          const product = {
-            id: change.doc.id,
-            barcode: data.barcode || '',
-            name: data.name || '',
-            category: data.category || '',
-            purchasePrice: Number(data.purchasePrice) || 0,
-            retailPrice: Number(data.salePrice) || 0,
-            quantity: Number(data.quantity) || 0,
-            unit: data.unit || 'шт',
-            expiryDate: data.expiryDate,
-            supplier: data.supplier,
-            paymentType: data.paymentType || 'full',
-            paidAmount: Number(data.paidAmount) || 0,
-            debtAmount: Number(data.debtAmount) || 0,
-            addedBy: data.addedBy || '',
-            lastUpdated: data.updatedAt || data.createdAt,
-            priceHistory: data.priceHistory || [],
-            photos: data.photos || []
-          };
-          
-          if (change.type === 'added') {
-            const exists = productsCache.current.some(p => p.id === product.id);
-            if (!exists) {
-              productsCache.current = [product, ...productsCache.current];
-              if (product.barcode) {
-                productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
-              }
-              productsNameMap.current.set(product.name.toLowerCase(), product);
-              console.log(`✅ Добавлен товар в кеш: ${product.name}`);
+    // Используем polling для обновлений из MySQL
+    const pollProducts = async () => {
+      try {
+        const products = await getAllFirebaseProducts();
+        products.forEach(product => {
+          const exists = productsCache.current.some(p => p.id === product.id);
+          if (!exists) {
+            productsCache.current = [product, ...productsCache.current];
+            if (product.barcode) {
+              productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
             }
-          } else if (change.type === 'modified') {
+            productsNameMap.current.set(product.name.toLowerCase(), product);
+          } else {
             const index = productsCache.current.findIndex(p => p.id === product.id);
             if (index !== -1) {
               productsCache.current[index] = product;
@@ -238,26 +212,20 @@ export const CashierTab = ({ cashierRole = 'cashier' }: CashierTabProps) => {
                 productsBarcodeMap.current.set(product.barcode.toLowerCase(), product);
               }
               productsNameMap.current.set(product.name.toLowerCase(), product);
-              console.log(`✅ Обновлен товар в кеше: ${product.name}`);
             }
-          } else if (change.type === 'removed') {
-            productsCache.current = productsCache.current.filter(p => p.id !== product.id);
-            if (product.barcode) {
-              productsBarcodeMap.current.delete(product.barcode.toLowerCase());
-            }
-            productsNameMap.current.delete(product.name.toLowerCase());
-            console.log(`✅ Удален товар из кеша: ${product.name}`);
           }
         });
-      },
-      (error: any) => {
-        console.error('❌ Ошибка Firebase realtime:', error);
+      } catch (error) {
+        console.error('❌ Ошибка MySQL polling:', error);
       }
-    );
+    };
+    
+    const interval = setInterval(pollProducts, 30000); // Каждые 30 секунд
+    pollProducts(); // Первоначальная загрузка
 
     return () => {
       console.log('📡 Отписываемся от обновлений товаров');
-      unsubscribe();
+      clearInterval(interval);
     };
   }, [cacheReady]);
 

@@ -6,11 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Фиксированные пользователи
+// Фиксированные пользователи с уникальными ролями
 const USERS = [
   { login: '8080', role: 'admin', name: 'Администратор', user_id: '00000000-0000-0000-0000-000000000001' },
-  { login: '1020', role: 'cashier', name: 'Кассир 1', user_id: '00000000-0000-0000-0000-000000000002' },
-  { login: '2030', role: 'cashier', name: 'Кассир 2', user_id: '00000000-0000-0000-0000-000000000003' },
+  { login: '1020', role: 'cashier1', name: 'Кассир 1', user_id: '00000000-0000-0000-0000-000000000002' },
+  { login: '2030', role: 'cashier2', name: 'Кассир 2', user_id: '00000000-0000-0000-0000-000000000003' },
   { login: '3040', role: 'warehouse', name: 'Склад', user_id: '00000000-0000-0000-0000-000000000004' },
 ];
 
@@ -48,7 +48,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Логин верный:', foundUser.name);
+    console.log('✅ Логин верный:', foundUser.name, 'роль:', foundUser.role);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

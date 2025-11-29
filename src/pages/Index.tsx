@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { initLocalMode, initAllLocalSystems } from '@/lib/localOnlyMode';
 import { testConnection } from '@/lib/mysqlDatabase';
+import { loginByUsername } from '@/lib/loginAuth';
 
 // Ленивая загрузка компонентов для быстрого старта
 const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
@@ -35,20 +36,20 @@ const TabLoader = () => (
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'employees' | 'employee-work' | 'cancellations';
 
-type AppRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'system';
+type AppRole = 'admin' | 'cashier1' | 'cashier2' | 'warehouse' | 'system';
 
 interface AppSession {
   role: AppRole;
   userName?: string;
 }
 
-// Данные табов
+// Данные табов - роли для каждого раздела
 const ALL_TABS_DATA = [
   { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
-  { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory', 'system'] },
-  { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier'] },
+  { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'warehouse'] },
+  { id: 'cashier' as Tab, label: 'Касса 1', icon: ShoppingCart, roles: ['admin', 'cashier1'] },
   { id: 'cashier2' as Tab, label: 'Касса 2', icon: ShoppingCart, roles: ['admin', 'cashier2'] },
-  { id: 'pending-products' as Tab, label: 'Очередь', icon: Upload, roles: ['admin', 'inventory'] },
+  { id: 'pending-products' as Tab, label: 'Очередь', icon: Upload, roles: ['admin', 'warehouse'] },
   { id: 'suppliers' as Tab, label: 'Поставщики', icon: Building2, roles: ['admin'] },
   { id: 'reports' as Tab, label: 'Отчёты', icon: FileText, roles: ['admin'] },
   { id: 'expiry' as Tab, label: 'Сроки', icon: AlertTriangle, roles: ['admin'] },
@@ -58,11 +59,12 @@ const ALL_TABS_DATA = [
   { id: 'logs' as Tab, label: 'Логи', icon: Activity, roles: ['admin'] },
 ];
 
+// Начальная вкладка для каждой роли
 const ROLE_TO_TAB: Record<string, Tab> = {
   'admin': 'dashboard',
-  'cashier': 'cashier',
+  'cashier1': 'cashier',
   'cashier2': 'cashier2',
-  'inventory': 'inventory',
+  'warehouse': 'inventory',
   'system': 'inventory'
 };
 
@@ -119,27 +121,34 @@ const Index = () => {
     return ALL_TABS_DATA.filter(tab => tab.roles.includes(userRole));
   }, [userRole]);
 
-  // Быстрый вход (локальный, без Firebase)
+  // Вход через edge function
   const handleLogin = useCallback(async (login: string) => {
     setLoading(true);
     
-    // Простая авторизация по логину
-    const roleMap: Record<string, AppRole> = {
-      'admin': 'admin',
-      'cashier': 'cashier',
-      'cashier2': 'cashier2',
-      'inventory': 'inventory',
-      'system': 'system'
-    };
-    
-    const role = roleMap[login.toLowerCase()] || 'cashier';
-    const newSession: AppSession = { role, userName: login };
-    
-    saveSession(newSession);
-    setSession(newSession);
-    setUserRole(role);
-    setActiveTab(ROLE_TO_TAB[role] || 'dashboard');
-    toast.success(`Добро пожаловать, ${login}!`);
+    try {
+      const result = await loginByUsername(login);
+      
+      if (!result.success) {
+        toast.error(result.error || 'Неверный логин');
+        setLoading(false);
+        return;
+      }
+      
+      const role = (result.role as AppRole) || 'system';
+      const newSession: AppSession = { 
+        role, 
+        userName: result.login || login 
+      };
+      
+      saveSession(newSession);
+      setSession(newSession);
+      setUserRole(role);
+      setActiveTab(ROLE_TO_TAB[role] || 'dashboard');
+      toast.success(`Добро пожаловать!`);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Ошибка входа');
+    }
     
     setLoading(false);
   }, []);

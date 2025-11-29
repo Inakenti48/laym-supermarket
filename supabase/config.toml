@@ -40,3 +40,6 @@ verify_jwt = false
 
 [functions.fast-scan-product]
 verify_jwt = false
+
+[functions.mysql-query]
+verify_jwt = false

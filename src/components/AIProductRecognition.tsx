@@ -446,7 +446,42 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       console.log('💰 Найдена цена:', priceInfo);
       
       let savedTo = aiResult.savedTo || '';
-      let saveError = '';
+      
+      // Если edge function не сохранила - сохраняем в MySQL сами
+      if (!savedTo && scannedBarcode) {
+        console.log('💾 Сохраняем в MySQL...');
+        try {
+          if (priceInfo && priceInfo.purchasePrice > 0) {
+            // Есть цена - в products
+            const result = await saveOrUpdateLocalProduct({
+              barcode: scannedBarcode,
+              name: priceInfo.name || scannedName,
+              purchasePrice: priceInfo.purchasePrice,
+              salePrice: Math.round(priceInfo.purchasePrice * 1.3),
+              quantity: 1,
+              category: priceInfo.category || scannedCategory,
+              addedBy: userName,
+            });
+            savedTo = result.isNew ? 'products' : 'products_updated';
+            console.log('✅ Сохранено в products');
+          } else {
+            // Нет цены - в очередь
+            await addToQueue({
+              barcode: scannedBarcode,
+              product_name: scannedName || 'Неизвестный товар',
+              category: scannedCategory,
+              front_photo: frontPhoto,
+              barcode_photo: barcodePhoto,
+              quantity: 1,
+              created_by: userName,
+            });
+            savedTo = 'queue';
+            console.log('📋 Сохранено в очередь');
+          }
+        } catch (saveErr: any) {
+          console.error('❌ Ошибка сохранения в MySQL:', saveErr);
+        }
+      }
       
       // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
@@ -466,7 +501,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         setNotification(`📋 ${scannedName || scannedBarcode} → очередь`);
         toast.info(`📋 "${scannedName || scannedBarcode}" добавлен в очередь`, { duration: 2000 });
       } else {
-        setNotification(`⚠️ Товар не сохранён`);
+        setNotification(`⚠️ ${scannedName || scannedBarcode} - заполните вручную`);
+        toast.warning('Заполните данные вручную', { duration: 2000 });
       }
       
       onProductFound({

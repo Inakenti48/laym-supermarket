@@ -198,98 +198,16 @@ serve(async (req) => {
 
     console.log(`📦 Распознано: ${barcode} - ${name} (${category})`);
 
-    // Проверяем цену в справочнике
-    const priceInfo = barcode ? findPriceByBarcode(barcode, pricesMap) : null;
-    
-    let savedTo = '';
-    let productId = '';
-
-    if (priceInfo && priceInfo.salePrice > 0) {
-      // ЦЕНА НАЙДЕНА → Сохраняем в products
-      console.log(`✅ Цена найдена: ${priceInfo.salePrice}₽`);
-      
-      // Проверяем дубликат
-      const { data: existing } = await supabase
-        .from('products')
-        .select('id')
-        .eq('barcode', barcode)
-        .maybeSingle();
-
-      if (existing) {
-        // Обновляем количество
-        await supabase
-          .from('products')
-          .update({ quantity: supabase.rpc('increment_quantity', { row_id: existing.id }) })
-          .eq('id', existing.id);
-        
-        productId = existing.id;
-        savedTo = 'products_updated';
-        console.log(`📝 Товар обновлен в products`);
-      } else {
-        // Создаем новый
-        const { data: newProduct, error: insertError } = await supabase
-          .from('products')
-          .insert([{
-            barcode,
-            name: priceInfo.name || name,
-            category: priceInfo.category || category,
-            purchase_price: priceInfo.purchasePrice,
-            sale_price: priceInfo.salePrice,
-            quantity: 1,
-            unit: 'шт',
-            created_by: userName || deviceId
-          }])
-          .select('id')
-          .single();
-
-        if (insertError) {
-          console.error('Insert to products error:', insertError);
-        } else {
-          productId = newProduct?.id || '';
-          savedTo = 'products';
-          console.log(`✅ Товар добавлен в products с ценой`);
-        }
-      }
-    } else {
-      // ЦЕНА НЕ НАЙДЕНА → Сохраняем в очередь
-      console.log(`⏳ Цена не найдена, добавляем в очередь`);
-      
-      // Проверяем дубликат в очереди
-      const { data: existingQueue } = await supabase
-        .from('vremenno_product_foto')
-        .select('id')
-        .or(`barcode.eq.${barcode || 'NONE'},product_name.ilike.${name}`)
-        .maybeSingle();
-
-      if (existingQueue) {
-        savedTo = 'queue_exists';
-        productId = existingQueue.id;
-        console.log(`⚠️ Уже в очереди`);
-      } else {
-        const { data: newQueue, error: queueError } = await supabase
-          .from('vremenno_product_foto')
-          .insert([{
-            barcode: barcode || `auto-${Date.now()}`,
-            product_name: name,
-            category,
-            front_photo: frontPhoto || '',
-            barcode_photo: barcodePhoto || '',
-            quantity: 1,
-            created_by: userName || deviceId
-          }])
-          .select('id')
-          .single();
-
-        if (queueError) {
-          console.error('Insert to queue error:', queueError);
-        } else {
-          productId = newQueue?.id || '';
-          savedTo = 'queue';
-          console.log(`📋 Товар добавлен в очередь`);
-        }
-      }
+    // Проверяем цену в справочнике (с таймаутом)
+    let priceInfo = null;
+    try {
+      priceInfo = barcode ? findPriceByBarcode(barcode, pricesMap) : null;
+    } catch (e) {
+      console.error('Price lookup error:', e);
     }
-
+    
+    // НЕ пытаемся сохранять в Supabase - просто возвращаем результат
+    // Клиент сам сохранит в MySQL
     const totalTime = Date.now() - startTime;
     console.log(`=== FAST SCAN DONE in ${totalTime}ms ===`);
 
@@ -302,8 +220,8 @@ serve(async (req) => {
         hasPrice: !!priceInfo,
         price: priceInfo?.salePrice || 0,
         purchasePrice: priceInfo?.purchasePrice || 0,
-        savedTo,
-        productId,
+        savedTo: '', // Клиент сохранит сам в MySQL
+        productId: '',
         processingTime: totalTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

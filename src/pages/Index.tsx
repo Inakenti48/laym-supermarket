@@ -9,9 +9,8 @@ import { RoleSelector } from '@/components/RoleSelector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { loginWithFirebase, logoutFirebase, getCurrentSession, AppRole, AppSession } from '@/lib/firebase';
-import { initLocalMode, initAllLocalSystems, isLocalOnlyMode } from '@/lib/localOnlyMode';
-import { enableFirebaseSync, getAllFirebaseProducts, getFirebaseStatus, subscribeToFirebaseProducts } from '@/lib/firebaseProducts';
+import { initLocalMode, initAllLocalSystems } from '@/lib/localOnlyMode';
+import { testConnection } from '@/lib/mysqlDatabase';
 
 // Ленивая загрузка компонентов для быстрого старта
 const DashboardTab = lazy(() => import('@/components/DashboardTab').then(m => ({ default: m.DashboardTab })));
@@ -36,7 +35,14 @@ const TabLoader = () => (
 
 type Tab = 'dashboard' | 'inventory' | 'cashier' | 'cashier2' | 'pending-products' | 'suppliers' | 'reports' | 'expiry' | 'diagnostics' | 'logs' | 'employees' | 'employee-work' | 'cancellations';
 
-// Данные табов вынесены за компонент для оптимизации
+type AppRole = 'admin' | 'cashier' | 'cashier2' | 'inventory' | 'system';
+
+interface AppSession {
+  role: AppRole;
+  userName?: string;
+}
+
+// Данные табов
 const ALL_TABS_DATA = [
   { id: 'dashboard' as Tab, label: 'Панель', icon: LayoutDashboard, roles: ['admin'] },
   { id: 'inventory' as Tab, label: 'Товары', icon: Package, roles: ['admin', 'inventory', 'system'] },
@@ -60,49 +66,51 @@ const ROLE_TO_TAB: Record<string, Tab> = {
   'system': 'inventory'
 };
 
+// Простая авторизация (без Firebase)
+const getCurrentSession = (): AppSession | null => {
+  const saved = localStorage.getItem('app_session');
+  return saved ? JSON.parse(saved) : null;
+};
+
+const saveSession = (session: AppSession) => {
+  localStorage.setItem('app_session', JSON.stringify(session));
+};
+
+const clearSession = () => {
+  localStorage.removeItem('app_session');
+};
+
 const Index = () => {
   const [session, setSession] = useState<AppSession | null>(() => getCurrentSession());
   const [userRole, setUserRole] = useState<AppRole | null>(() => getCurrentSession()?.role || null);
   const [loading, setLoading] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [showEmployeeLogin, setShowEmployeeLogin] = useState(false);
-  const [localMode, setLocalMode] = useState(() => initLocalMode());
+  const [mysqlConnected, setMysqlConnected] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const s = getCurrentSession();
     return s ? (ROLE_TO_TAB[s.role] || 'dashboard') : 'dashboard';
   });
 
-  // Инициализация Firebase синхронизации с постоянной подпиской
+  // Инициализация MySQL
   useEffect(() => {
-    // Включаем Firebase синхронизацию
-    enableFirebaseSync();
-    
-    let unsubscribe: (() => void) | null = null;
-    let isFirstLoad = true;
-    
-    // Подписываемся на realtime обновления Firebase
-    unsubscribe = subscribeToFirebaseProducts((products) => {
-      const status = getFirebaseStatus();
+    const init = async () => {
+      initLocalMode();
       
-      if (isFirstLoad) {
-        console.log(`🔥 Firebase ${status.mode}: загружено ${products.length} товаров`);
-        toast.success(`🔥 ${status.message} (${products.length} товаров)`, { duration: 2000 });
-        isFirstLoad = false;
+      // Проверяем подключение к MySQL
+      const connected = await testConnection();
+      setMysqlConnected(connected);
+      
+      if (connected) {
+        toast.success('🗃️ MySQL подключен', { duration: 2000 });
       } else {
-        console.log(`🔄 Синхронизация: ${products.length} товаров`);
+        toast.error('⚠️ MySQL недоступен, работаем офлайн');
       }
-    });
-    
-    if (localMode) {
-      initAllLocalSystems().catch(console.error);
-    }
-    
-    // Очистка подписки при размонтировании
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      
+      await initAllLocalSystems();
     };
+    
+    init().catch(console.error);
   }, []);
 
   // Мемоизация табов
@@ -111,31 +119,38 @@ const Index = () => {
     return ALL_TABS_DATA.filter(tab => tab.roles.includes(userRole));
   }, [userRole]);
 
-  // Быстрый вход
+  // Быстрый вход (локальный, без Firebase)
   const handleLogin = useCallback(async (login: string) => {
     setLoading(true);
     
-    const result = await loginWithFirebase(login);
+    // Простая авторизация по логину
+    const roleMap: Record<string, AppRole> = {
+      'admin': 'admin',
+      'cashier': 'cashier',
+      'cashier2': 'cashier2',
+      'inventory': 'inventory',
+      'system': 'system'
+    };
     
-    if (result.success && result.session) {
-      setSession(result.session);
-      setUserRole(result.session.role);
-      setActiveTab(ROLE_TO_TAB[result.session.role] || 'dashboard');
-      toast.success(`${result.userName || 'Добро пожаловать!'}`);
-    } else {
-      toast.error(result.error || 'Неверный логин');
-    }
+    const role = roleMap[login.toLowerCase()] || 'cashier';
+    const newSession: AppSession = { role, userName: login };
+    
+    saveSession(newSession);
+    setSession(newSession);
+    setUserRole(role);
+    setActiveTab(ROLE_TO_TAB[role] || 'dashboard');
+    toast.success(`Добро пожаловать, ${login}!`);
     
     setLoading(false);
   }, []);
 
   // Быстрый выход
   const handleLogout = useCallback(async () => {
+    clearSession();
     setSession(null);
     setUserRole(null);
     setEmployeeId(null);
     setShowEmployeeLogin(false);
-    logoutFirebase(); // Фоновое выполнение
     toast.info('Выход');
   }, []);
 
@@ -178,12 +193,13 @@ const Index = () => {
           <div className="flex items-center gap-2 min-w-0">
             <Package className="h-6 w-6 text-primary flex-shrink-0" />
             <h1 className="text-base font-bold truncate">Учет товаров</h1>
-            {localMode && (
-              <span className="flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
-                <Database className="h-3 w-3" />
-                Firebase
-              </span>
-            )}
+            <span className={cn(
+              "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
+              mysqlConnected ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"
+            )}>
+              <Database className="h-3 w-3" />
+              {mysqlConnected ? 'MySQL' : 'Офлайн'}
+            </span>
           </div>
           
           <div className="flex items-center gap-1 flex-shrink-0">

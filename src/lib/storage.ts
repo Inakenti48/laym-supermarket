@@ -1,23 +1,16 @@
-// Гибридное хранение: Локально (IndexedDB) + Firebase
-import { retryOperation } from './retryUtils';
+// MySQL Storage Layer - все операции через MySQL
 import {
-  getAllFirebaseProducts,
-  findFirebaseProductByBarcode,
-  saveFirebaseProduct as saveFirebaseProductBase,
-  updateFirebaseProductQuantity,
-  removeFirebaseExpiredProduct,
-  getFirebaseExpiringProducts,
-  searchFirebaseProducts
-} from './firebaseProducts';
-import { firebaseDb } from './firebase';
-import { collection, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { 
-  getCancellationRequests as getFirebaseCancellations,
-  createCancellationRequest as createFirebaseCancellation,
-  updateCancellationRequest as updateFirebaseCancellation,
-  CancellationRequest as FirebaseCancellationRequest,
-  saveProductImageFirebase
-} from './firebaseCollections';
+  getAllProducts as mysqlGetAllProducts,
+  getProductByBarcode as mysqlGetProductByBarcode,
+  insertProduct as mysqlInsertProduct,
+  updateProduct as mysqlUpdateProduct,
+  deleteProduct as mysqlDeleteProduct,
+  getCancellationRequests as mysqlGetCancellations,
+  createCancellationRequest as mysqlCreateCancellation,
+  updateCancellationStatus as mysqlUpdateCancellation,
+  insertSale,
+  Product,
+} from './mysqlDatabase';
 import {
   initLocalDB,
   saveProductLocally,
@@ -49,19 +42,61 @@ export interface StoredProduct {
   }>;
 }
 
-// Сохранение фото товара в Firebase (base64)
+// Конвертация MySQL Product в StoredProduct
+const convertToStoredProduct = (p: Product): StoredProduct => ({
+  id: p.id,
+  barcode: p.barcode,
+  name: p.name,
+  category: p.category || '',
+  purchasePrice: p.purchase_price,
+  retailPrice: p.sale_price,
+  quantity: p.quantity,
+  unit: 'шт',
+  expiryDate: p.expiry_date,
+  photos: [],
+  paymentType: 'full',
+  paidAmount: p.purchase_price * p.quantity,
+  debtAmount: 0,
+  addedBy: p.created_by || '',
+  supplier: p.supplier_id,
+  lastUpdated: p.updated_at || p.created_at || new Date().toISOString(),
+  priceHistory: [{
+    date: p.created_at || new Date().toISOString(),
+    purchasePrice: p.purchase_price,
+    retailPrice: p.sale_price,
+    changedBy: p.created_by || ''
+  }]
+});
+
+// Сохранение фото товара в S3
 export const saveProductImage = async (
   barcode: string, 
   productName: string, 
   imageBase64: string,
   userId?: string
 ): Promise<boolean> => {
-  return saveProductImageFirebase(barcode, productName, imageBase64);
+  try {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/s3-upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'upload',
+        fileName: `${barcode}_${Date.now()}.jpg`,
+        fileData: imageBase64.replace(/^data:image\/\w+;base64,/, ''),
+        contentType: 'image/jpeg',
+        folder: 'products'
+      })
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('❌ Ошибка загрузки фото:', error);
+    return false;
+  }
 };
 
-// === ГИБРИДНЫЕ ФУНКЦИИ: ЛОКАЛЬНО + FIREBASE ===
+// === ФУНКЦИИ РАБОТЫ С ТОВАРАМИ ===
 
-// Инициализация локальной БД при старте
 let localDbInitialized = false;
 const ensureLocalDb = async () => {
   if (!localDbInitialized) {
@@ -74,32 +109,21 @@ export const getStoredProducts = async (): Promise<StoredProduct[]> => {
   await ensureLocalDb();
   
   try {
-    // Пробуем Firebase
-    console.log('📦 Загрузка товаров из Firebase...');
-    const products = await Promise.race([
-      getAllFirebaseProducts(),
-      new Promise<StoredProduct[]>((_, reject) => 
-        setTimeout(() => reject(new Error('Firebase timeout')), 5000)
-      )
-    ]);
+    console.log('📦 Загрузка товаров из MySQL...');
+    const products = await mysqlGetAllProducts();
+    const converted = products.map(convertToStoredProduct);
     
-    // Сохраняем локально для офлайн доступа
-    if (products.length > 0) {
-      localStorage.setItem('cached_products', JSON.stringify(products));
+    // Кэшируем локально
+    if (converted.length > 0) {
+      localStorage.setItem('cached_products', JSON.stringify(converted));
       localStorage.setItem('cached_products_time', Date.now().toString());
     }
     
-    return products;
+    return converted;
   } catch (error) {
-    console.warn('⚠️ Firebase недоступен, загружаем из кэша...');
-    
-    // Fallback на локальный кэш
+    console.warn('⚠️ MySQL недоступен, загружаем из кэша...');
     const cached = localStorage.getItem('cached_products');
-    if (cached) {
-      return JSON.parse(cached);
-    }
-    
-    // Fallback на IndexedDB
+    if (cached) return JSON.parse(cached);
     const localData = await getAllLocalData();
     return localData.products as StoredProduct[];
   }
@@ -109,11 +133,11 @@ export const findProductByBarcode = async (barcode: string): Promise<StoredProdu
   if (!barcode) return null;
   
   try {
-    return await findFirebaseProductByBarcode(barcode);
+    const product = await mysqlGetProductByBarcode(barcode);
+    if (!product) return null;
+    return convertToStoredProduct(product);
   } catch (error) {
-    console.warn('⚠️ Firebase недоступен, ищем локально...');
-    
-    // Fallback на локальный кэш
+    console.warn('⚠️ MySQL недоступен, ищем локально...');
     const cached = localStorage.getItem('cached_products');
     if (cached) {
       const products: StoredProduct[] = JSON.parse(cached);
@@ -129,11 +153,11 @@ export const saveProduct = async (
 ): Promise<StoredProduct> => {
   await ensureLocalDb();
   
-  // СНАЧАЛА сохраняем локально (IndexedDB + localStorage)
+  // Сохраняем локально
   const localId = await saveProductLocally(product);
   console.log('💾 Товар сохранен локально:', localId);
   
-  // Обновляем локальный кэш
+  // Обновляем кэш
   const cached = localStorage.getItem('cached_products');
   const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
   const newProduct: StoredProduct = {
@@ -148,7 +172,6 @@ export const saveProduct = async (
     }]
   };
   
-  // Проверяем, есть ли уже товар с таким штрихкодом
   const existingIndex = products.findIndex(p => p.barcode === product.barcode);
   if (existingIndex >= 0) {
     products[existingIndex] = { ...products[existingIndex], ...newProduct, quantity: products[existingIndex].quantity + product.quantity };
@@ -157,22 +180,24 @@ export const saveProduct = async (
   }
   localStorage.setItem('cached_products', JSON.stringify(products));
   
-  // ПОТОМ пробуем синхронизировать с Firebase (в фоне)
-  retryOperation(
-    async () => {
-      console.log('☁️ Синхронизация с Firebase...');
-      return saveFirebaseProductBase(product, userId);
-    },
-    {
-      maxAttempts: 5,
-      initialDelay: 1000,
-      onRetry: (attempt, error) => {
-        console.log(`🔄 Повторная попытка синхронизации "${product.name}" (попытка ${attempt})...`);
-      }
-    }
-  ).catch(err => {
-    console.warn('⚠️ Не удалось синхронизировать с Firebase, данные сохранены локально:', err);
-  });
+  // Синхронизируем с MySQL
+  try {
+    await mysqlInsertProduct({
+      barcode: product.barcode,
+      name: product.name,
+      category: product.category,
+      purchase_price: product.purchasePrice,
+      sale_price: product.retailPrice,
+      quantity: product.quantity,
+      unit: product.unit,
+      supplier_id: product.supplier,
+      expiry_date: product.expiryDate,
+      created_by: userId
+    });
+    console.log('☁️ Товар синхронизирован с MySQL');
+  } catch (err) {
+    console.warn('⚠️ Не удалось синхронизировать с MySQL:', err);
+  }
   
   return newProduct;
 };
@@ -182,30 +207,19 @@ export const getAllProducts = async (): Promise<StoredProduct[]> => {
 };
 
 export const getExpiringProducts = async (daysBeforeExpiry: number = 3): Promise<StoredProduct[]> => {
-  try {
-    return await getFirebaseExpiringProducts(daysBeforeExpiry);
-  } catch (error) {
-    console.warn('⚠️ Firebase недоступен, проверяем локально...');
-    const cached = localStorage.getItem('cached_products');
-    if (cached) {
-      const products: StoredProduct[] = JSON.parse(cached);
-      const now = new Date();
-      const limitDate = new Date(now.getTime() + daysBeforeExpiry * 24 * 60 * 60 * 1000);
-      return products.filter(p => p.expiryDate && new Date(p.expiryDate) <= limitDate);
-    }
-    return [];
-  }
+  const products = await getStoredProducts();
+  const now = new Date();
+  const limitDate = new Date(now.getTime() + daysBeforeExpiry * 24 * 60 * 60 * 1000);
+  return products.filter(p => p.expiryDate && new Date(p.expiryDate) <= limitDate);
 };
 
 export const isProductExpired = (product: StoredProduct): boolean => {
   if (!product.expiryDate) return false;
-  const now = new Date();
-  const expiryDate = new Date(product.expiryDate);
-  return expiryDate < now;
+  return new Date(product.expiryDate) < new Date();
 };
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
-  // Обновляем локальный кэш
+  // Обновляем кэш
   const cached = localStorage.getItem('cached_products');
   if (cached) {
     const products: StoredProduct[] = JSON.parse(cached);
@@ -216,16 +230,18 @@ export const updateProductQuantity = async (barcode: string, quantityChange: num
     }
   }
   
-  // Синхронизируем с Firebase
+  // Синхронизируем с MySQL
   try {
-    await updateFirebaseProductQuantity(barcode, quantityChange);
+    const product = await mysqlGetProductByBarcode(barcode);
+    if (product) {
+      await mysqlUpdateProduct(barcode, { quantity: product.quantity + quantityChange });
+    }
   } catch (error) {
-    console.warn('⚠️ Не удалось синхронизировать количество с Firebase:', error);
+    console.warn('⚠️ Не удалось синхронизировать количество с MySQL:', error);
   }
 };
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
-  // Удаляем из локального кэша
   const cached = localStorage.getItem('cached_products');
   let removedProduct: StoredProduct | null = null;
   
@@ -239,18 +255,16 @@ export const removeExpiredProduct = async (barcode: string): Promise<StoredProdu
     }
   }
   
-  // Синхронизируем с Firebase
   try {
-    return await removeFirebaseExpiredProduct(barcode);
+    await mysqlDeleteProduct(barcode);
   } catch (error) {
-    console.warn('⚠️ Не удалось удалить из Firebase:', error);
-    return removedProduct;
+    console.warn('⚠️ Не удалось удалить из MySQL:', error);
   }
+  
+  return removedProduct;
 };
 
-// === ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ КОМПОНЕНТОВ (с локальным кэшем) ===
-
-// Upsert товара (вставка или обновление по штрихкоду)
+// Upsert товара
 export const upsertProduct = async (
   productData: {
     barcode: string;
@@ -265,7 +279,6 @@ export const upsertProduct = async (
     created_by?: string;
   }
 ): Promise<{ success: boolean; isUpdate: boolean; newQuantity?: number }> => {
-  // СНАЧАЛА обновляем локальный кэш
   const cached = localStorage.getItem('cached_products');
   const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
   const existingIndex = products.findIndex(p => p.barcode === productData.barcode);
@@ -316,65 +329,35 @@ export const upsertProduct = async (
   }
   
   localStorage.setItem('cached_products', JSON.stringify(products));
-  console.log('💾 Товар сохранен локально:', productData.barcode);
   
-  // ПОТОМ синхронизируем с Firebase (в фоне)
+  // Синхронизируем с MySQL
   try {
-    const existing = await findFirebaseProductByBarcode(productData.barcode);
-    
+    const existing = await mysqlGetProductByBarcode(productData.barcode);
     if (existing) {
-      const q = query(
-        collection(firebaseDb, 'products'),
-        where('barcode', '==', productData.barcode)
-      );
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        
-        await updateDoc(docRef, {
-          name: productData.name,
-          category: productData.category || existing.category,
-          supplier: productData.supplier || existing.supplier || null,
-          purchasePrice: productData.purchase_price,
-          salePrice: productData.sale_price,
-          quantity: newQuantity,
-          expiryDate: productData.expiry_date || existing.expiryDate || null,
-          updatedAt: new Date().toISOString()
-        });
-        
-        return { success: true, isUpdate: true, newQuantity };
-      }
+      await mysqlUpdateProduct(productData.barcode, {
+        name: productData.name,
+        category: productData.category || '',
+        purchase_price: productData.purchase_price,
+        sale_price: productData.sale_price,
+        quantity: newQuantity,
+        expiry_date: productData.expiry_date || undefined
+      });
+    } else {
+      await mysqlInsertProduct({
+        barcode: productData.barcode,
+        name: productData.name,
+        category: productData.category || '',
+        purchase_price: productData.purchase_price,
+        sale_price: productData.sale_price,
+        quantity: productData.quantity,
+        unit: productData.unit || 'шт',
+        expiry_date: productData.expiry_date || undefined,
+        created_by: productData.created_by
+      });
     }
-    
-    const newId = crypto.randomUUID();
-    await setDoc(doc(firebaseDb, 'products', newId), {
-      barcode: productData.barcode,
-      name: productData.name,
-      category: productData.category || '',
-      supplier: productData.supplier || null,
-      unit: productData.unit || 'шт',
-      purchasePrice: productData.purchase_price,
-      salePrice: productData.sale_price,
-      quantity: productData.quantity,
-      expiryDate: productData.expiry_date || null,
-      paymentType: 'full',
-      paidAmount: productData.purchase_price * productData.quantity,
-      debtAmount: 0,
-      addedBy: productData.created_by || '',
-      priceHistory: [{
-        date: new Date().toISOString(),
-        purchasePrice: productData.purchase_price,
-        retailPrice: productData.sale_price,
-        changedBy: productData.created_by || ''
-      }],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-    
-    return { success: true, isUpdate: false, newQuantity: productData.quantity };
+    return { success: true, isUpdate, newQuantity };
   } catch (error) {
-    console.warn('⚠️ Firebase недоступен, данные сохранены локально:', error);
+    console.warn('⚠️ MySQL недоступен, данные сохранены локально:', error);
     return { success: true, isUpdate, newQuantity };
   }
 };
@@ -393,82 +376,61 @@ export const updateProductById = async (
   }>
 ): Promise<boolean> => {
   try {
-    const docRef = doc(firebaseDb, 'products', id);
-    const updateData: any = { updatedAt: new Date().toISOString() };
-    
-    if (updates.quantity !== undefined) updateData.quantity = updates.quantity;
-    if (updates.name !== undefined) updateData.name = updates.name;
-    if (updates.category !== undefined) updateData.category = updates.category;
-    if (updates.supplier !== undefined) updateData.supplier = updates.supplier;
-    if (updates.purchasePrice !== undefined) updateData.purchasePrice = updates.purchasePrice;
-    if (updates.salePrice !== undefined) updateData.salePrice = updates.salePrice;
-    if (updates.expiryDate !== undefined) updateData.expiryDate = updates.expiryDate;
-    
-    await updateDoc(docRef, updateData);
-    return true;
+    // Найдем товар по ID в кэше
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      const products: StoredProduct[] = JSON.parse(cached);
+      const product = products.find(p => p.id === id);
+      if (product) {
+        const mysqlUpdates: Partial<Product> = {};
+        if (updates.quantity !== undefined) mysqlUpdates.quantity = updates.quantity;
+        if (updates.name !== undefined) mysqlUpdates.name = updates.name;
+        if (updates.category !== undefined) mysqlUpdates.category = updates.category;
+        if (updates.purchasePrice !== undefined) mysqlUpdates.purchase_price = updates.purchasePrice;
+        if (updates.salePrice !== undefined) mysqlUpdates.sale_price = updates.salePrice;
+        if (updates.expiryDate !== undefined) mysqlUpdates.expiry_date = updates.expiryDate || undefined;
+        
+        await mysqlUpdateProduct(product.barcode, mysqlUpdates);
+        return true;
+      }
+    }
+    return false;
   } catch (error) {
-    console.error('❌ Ошибка обновления товара по ID:', error);
+    console.error('❌ Ошибка обновления товара:', error);
     return false;
   }
 };
 
 // Получить товар по ID
 export const getProductById = async (id: string): Promise<StoredProduct | null> => {
-  try {
-    const { getDoc: fbGetDoc } = await import('firebase/firestore');
-    const docRef = doc(firebaseDb, 'products', id);
-    const docSnap = await fbGetDoc(docRef);
-    
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        barcode: data.barcode || '',
-        name: data.name || '',
-        category: data.category || '',
-        purchasePrice: Number(data.purchasePrice) || 0,
-        retailPrice: Number(data.salePrice) || 0,
-        quantity: Number(data.quantity) || 0,
-        unit: 'шт' as const,
-        expiryDate: data.expiryDate || undefined,
-        photos: data.photos || [],
-        paymentType: (data.paymentType as 'full' | 'partial' | 'debt') || 'full',
-        paidAmount: Number(data.paidAmount) || 0,
-        debtAmount: Number(data.debtAmount) || 0,
-        addedBy: data.addedBy || '',
-        supplier: data.supplier || undefined,
-        lastUpdated: data.updatedAt || data.createdAt || new Date().toISOString(),
-        priceHistory: data.priceHistory || []
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('❌ Ошибка получения товара по ID:', error);
-    return null;
+  const cached = localStorage.getItem('cached_products');
+  if (cached) {
+    const products: StoredProduct[] = JSON.parse(cached);
+    return products.find(p => p.id === id) || null;
   }
+  return null;
 };
 
-// Удалить товар полностью
+// Удалить товар
 export const deleteProduct = async (barcode: string): Promise<boolean> => {
   try {
-    const q = query(
-      collection(firebaseDb, 'products'),
-      where('barcode', '==', barcode)
-    );
-    const snapshot = await getDocs(q);
+    await mysqlDeleteProduct(barcode);
     
-    if (!snapshot.empty) {
-      await deleteDoc(snapshot.docs[0].ref);
-      return true;
+    // Удаляем из кэша
+    const cached = localStorage.getItem('cached_products');
+    if (cached) {
+      const products: StoredProduct[] = JSON.parse(cached);
+      const filtered = products.filter(p => p.barcode !== barcode);
+      localStorage.setItem('cached_products', JSON.stringify(filtered));
     }
-    return false;
+    return true;
   } catch (error) {
     console.error('❌ Ошибка удаления товара:', error);
     return false;
   }
 };
 
-// === СИСТЕМА ОТМЕНЫ ТОВАРОВ (Firebase) ===
+// === СИСТЕМА ОТМЕНЫ ТОВАРОВ ===
 
 export interface CancellationRequest {
   id: string;
@@ -479,12 +441,12 @@ export interface CancellationRequest {
 }
 
 export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
-  const requests = await getFirebaseCancellations();
+  const requests = await mysqlGetCancellations();
   return requests.map(r => ({
     id: r.id,
     items: r.items,
     cashier: r.cashier,
-    requestedAt: r.created_at,
+    requestedAt: r.created_at || '',
     status: r.status
   }));
 };
@@ -493,9 +455,9 @@ export const createCancellationRequest = async (
   items: Array<{ barcode: string; name: string; quantity: number; price: number }>, 
   cashier: string
 ): Promise<CancellationRequest> => {
-  const id = await createFirebaseCancellation(items, cashier);
+  const result = await mysqlCreateCancellation(items, cashier);
   return {
-    id,
+    id: result.id || crypto.randomUUID(),
     items,
     cashier,
     requestedAt: new Date().toISOString(),
@@ -503,55 +465,49 @@ export const createCancellationRequest = async (
   };
 };
 
-export const updateCancellationRequest = async (id: string, status: 'approved' | 'rejected'): Promise<void> => {
-  await updateFirebaseCancellation(id, status);
-  
-  if (status === 'approved') {
-    const requests = await getFirebaseCancellations();
-    const request = requests.find(r => r.id === id);
-    if (request) {
-      for (const item of request.items) {
-        await updateProductQuantity(item.barcode, item.quantity);
-      }
-    }
-  }
+export const approveCancellation = async (id: string, adminId: string): Promise<void> => {
+  await mysqlUpdateCancellation(id, 'approved', adminId);
 };
 
-export const cleanupOldCancellations = async (): Promise<void> => {
-  console.log('cleanupOldCancellations: Not implemented for Firebase');
+export const rejectCancellation = async (id: string, adminId: string): Promise<void> => {
+  await mysqlUpdateCancellation(id, 'rejected', adminId);
 };
 
-export const exportAllData = async () => {
-  const { getSuppliers } = await import('./suppliersDb');
-  
-  const allData = {
-    products: await getStoredProducts(),
-    cancellations: await getCancellationRequests(),
-    suppliers: await getSuppliers(),
-    exportDate: new Date().toISOString(),
-    version: '3.0-firebase'
-  };
+// === ПРОДАЖИ ===
 
-  const jsonString = JSON.stringify(allData, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
-export const importAllData = async (jsonData: string) => {
+export const recordSale = async (
+  barcode: string,
+  productName: string,
+  quantity: number,
+  unitPrice: number,
+  cashier: string,
+  paymentMethod: string = 'cash'
+): Promise<boolean> => {
   try {
-    const data = JSON.parse(jsonData);
-    console.log('Import from backup not implemented for Firebase');
-    return false;
+    await insertSale({
+      barcode,
+      product_name: productName,
+      quantity,
+      unit_price: unitPrice,
+      total_price: quantity * unitPrice,
+      cashier,
+      payment_method: paymentMethod
+    });
+    return true;
   } catch (error) {
-    console.error('Ошибка импорта данных:', error);
+    console.error('❌ Ошибка записи продажи:', error);
     return false;
   }
+};
+
+// === ПОИСК ===
+
+export const searchProducts = async (query: string): Promise<StoredProduct[]> => {
+  const products = await getStoredProducts();
+  const q = query.toLowerCase();
+  return products.filter(p => 
+    p.name.toLowerCase().includes(q) || 
+    p.barcode.includes(q) ||
+    p.category?.toLowerCase().includes(q)
+  );
 };

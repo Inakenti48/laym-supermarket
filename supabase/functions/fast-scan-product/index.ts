@@ -1,79 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// CSV данные кэшируются в памяти
-let csvPricesCache: Map<string, { name: string; category: string; purchasePrice: number; salePrice: number }> | null = null;
-
-// Загрузка цен из CSV (через Supabase Storage или прямой fetch)
-async function loadCSVPrices(supabase: any): Promise<Map<string, any>> {
-  if (csvPricesCache) {
-    return csvPricesCache;
-  }
-
-  csvPricesCache = new Map();
-  
-  try {
-    // Загружаем price_reference.csv из публичной папки
-    const baseUrl = Deno.env.get('SUPABASE_URL')?.replace('//', '//') || '';
-    const csvUrls = [
-      `${baseUrl}/storage/v1/object/public/csv-data/price_reference.csv`,
-    ];
-
-    // Также пробуем загрузить из products таблицы как fallback
-    const { data: existingProducts } = await supabase
-      .from('products')
-      .select('barcode, name, category, purchase_price, sale_price')
-      .not('barcode', 'is', null);
-
-    if (existingProducts) {
-      for (const p of existingProducts) {
-        if (p.barcode && p.sale_price > 0) {
-          csvPricesCache.set(p.barcode, {
-            name: p.name,
-            category: p.category || '',
-            purchasePrice: p.purchase_price || 0,
-            salePrice: p.sale_price || 0
-          });
-        }
-      }
-      console.log(`📦 Загружено ${csvPricesCache.size} товаров из базы products`);
-    }
-
-  } catch (error) {
-    console.error('Error loading CSV prices:', error);
-  }
-
-  return csvPricesCache;
-}
-
-// Поиск цены по штрихкоду
-function findPriceByBarcode(barcode: string, pricesMap: Map<string, any>): any | null {
-  if (!barcode) return null;
-  
-  const normalized = barcode.trim();
-  
-  // Точное совпадение
-  if (pricesMap.has(normalized)) {
-    return pricesMap.get(normalized);
-  }
-  
-  // Поиск по последним 4+ цифрам
-  if (normalized.length >= 4) {
-    const last4 = normalized.slice(-4);
-    for (const [key, value] of pricesMap) {
-      if (key.endsWith(last4)) {
-        return value;
-      }
-    }
-  }
-  
-  return null;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -87,7 +17,6 @@ serve(async (req) => {
     
     console.log('=== FAST SCAN START ===');
     console.log('Device:', deviceId);
-    console.log('User:', userName);
     
     if (!frontPhoto && !barcodePhoto) {
       return new Response(
@@ -101,15 +30,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Загружаем справочник цен
-    const pricesMap = await loadCSVPrices(supabase);
-    console.log(`📊 Справочник цен: ${pricesMap.size} записей`);
-
-    // Используем САМУЮ БЫСТРУЮ модель для распознавания
+    // ТОЛЬКО AI распознавание - никакого Supabase!
     const primaryImage = frontPhoto || barcodePhoto;
     
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -119,7 +40,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite', // САМАЯ БЫСТРАЯ модель!
+        model: 'google/gemini-2.5-flash-lite',
         messages: [
           { 
             role: 'system', 
@@ -156,8 +77,7 @@ serve(async (req) => {
           }
         }],
         tool_choice: { type: "function", function: { name: "extract_product" } },
-        temperature: 0.1, // Низкая температура для точности
-        max_tokens: 200   // Ограничиваем для скорости
+        max_tokens: 200
       }),
     });
 
@@ -181,15 +101,15 @@ serve(async (req) => {
 
     // Парсим результат
     let barcode = '';
-    let name = 'Неизвестный товар';
+    let name = '';
     let category = '';
 
     try {
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       if (toolCall?.function?.arguments) {
         const parsed = JSON.parse(toolCall.function.arguments);
-        barcode = (parsed.barcode || '').replace(/\D/g, ''); // Только цифры
-        name = parsed.name || 'Неизвестный товар';
+        barcode = (parsed.barcode || '').replace(/\D/g, '');
+        name = parsed.name || '';
         category = parsed.category || '';
       }
     } catch (e) {
@@ -197,32 +117,16 @@ serve(async (req) => {
     }
 
     console.log(`📦 Распознано: ${barcode} - ${name} (${category})`);
+    console.log(`=== FAST SCAN DONE in ${aiTime}ms ===`);
 
-    // Проверяем цену в справочнике (с таймаутом)
-    let priceInfo = null;
-    try {
-      priceInfo = barcode ? findPriceByBarcode(barcode, pricesMap) : null;
-    } catch (e) {
-      console.error('Price lookup error:', e);
-    }
-    
-    // НЕ пытаемся сохранять в Supabase - просто возвращаем результат
-    // Клиент сам сохранит в MySQL
-    const totalTime = Date.now() - startTime;
-    console.log(`=== FAST SCAN DONE in ${totalTime}ms ===`);
-
+    // Возвращаем ТОЛЬКО результат AI - клиент сам сохранит в MySQL
     return new Response(
       JSON.stringify({
         success: true,
         barcode,
         name,
         category,
-        hasPrice: !!priceInfo,
-        price: priceInfo?.salePrice || 0,
-        purchasePrice: priceInfo?.purchasePrice || 0,
-        savedTo: '', // Клиент сохранит сам в MySQL
-        productId: '',
-        processingTime: totalTime
+        processingTime: aiTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

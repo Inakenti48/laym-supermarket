@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Settings, Monitor, Flame, Database, Trash2 } from 'lucide-react';
+import { Settings, Monitor, Database } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/mysqlCollections';
-import { 
-  testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, 
-  retryFirebaseConnection, clearAllFirebaseProducts, enableFirebaseSync, 
-  disableFirebaseSync, isFirebaseEnabled, initFirebaseUsers 
-} from '@/lib/mysqlCollections';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { getDevices, saveDevice, type Device } from '@/lib/mysqlCollections';
@@ -48,99 +43,6 @@ export const DiagnosticsTab = () => {
     };
     loadUserRole();
   }, []);
-
-  // Инициализация Firebase пользователей
-  const [firebaseLoading, setFirebaseLoading] = useState(false);
-  const [firebaseTestLoading, setFirebaseTestLoading] = useState(false);
-  const [initTestLoading, setInitTestLoading] = useState(false);
-  const [clearLoading, setClearLoading] = useState(false);
-  const [firebaseStatus, setFirebaseStatus] = useState(() => getFirebaseStatus());
-  
-  const handleInitFirebase = async () => {
-    setFirebaseLoading(true);
-    try {
-      const result = await initFirebaseUsers();
-      if (result.success) {
-        toast.success(`✅ ${result.message}`);
-      } else {
-        toast.error(`❌ ${result.message}`);
-      }
-    } catch (error: any) {
-      toast.error(`❌ Ошибка: ${error.message}`);
-    }
-    setFirebaseLoading(false);
-  };
-
-  const handleTestFirebaseProducts = async () => {
-    setFirebaseTestLoading(true);
-    try {
-      const result = await testFirebaseConnection();
-      if (result.success) {
-        toast.success(`✅ ${result.message} (${result.mode})`);
-        console.log('Тестовый товар:', result.product);
-      } else {
-        toast.error(`❌ ${result.message}`);
-      }
-      setFirebaseStatus(getFirebaseStatus());
-    } catch (error: any) {
-      toast.error(`❌ Ошибка: ${error.message}`);
-    }
-    setFirebaseTestLoading(false);
-  };
-
-  const handleInitTestProducts = async () => {
-    setInitTestLoading(true);
-    try {
-      const result = await initializeWithTestProducts();
-      if (result.success) {
-        toast.success(`✅ ${result.message}`);
-      } else {
-        toast.error(`❌ ${result.message}`);
-      }
-      setFirebaseStatus(getFirebaseStatus());
-    } catch (error: any) {
-      toast.error(`❌ Ошибка: ${error.message}`);
-    }
-    setInitTestLoading(false);
-  };
-
-  const handleRetryFirebase = () => {
-    enableFirebaseSync();
-    retryFirebaseConnection();
-    setFirebaseStatus(getFirebaseStatus());
-    toast.info('🔄 Попытка переподключения к Firebase...');
-  };
-
-  const handleToggleFirebase = () => {
-    if (isFirebaseEnabled()) {
-      disableFirebaseSync();
-      toast.info('📦 Переключено на локальное хранилище');
-    } else {
-      enableFirebaseSync();
-      retryFirebaseConnection();
-      toast.info('🔥 Firebase синхронизация включена');
-    }
-    setFirebaseStatus(getFirebaseStatus());
-  };
-
-  const handleClearAllProducts = async () => {
-    if (!confirm('⚠️ Удалить ВСЕ товары из Firebase и локальной базы? Это действие необратимо!')) {
-      return;
-    }
-    setClearLoading(true);
-    try {
-      const result = await clearAllFirebaseProducts();
-      if (result.success) {
-        toast.success(`✅ ${result.message}`);
-      } else {
-        toast.error(`❌ Ошибка очистки`);
-      }
-      setFirebaseStatus(getFirebaseStatus());
-    } catch (error: any) {
-      toast.error(`❌ Ошибка: ${error.message}`);
-    }
-    setClearLoading(false);
-  };
 
   // Загружаем все устройства для админа
   useEffect(() => {
@@ -244,118 +146,12 @@ export const DiagnosticsTab = () => {
           </div>
         </div>
 
-        {/* Firebase инициализация */}
+        {/* MySQL Status */}
         {userRole === 'admin' && (
-          <div className="mb-6 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-3">
-            {/* Статус Firebase */}
-            <div className="flex items-center justify-between pb-2 border-b border-orange-500/20">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${firebaseStatus.connected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                <span className="text-sm font-medium">
-                  Режим: {firebaseStatus.mode}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleToggleFirebase}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                >
-                  {firebaseStatus.connected ? '📦 Переключить на локальное' : '🔥 Включить Firebase'}
-                </Button>
-                {!firebaseStatus.connected && (
-                  <Button
-                    onClick={handleRetryFirebase}
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs"
-                  >
-                    Переподключить
-                  </Button>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Flame className="h-4 w-4 text-orange-500" />
-                  Firebase Пользователи
-                </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Создать пользователей в Firebase (один раз)
-                </p>
-              </div>
-              <Button
-                onClick={handleInitFirebase}
-                disabled={firebaseLoading}
-                variant="outline"
-                size="sm"
-                className="border-orange-500/50 hover:bg-orange-500/10"
-              >
-                {firebaseLoading ? 'Создание...' : 'Инициализировать'}
-              </Button>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-orange-500/20">
-              <div>
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Database className="h-4 w-4 text-orange-500" />
-                  Тест подключения
-                </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Проверить подключение (добавит 1 тестовый товар)
-                </p>
-              </div>
-              <Button
-                onClick={handleTestFirebaseProducts}
-                disabled={firebaseTestLoading}
-                variant="outline"
-                size="sm"
-                className="border-orange-500/50 hover:bg-orange-500/10"
-              >
-                {firebaseTestLoading ? 'Проверка...' : 'Тест'}
-              </Button>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-orange-500/20">
-              <div>
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Database className="h-4 w-4 text-green-500" />
-                  Тестовые товары
-                </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Добавить 5 демо-товаров для тестирования
-                </p>
-              </div>
-              <Button
-                onClick={handleInitTestProducts}
-                disabled={initTestLoading}
-                variant="outline"
-                size="sm"
-                className="border-green-500/50 hover:bg-green-500/10"
-              >
-                {initTestLoading ? 'Добавление...' : 'Добавить демо'}
-              </Button>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-red-500/20">
-              <div>
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                  Очистить товары
-                </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Удалить ВСЕ товары из базы данных
-                </p>
-              </div>
-              <Button
-                onClick={handleClearAllProducts}
-                disabled={clearLoading}
-                variant="outline"
-                size="sm"
-                className="border-red-500/50 hover:bg-red-500/10 text-red-600"
-              >
-                {clearLoading ? 'Удаление...' : 'Очистить'}
-              </Button>
+          <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-sm font-medium">MySQL подключен</span>
             </div>
           </div>
         )}

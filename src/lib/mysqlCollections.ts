@@ -323,7 +323,7 @@ export const disableFirebaseSync = () => {};
 export const isFirebaseEnabled = () => true;
 export const initFirebaseUsers = async () => ({ success: true, message: 'MySQL mode - no Firebase users needed' });
 
-// Session management
+// Session management - сессия хранится локально (device-specific)
 export interface AppSession {
   role: string;
   userName?: string;
@@ -331,9 +331,15 @@ export interface AppSession {
   login?: string;
 }
 
+// NOTE: Session storage остается локальным (специфично для устройства)
+// Все остальные данные (товары, поставщики, логи) - в MySQL
 export const getCurrentSession = (): AppSession | null => {
-  const saved = localStorage.getItem('app_session');
-  return saved ? JSON.parse(saved) : null;
+  try {
+    const saved = localStorage.getItem('app_session');
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
 };
 
 // Re-export PendingProduct type

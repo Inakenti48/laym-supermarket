@@ -194,6 +194,34 @@ serve(async (req) => {
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
 
+        // Таблицы для черновиков форм
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS form_drafts (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL,
+            form_type VARCHAR(50) NOT NULL,
+            data JSON NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_user_form (user_id, form_type)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS user_sessions (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL,
+            role VARCHAR(50) NOT NULL,
+            user_name VARCHAR(255),
+            cashier_name VARCHAR(255),
+            employee_id VARCHAR(36),
+            device_id VARCHAR(100),
+            login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP,
+            INDEX idx_user (user_id),
+            INDEX idx_expires (expires_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
         result = { success: true, message: 'All tables created successfully' };
         break;
 
@@ -609,6 +637,64 @@ serve(async (req) => {
           'UPDATE task_reports SET status = ?, admin_note = ? WHERE id = ?',
           [data.status, data.admin_note || null, data.id]
         );
+        result = { success: true };
+        break;
+
+      // ==================== FORM DRAFTS ====================
+      case 'get_form_draft':
+        const [draft] = await client.query(
+          'SELECT * FROM form_drafts WHERE user_id = ? AND form_type = ?',
+          [data.user_id, data.form_type]
+        );
+        result = { success: true, data: draft ? { ...draft, data: JSON.parse(draft.data) } : null };
+        break;
+
+      case 'save_form_draft':
+        const draftId = crypto.randomUUID();
+        await client.execute(
+          `INSERT INTO form_drafts (id, user_id, form_type, data)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = NOW()`,
+          [draftId, data.user_id, data.form_type, JSON.stringify(data.data)]
+        );
+        result = { success: true };
+        break;
+
+      case 'delete_form_draft':
+        await client.execute(
+          'DELETE FROM form_drafts WHERE user_id = ? AND form_type = ?',
+          [data.user_id, data.form_type]
+        );
+        result = { success: true };
+        break;
+
+      // ==================== USER SESSIONS ====================
+      case 'create_session':
+        const sessionId = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await client.execute(
+          `INSERT INTO user_sessions (id, user_id, role, user_name, cashier_name, employee_id, device_id, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [sessionId, data.user_id, data.role, data.user_name || null, data.cashier_name || null, data.employee_id || null, data.device_id || null, expiresAt]
+        );
+        result = { success: true, data: { sessionId, expiresAt: expiresAt.toISOString() } };
+        break;
+
+      case 'get_session':
+        const [session] = await client.query(
+          'SELECT * FROM user_sessions WHERE id = ? AND expires_at > NOW()',
+          [data.session_id]
+        );
+        result = { success: true, data: session || null };
+        break;
+
+      case 'delete_session':
+        await client.execute('DELETE FROM user_sessions WHERE id = ?', [data.session_id]);
+        result = { success: true };
+        break;
+
+      case 'cleanup_expired_sessions':
+        await client.execute('DELETE FROM user_sessions WHERE expires_at < NOW()');
         result = { success: true };
         break;
 

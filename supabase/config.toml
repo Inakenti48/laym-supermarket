@@ -43,3 +43,6 @@ verify_jwt = false
 
 [functions.mysql-query]
 verify_jwt = false
+
+[functions.s3-upload]
+verify_jwt = false

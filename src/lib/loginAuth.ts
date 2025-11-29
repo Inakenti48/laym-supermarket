@@ -35,8 +35,8 @@ export const loginByUsername = async (login: string): Promise<{
     // Вызываем edge function - она сразу создает сессию!
     console.log('📡 Вызов функции...');
 
-    // Добавляем таймаут, чтобы не "висеть" при проблемах с сервером
-    const timeoutMs = 5000;
+    // Таймаут 10 секунд
+    const timeoutMs = 10000;
     let data: any = null;
     let error: any = null;
 

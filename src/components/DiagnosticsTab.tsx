@@ -101,18 +101,18 @@ export const DiagnosticsTab = () => {
 
   return (
     <Tabs defaultValue="settings" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="settings">
-          <Settings className="h-4 w-4 mr-2" />
-          Настройки
+      <TabsList className="grid w-full grid-cols-3">
+        <TabsTrigger value="settings" className="text-xs sm:text-sm">
+          <Settings className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Настройки</span>
         </TabsTrigger>
-        <TabsTrigger value="monitor">
-          <Monitor className="h-4 w-4 mr-2" />
-          Активные устройства
+        <TabsTrigger value="monitor" className="text-xs sm:text-sm">
+          <Monitor className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Устройства</span>
         </TabsTrigger>
-        <TabsTrigger value="printer">
-          <Settings className="h-4 w-4 mr-2" />
-          Wi-Fi Принтер
+        <TabsTrigger value="printer" className="text-xs sm:text-sm">
+          <Database className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Принтер</span>
         </TabsTrigger>
       </TabsList>
 

@@ -6,10 +6,14 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
-import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection, clearAllFirebaseProducts, enableFirebaseSync, disableFirebaseSync, isFirebaseEnabled } from '@/lib/firebaseProducts';
+import { 
+  testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, 
+  retryFirebaseConnection, clearAllFirebaseProducts, enableFirebaseSync, 
+  disableFirebaseSync, isFirebaseEnabled 
+} from '@/lib/mysqlCollections';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getDevices, saveDevice, type Device } from '@/lib/firebaseCollections';
+import { getDevices, saveDevice, type Device } from '@/lib/mysqlCollections';
 import { ActiveDevicesMonitor } from './ActiveDevicesMonitor';
 import { WiFiPrinterSettings } from './WiFiPrinterSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

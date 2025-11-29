@@ -44,7 +44,7 @@ import {
   DRAWER_COMMANDS,
   type ReceiptData 
 } from '@/lib/printer';
-import { addSale } from '@/lib/firebaseCollections';
+import { addSale } from '@/lib/mysqlCollections';
 
 interface CartItem {
   id: string;

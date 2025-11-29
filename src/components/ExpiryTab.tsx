@@ -7,7 +7,7 @@ import { addLog } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { StoredProduct } from '@/lib/storage';
-import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
+import { useFirebaseProducts } from '@/hooks/useProductsSync';
 
 export const ExpiryTab = () => {
   const [expiringProducts, setExpiringProducts] = useState<StoredProduct[]>([]);

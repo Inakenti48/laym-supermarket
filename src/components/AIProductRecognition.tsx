@@ -7,7 +7,7 @@ import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
 import { saveOrUpdateLocalProduct } from '@/lib/localOnlyMode';
-import { addToQueue } from '@/lib/firebaseCollections';
+import { addToQueue } from '@/lib/mysqlCollections';
 import {
   AlertDialog,
   AlertDialogAction,

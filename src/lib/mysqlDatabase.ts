@@ -9,14 +9,14 @@ interface MySQLResponse<T = unknown> {
   message?: string;
 }
 
-async function mysqlRequest<T = unknown>(action: string, data?: Record<string, unknown>): Promise<MySQLResponse<T>> {
+export async function mysqlRequest<T = unknown>(action: string, data?: Record<string, unknown>): Promise<MySQLResponse<T>> {
   try {
     const response = await fetch(MYSQL_FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action, ...data }),
+      body: JSON.stringify({ action, data }),
     });
     
     const result = await response.json();
@@ -163,8 +163,8 @@ export async function getAllLogs(): Promise<SystemLog[]> {
   return result.data || [];
 }
 
-export async function insertLog(log: Omit<SystemLog, 'id' | 'created_at'>): Promise<boolean> {
-  const result = await mysqlRequest('insert_log', { log });
+export async function insertLog(action: string, userName?: string, details?: string): Promise<boolean> {
+  const result = await mysqlRequest('insert_log', { action, user_name: userName, details });
   return result.success;
 }
 
@@ -222,6 +222,9 @@ export interface PendingProduct {
   supplier?: string;
   expiry_date?: string;
   photo_url?: string;
+  front_photo?: string;
+  barcode_photo?: string;
+  image_url?: string;
   added_by: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at?: string;

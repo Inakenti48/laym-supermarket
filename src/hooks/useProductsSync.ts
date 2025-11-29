@@ -51,8 +51,9 @@ export function useProductsSync() {
     refresh();
   }, [refresh]);
 
-  return { products, loading, error, refresh };
+  return { products, loading, error, refresh, refetch: refresh };
 }
 
-// Алиас для обратной совместимости
-export { useProductsSync as useFirebaseSync };
+// Алиасы для обратной совместимости
+export const useFirebaseSync = useProductsSync;
+export const useFirebaseProducts = useProductsSync;

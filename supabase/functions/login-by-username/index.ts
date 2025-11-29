@@ -1,12 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.76.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Фиксированные пользователи с уникальными ролями
+// Фиксированные пользователи
 const USERS = [
   { login: '8080', role: 'admin', name: 'Администратор', user_id: '00000000-0000-0000-0000-000000000001' },
   { login: '1020', role: 'cashier1', name: 'Кассир 1', user_id: '00000000-0000-0000-0000-000000000002' },
@@ -29,9 +28,9 @@ serve(async (req) => {
       );
     }
 
-    console.log('🔐 Проверка входа по хешу');
+    console.log('🔐 Проверка входа');
 
-    // Ищем пользователя с совпадающим хешем
+    // Ищем пользователя
     let foundUser = null;
     for (const user of USERS) {
       const userHash = await hashSHA256(user.login);
@@ -42,48 +41,17 @@ serve(async (req) => {
     }
 
     if (!foundUser) {
+      console.log('❌ Неверный логин');
       return new Response(
         JSON.stringify({ success: false, error: 'Неверный логин' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('✅ Логин верный:', foundUser.name, 'роль:', foundUser.role);
+    console.log('✅ Логин верный:', foundUser.name);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Удаляем старые сессии пользователя
-    await supabase
-      .from('user_sessions')
-      .delete()
-      .eq('user_id', foundUser.user_id);
-
-    // Создаем новую сессию
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: foundUser.user_id,
-        login: foundUser.login,
-        role: foundUser.role,
-        expires_at: expiresAt.toISOString()
-      })
-      .select('id')
-      .single();
-
-    if (sessionError) {
-      console.error('❌ Ошибка создания сессии:', sessionError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Ошибка создания сессии' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('✅ Сессия создана:', sessionData.id);
+    // Генерируем ID сессии без обращения к БД
+    const sessionId = crypto.randomUUID();
 
     return new Response(
       JSON.stringify({ 
@@ -92,26 +60,24 @@ serve(async (req) => {
         role: foundUser.role,
         login: foundUser.login,
         name: foundUser.name,
-        sessionId: sessionData.id
+        sessionId: sessionId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('💥 Критическая ошибка:', error);
+    console.error('💥 Ошибка:', error);
     return new Response(
-      JSON.stringify({ success: false, error: 'Внутренняя ошибка сервера' }),
+      JSON.stringify({ success: false, error: 'Ошибка сервера' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
 
-// SHA-256 хеширование
 async function hashSHA256(text: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex.substring(0, 32);
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
 }

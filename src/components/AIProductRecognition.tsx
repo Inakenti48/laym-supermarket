@@ -447,40 +447,41 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       let savedTo = aiResult.savedTo || '';
       
-      // Если edge function не сохранила - сохраняем в MySQL сами
-      if (!savedTo && scannedBarcode) {
-        console.log('💾 Сохраняем в MySQL...');
-        try {
-          if (priceInfo && priceInfo.purchasePrice > 0) {
-            // Есть цена - в products
-            const result = await saveOrUpdateLocalProduct({
-              barcode: scannedBarcode,
-              name: priceInfo.name || scannedName,
-              purchasePrice: priceInfo.purchasePrice,
-              salePrice: Math.round(priceInfo.purchasePrice * 1.3),
-              quantity: 1,
-              category: priceInfo.category || scannedCategory,
-              addedBy: userName,
-            });
-            savedTo = result.isNew ? 'products' : 'products_updated';
-            console.log('✅ Сохранено в products');
-          } else {
-            // Нет цены - в очередь
-            await addToQueue({
-              barcode: scannedBarcode,
-              product_name: scannedName || 'Неизвестный товар',
-              category: scannedCategory,
-              front_photo: frontPhoto,
-              barcode_photo: barcodePhoto,
-              quantity: 1,
-              created_by: userName,
-            });
-            savedTo = 'queue';
-            console.log('📋 Сохранено в очередь');
-          }
-        } catch (saveErr: any) {
-          console.error('❌ Ошибка сохранения в MySQL:', saveErr);
+      // Сохраняем в MySQL (edge function только распознаёт)
+      console.log('💾 Сохраняем в MySQL...', { scannedBarcode, priceInfo, savedTo });
+      try {
+        if (priceInfo && priceInfo.purchasePrice > 0) {
+          // Есть цена - в products
+          console.log('📦 Сохраняем в products с ценой:', priceInfo.purchasePrice);
+          const result = await saveOrUpdateLocalProduct({
+            barcode: scannedBarcode,
+            name: priceInfo.name || scannedName,
+            purchasePrice: priceInfo.purchasePrice,
+            salePrice: Math.round(priceInfo.purchasePrice * 1.3),
+            quantity: 1,
+            category: priceInfo.category || scannedCategory,
+            addedBy: userName,
+          });
+          savedTo = result.isNew ? 'products' : 'products_updated';
+          console.log('✅ Сохранено в products:', savedTo);
+        } else {
+          // Нет цены - в очередь
+          console.log('📋 Сохраняем в очередь (нет цены)');
+          await addToQueue({
+            barcode: scannedBarcode || 'unknown',
+            product_name: scannedName || 'Неизвестный товар',
+            category: scannedCategory,
+            front_photo: frontPhoto,
+            barcode_photo: barcodePhoto,
+            quantity: 1,
+            created_by: userName,
+          });
+          savedTo = 'queue';
+          console.log('✅ Сохранено в очередь');
         }
+      } catch (saveErr: any) {
+        console.error('❌ Ошибка сохранения в MySQL:', saveErr);
+        toast.error(`Ошибка сохранения: ${saveErr.message}`);
       }
       
       // Увеличиваем счетчик

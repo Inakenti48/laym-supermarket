@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
-import { getAllProducts } from '@/lib/storage';
+import { getAllProducts, findProductByBarcode } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
@@ -307,41 +306,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   };
 
   const recognizeProduct = async (imageBase64: string, type: 'product' | 'barcode' | 'expiry' | 'dual'): Promise<{ barcode: string; name?: string; category?: string; photoUrl?: string }> => {
-    // Сжимаем изображение сразу для всех операций
-    console.log('📦 Сжатие изображения...');
-    const compressedImage = await compressForAI(imageBase64);
-    
-    // Упрощаем логику: сразу обращаемся к AI, без предварительного поиска по фото,
-    // чтобы сканирование работало максимально быстро
-    console.log('🤖 AI распознавание (без предварительного поиска по фото)...');
+    // Локальный поиск товара (AI функции отключены)
+    console.log('🔍 Локальный поиск товара...');
     const allProducts = await getAllProducts();
     
-    const { data, error } = await supabase.functions.invoke('recognize-product', {
-      body: {
-        imageUrl: compressedImage,  // Используем сжатое изображение
-        recognitionType: type,
-        allProducts: allProducts.map(p => ({
-          barcode: p.barcode,
-          name: p.name,
-          category: p.category,
-          photos: p.photos
-        }))
-      }
-    });
-
-    if (error) {
-      console.error('Recognition error:', error);
-      throw error;
-    }
-
-    const result = data?.result || {};
+    // Возвращаем пустой результат - AI распознавание отключено
+    console.log('⚠️ AI распознавание отключено (Supabase удален)');
     
-    // Возвращаем результат с захваченным изображением для сохранения
     return {
-      barcode: result.barcode || '',
-      name: result.name || '',
-      category: result.category || '',
-      photoUrl: imageBase64  // Передаем изображение для последующего сохранения
+      barcode: '',
+      name: '',
+      category: '',
+      photoUrl: imageBase64
     };
   };
 
@@ -400,49 +376,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       // Если режим распознавания срока годности
       if (mode === 'expiry') {
-        setNotification('🔍 Распознавание дат...');
-        
-        try {
-          // Сжимаем изображение перед отправкой
-          const compressedImage = await compressForAI(image);
-          
-          const { data, error } = await supabase.functions.invoke('recognize-expiry-date', {
-            body: { imageBase64: compressedImage }
-          });
-
-          if (error) {
-            console.error('Ошибка вызова recognize-expiry-date:', error);
-            setNotification('❌ Ошибка');
-            setTimeout(() => setNotification(''), 1500);
-            toast.error('Ошибка при распознавании дат', { position: 'top-center' });
-            return;
-          }
-
-          console.log('📅 Результат распознавания дат:', data);
-
-          if (data?.manufacturingDate || data?.expiryDate) {
-            setNotification('✅ Даты распознаны!');
-            
-            onProductFound({ 
-              barcode: '', 
-              capturedImage: image,
-              expiryDate: data.expiryDate,
-              manufacturingDate: data.manufacturingDate 
-            });
-            
-            setTimeout(() => setNotification(''), 1000);
-          } else {
-            setNotification('❌ Даты не найдены');
-            setTimeout(() => setNotification(''), 1500);
-            toast.warning('⚠️ Даты не найдены на изображении', { position: 'top-center' });
-          }
-        } catch (err: any) {
-          console.error('Ошибка распознавания срока годности:', err);
-          setNotification('❌ Ошибка');
-          setTimeout(() => setNotification(''), 1500);
-          toast.error('Ошибка при распознавании дат', { position: 'top-center' });
-        }
-        
+        setNotification('⚠️ Функция недоступна');
+        toast.warning('⚠️ AI распознавание дат временно недоступно. Введите даты вручную.', { position: 'top-center' });
+        setTimeout(() => setNotification(''), 1500);
         setIsProcessing(false);
         return;
       }
@@ -524,23 +460,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       }
       const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      // ТОЛЬКО AI распознавание (без автосохранения на сервере)
-      console.log('⚡ Вызов AI распознавания...');
-      const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-product-photos', {
-        body: { 
-          frontPhoto: compressedFront,
-          barcodePhoto: compressedBarcode,
-          autoSave: false, // НЕ сохраняем на сервере - сделаем это локально
-          deviceId,
-          userName
-        }
-      });
+      // AI распознавание отключено (Supabase удален)
+      console.log('⚠️ AI распознавание отключено - используем локальный режим');
       
-      console.log('⚡ AI ответ:', { scanData, scanError, time: scanData?.processingTime });
-
-      const scannedBarcode = scanData?.barcode || '';
-      const scannedName = scanData?.name || '';
-      const scannedCategory = scanData?.category || '';
+      // Генерируем временный штрихкод если не найден
+      const tempBarcode = `TEMP-${Date.now()}`;
+      const scannedBarcode = tempBarcode;
+      const scannedName = '';
+      const scannedCategory = '';
       
       // ЛОКАЛЬНЫЙ поиск цены (избегаем таймаут базы)
       console.log('🔍 Локальный поиск цены...');
@@ -598,18 +525,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setIsProcessing(false);
       
       // Показываем статус
-      if (scanError) {
-        console.error('Function invoke error:', scanError);
-        setNotification('⚠️ Ошибка AI');
-        toast.error('Ошибка AI при сканировании');
-        onProductFound({
-          barcode: scannedBarcode,
-          name: scannedName,
-          category: scannedCategory,
-          frontPhoto: tempFrontPhoto,
-          barcodePhoto: tempBarcodePhoto
-        });
-      } else if (saveError) {
+      if (saveError) {
         console.error('Save error:', saveError);
         setNotification(`⚠️ Ошибка: ${saveError.substring(0, 30)}`);
         toast.error(`Ошибка сохранения: ${saveError}`);

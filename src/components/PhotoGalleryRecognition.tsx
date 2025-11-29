@@ -3,9 +3,7 @@ import { Image, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
-import { compressForAI } from '@/lib/imageCompression';
-import { getAllProducts } from '@/lib/storage';
+import { getAllProducts, findProductByBarcode } from '@/lib/storage';
 
 interface PhotoGalleryRecognitionProps {
   onProductFound: (data: { 
@@ -51,112 +49,15 @@ export const PhotoGalleryRecognition = ({ onProductFound, onClose }: PhotoGaller
 
     setIsProcessing(true);
     try {
-      // Шаг 1: Попытка найти существующий товар по фото
-      console.log('🔍 Пытаемся найти существующий товар по фото...');
+      // AI распознавание отключено (Supabase удален)
+      console.log('⚠️ AI распознавание отключено');
+      toast.warning('⚠️ AI распознавание временно недоступно. Добавьте товар вручную.', { position: 'top-center' });
       
-      const existingProducts = await getAllProducts();
-      const productsWithImages = existingProducts.filter(p => p.photos && p.photos.length > 0);
-      
-      if (productsWithImages.length > 0) {
-        console.log(`📸 Найдено ${productsWithImages.length} товаров с фото`);
-        
-        // Сжимаем фото для экономии трафика
-        const compressedFront = await compressForAI(frontPhoto);
-        const compressedBarcode = await compressForAI(barcodePhoto);
-        
-        const { data: matchData, error: matchError } = await supabase.functions.invoke(
-          'recognize-product-by-photo',
-          {
-            body: { 
-              frontPhoto: compressedFront,
-              barcodePhoto: compressedBarcode
-            }
-          }
-        );
-
-        if (!matchError && matchData?.recognized && matchData.barcode !== 'UNKNOWN') {
-          console.log('✅ Товар найден в базе:', matchData.barcode);
-          toast.success(`✅ Товар найден: ${matchData.productName}`);
-          
-          onProductFound({
-            barcode: matchData.barcode,
-            name: matchData.productName,
-            category: matchData.category,
-            frontPhoto,
-            barcodePhoto
-          });
-          onClose();
-          return;
-        }
-        
-        console.log('ℹ️ Товар не найден, переходим к AI распознаванию');
-      }
-
-      // Шаг 2: AI распознавание если товар не найден
-      console.log('🤖 Запускаем AI распознавание...');
-      
-      // Загружаем фото в ImageKit через edge function
-      const [frontUploadResult, barcodeUploadResult] = await Promise.all([
-        supabase.functions.invoke('upload-to-imagekit', {
-          body: {
-            base64Image: frontPhoto,
-            fileName: `temp-front-${Date.now()}.jpg`,
-            folder: '/temporary'
-          }
-        }),
-        supabase.functions.invoke('upload-to-imagekit', {
-          body: {
-            base64Image: barcodePhoto,
-            fileName: `temp-barcode-${Date.now()}.jpg`,
-            folder: '/temporary'
-          }
-        })
-      ]);
-      
-      if (frontUploadResult.error || barcodeUploadResult.error) {
-        throw new Error('Ошибка загрузки фото в ImageKit');
-      }
-      
-      const frontUrl = frontUploadResult.data?.url;
-      const barcodeUrl = barcodeUploadResult.data?.url;
-      
-      if (!frontUrl || !barcodeUrl) {
-        throw new Error('Не удалось получить URL изображений');
-      }
-
-      // Вызываем edge function для распознавания
-      const { data: scanData, error: scanError } = await supabase.functions.invoke(
-        'scan-product-photos',
-        {
-          body: {
-            frontPhoto: frontUrl,
-            barcodePhoto: barcodeUrl
-          }
-        }
-      );
-
-      if (scanError) {
-        console.error('Ошибка AI распознавания:', scanError);
-        throw new Error('Ошибка распознавания');
-      }
-
-      console.log('✅ AI распознавание завершено:', scanData);
-      
-      const barcode = scanData?.barcode || '';
-      const name = scanData?.name || '';
-      const category = scanData?.category || '';
-      
-      if (!barcode && !name) {
-        toast.error('❌ Не удалось распознать товар');
-        return;
-      }
-      
-      toast.success(`✅ Распознано: ${name || 'товар'}`);
-      
+      // Передаем фото без распознавания
       onProductFound({
-        barcode,
-        name,
-        category,
+        barcode: '',
+        name: '',
+        category: '',
         frontPhoto,
         barcodePhoto
       });

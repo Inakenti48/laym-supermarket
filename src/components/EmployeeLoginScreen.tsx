@@ -27,37 +27,9 @@ export const EmployeeLoginScreen = ({ onLogin }: Props) => {
     );
 
     if (employee) {
-      // Используем данные из localStorage напрямую
+      // Используем данные из localStorage
       onLogin(employee.id, employee.name);
       toast.success(`Добро пожаловать, ${employee.name}!`);
-      
-      // Обновляем из Supabase в фоне (необязательно)
-      setTimeout(async () => {
-        try {
-          const { supabase } = await import('@/integrations/supabase/client');
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-          
-          const { data } = await supabase
-            .from('employees')
-            .select('id, name')
-            .eq('login', login)
-            .abortSignal(controller.signal)
-            .maybeSingle();
-          
-          clearTimeout(timeoutId);
-          
-          if (data && (data.id !== employee.id || data.name !== employee.name)) {
-            // Обновляем localStorage если данные изменились
-            const updatedAuth = employeesAuth.map((e: any) => 
-              e.login === login ? { ...e, id: data.id, name: data.name } : e
-            );
-            localStorage.setItem('employees_auth', JSON.stringify(updatedAuth));
-          }
-        } catch (error) {
-          console.warn('Фоновое обновление данных не удалось', error);
-        }
-      }, 0);
     } else {
       toast.error('Неверный логин или пароль');
     }

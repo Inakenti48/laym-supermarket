@@ -22,7 +22,7 @@ import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint'
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { addToQueue } from '@/lib/firebaseCollections';
+import { addToQueue, getQueueProducts, subscribeToQueue, deleteQueueItem } from '@/lib/firebaseCollections';
 import { useFormSync } from '@/hooks/useFormSync';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import { retryOperation } from '@/lib/retryUtils';
@@ -469,39 +469,17 @@ export const InventoryTab = () => {
     };
     loadSuppliers();
 
-    // Загрузка pending products из Supabase
-    const loadPendingProducts = async (page: number = 1) => {
+    // Загрузка pending products из Firebase
+    const loadPendingProducts = async () => {
       try {
-        // Сначала получаем общее количество
-        const { count, error: countError } = await supabase
-          .from('vremenno_product_foto')
-          .select('*', { count: 'exact', head: true });
+        const items = await getQueueProducts();
+        setQueueTotal(items.length);
         
-        if (countError) {
-          console.error('❌ Ошибка подсчета товаров:', countError);
-        } else {
-          setQueueTotal(count || 0);
-        }
+        const from = (queuePage - 1) * ITEMS_PER_PAGE;
+        const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
         
-        // Загружаем товары с пагинацией
-        const from = (page - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-        
-        const { data, error } = await supabase
-          .from('vremenno_product_foto')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, to);
-        
-        if (error) {
-          console.error('❌ Ошибка загрузки очереди:', error);
-          // Оставляем только лог в консоли, без всплывающего тоста,
-          // чтобы не мешать работе со сканером
-          return;
-        }
-        
-        if (data && data.length > 0) {
-          const loaded: PendingProduct[] = data.map(item => {
+        if (pageItems.length > 0) {
+          const loaded: PendingProduct[] = pageItems.map(item => {
             const photos = [];
             if (item.front_photo) photos.push(item.front_photo);
             if (item.barcode_photo) photos.push(item.barcode_photo);
@@ -512,33 +490,30 @@ export const InventoryTab = () => {
               barcode: item.barcode || '',
               name: item.product_name || '',
               category: item.category || '',
-              purchasePrice: item.purchase_price ? String(item.purchase_price) : '',
-              retailPrice: item.retail_price ? String(item.retail_price) : '',
+              purchasePrice: '',
+              retailPrice: '',
               quantity: item.quantity ? String(item.quantity) : '1',
               unit: 'шт',
-              supplier: item.supplier || '',
-              expiryDate: item.expiry_date || '',
+              supplier: '',
+              expiryDate: '',
               photos: photos,
               frontPhoto: item.front_photo || item.image_url || '',
               barcodePhoto: item.barcode_photo || '',
             };
           });
           setPendingProducts(loaded);
-          console.log(`✅ Загружено ${loaded.length} из ${count || 0} товаров (стр. ${page})`);
+          console.log(`✅ Загружено ${loaded.length} из ${items.length} товаров (стр. ${queuePage})`);
         } else {
           setPendingProducts([]);
           console.log('📦 Очередь пуста');
         }
       } catch (err) {
-        console.error('❌ КРИТИЧЕСКАЯ ошибка загрузки очереди:', err);
-        toast.error('Критическая ошибка загрузки очереди');
+        console.error('❌ Ошибка загрузки очереди:', err);
       }
     };
-    loadPendingProducts(queuePage);
+    loadPendingProducts();
 
-    // Подписка на Firebase очередь вместо Supabase
-    const { subscribeToQueue } = require('@/lib/firebaseCollections');
-    
+    // Подписка на Firebase очередь
     const unsubscribeQueue = subscribeToQueue((items: any[]) => {
       const from = (queuePage - 1) * ITEMS_PER_PAGE;
       const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
@@ -1170,16 +1145,9 @@ export const InventoryTab = () => {
   const handleRemovePendingProduct = async (id: string) => {
     setPendingProducts(prev => prev.filter(p => p.id !== id));
     
-    // Также удаляем из временной таблицы
+    // Удаляем из Firebase очереди
     try {
-      const { error } = await supabase
-        .from('vremenno_product_foto')
-        .delete()
-        .eq('id', id);
-      
-      if (error) {
-        console.error('Ошибка удаления из временной таблицы:', error);
-      }
+      await deleteQueueItem(id);
     } catch (err) {
       console.error('Ошибка при удалении:', err);
     }
@@ -1300,20 +1268,13 @@ export const InventoryTab = () => {
         }
       }
 
-      // Удаляем успешно сохраненные товары из временной таблицы
+      // Удаляем успешно сохраненные товары из Firebase очереди
       if (savedProductIds.length > 0) {
-        console.log(`🗑️ Удаление ${savedProductIds.length} товаров из временной таблицы...`);
+        console.log(`🗑️ Удаление ${savedProductIds.length} товаров из очереди...`);
         
         for (const productId of savedProductIds) {
           try {
-            const { error: deleteError } = await supabase
-              .from('vremenno_product_foto')
-              .delete()
-              .eq('id', productId);
-            
-            if (deleteError) {
-              console.error('Ошибка удаления из временной таблицы:', deleteError);
-            }
+            await deleteQueueItem(productId);
           } catch (err) {
             console.error('Ошибка при удалении:', err);
           }
@@ -1337,19 +1298,10 @@ export const InventoryTab = () => {
 
   const handleClearAllProducts = async () => {
     if (confirm(`Очистить очередь из ${pendingProducts.length} товаров?`)) {
-      // Удаляем все товары из временной таблицы
+      // Удаляем все товары из Firebase очереди
       try {
-        const productIds = pendingProducts.map(p => p.id);
-        
-        if (productIds.length > 0) {
-          const { error } = await supabase
-            .from('vremenno_product_foto')
-            .delete()
-            .in('id', productIds);
-          
-          if (error) {
-            console.error('Ошибка очистки временной таблицы:', error);
-          }
+        for (const product of pendingProducts) {
+          await deleteQueueItem(product.id);
         }
       } catch (err) {
         console.error('Ошибка при очистке:', err);
@@ -1472,12 +1424,9 @@ export const InventoryTab = () => {
         // ДОБАВЛЯЕМ В ОЧЕРЕДЬ для заполнения цен
         console.log('📋 Цены не заполнены - добавляем в очередь');
         
-        // Проверяем дубликат в очереди
-        const { data: existingInQueue } = await supabase
-          .from('vremenno_product_foto')
-          .select('id')
-          .eq('barcode', currentProduct.barcode)
-          .maybeSingle();
+        // Проверяем дубликат в очереди через Firebase
+        const queueItems = await getQueueProducts();
+        const existingInQueue = queueItems.find(item => item.barcode === currentProduct.barcode);
 
         if (existingInQueue) {
           toast.info('⚠️ Товар уже есть в очереди');
@@ -1487,33 +1436,16 @@ export const InventoryTab = () => {
 
         await retryOperation(
           async () => {
-            const { error: insertError } = await supabase
-              .from('vremenno_product_foto')
-              .insert({
-                barcode: currentProduct.barcode,
-                product_name: currentProduct.name,
-                category: currentProduct.category || null,
-                supplier: currentProduct.supplier || null,
-                unit: currentProduct.unit || 'шт',
-                purchase_price: currentProduct.purchasePrice ? parseFloat(currentProduct.purchasePrice) : null,
-                retail_price: currentProduct.retailPrice ? parseFloat(currentProduct.retailPrice) : null,
-                quantity: currentProduct.quantity ? parseFloat(currentProduct.quantity) : 1,
-                expiry_date: currentProduct.expiryDate || null,
-                payment_type: 'full',
-                paid_amount: (currentProduct.purchasePrice && currentProduct.quantity) 
-                  ? parseFloat(currentProduct.purchasePrice) * parseFloat(currentProduct.quantity) 
-                  : 0,
-                debt_amount: 0,
-                image_url: imageUrl,
-                storage_path: `product-photos/${currentProduct.barcode}-${Date.now()}`,
-                front_photo: frontPhoto || null,
-                barcode_photo: barcodePhoto || null,
-                front_photo_storage_path: frontPhoto ? `product-photos/${currentProduct.barcode}-front-${Date.now()}` : null,
-                barcode_photo_storage_path: barcodePhoto ? `product-photos/${currentProduct.barcode}-barcode-${Date.now()}` : null,
-                created_by: currentUserId,
-              });
-
-            if (insertError) throw insertError;
+            await addToQueue({
+              barcode: currentProduct.barcode,
+              product_name: currentProduct.name,
+              category: currentProduct.category || undefined,
+              quantity: currentProduct.quantity ? parseInt(currentProduct.quantity) : 1,
+              front_photo: frontPhoto || undefined,
+              barcode_photo: barcodePhoto || undefined,
+              image_url: imageUrl || undefined,
+              created_by: currentUserId,
+            });
 
             console.log('✅ Товар добавлен в очередь');
             toast.success('✅ Товар добавлен в очередь для заполнения цен!');

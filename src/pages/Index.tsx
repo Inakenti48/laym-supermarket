@@ -186,19 +186,19 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Header */}
       <header className="border-b bg-card shadow-sm sticky top-0 z-40">
-        <div className="container mx-auto px-2 sm:px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <Package className="h-6 w-6 text-primary flex-shrink-0" />
-            <h1 className="text-base font-bold truncate">Учет товаров</h1>
+        <div className="container mx-auto px-2 sm:px-4 h-14 flex items-center justify-between max-w-full">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Package className="h-5 w-5 sm:h-6 sm:w-6 text-primary flex-shrink-0" />
+            <h1 className="text-sm sm:text-base font-bold truncate">Учет товаров</h1>
             <span className={cn(
-              "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
+              "flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0",
               mysqlConnected ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"
             )}>
               <Database className="h-3 w-3" />
-              {mysqlConnected ? 'MySQL' : 'Офлайн'}
+              <span className="hidden sm:inline">{mysqlConnected ? 'MySQL' : 'Офлайн'}</span>
             </span>
           </div>
           
@@ -215,8 +215,8 @@ const Index = () => {
       </header>
 
       {/* Navigation */}
-      <nav className="border-b bg-card overflow-x-auto">
-        <div className="container mx-auto px-2 flex">
+      <nav className="border-b bg-card overflow-x-auto scrollbar-hide">
+        <div className="container mx-auto px-2 flex max-w-full">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -224,7 +224,7 @@ const Index = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-2.5 border-b-2 text-sm transition-colors whitespace-nowrap',
+                  'flex items-center gap-1 px-2 sm:px-3 py-2.5 border-b-2 text-xs sm:text-sm transition-colors whitespace-nowrap flex-shrink-0',
                   activeTab === tab.id
                     ? 'border-primary text-primary font-medium'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -239,7 +239,7 @@ const Index = () => {
       </nav>
 
       {/* Content */}
-      <main className="container mx-auto px-2 sm:px-4 py-4">
+      <main className="container mx-auto px-2 sm:px-4 py-4 max-w-full overflow-x-hidden">
         <Suspense fallback={<TabLoader />}>
           {employeeId ? (
             <EmployeeWorkTab employeeId={employeeId} />

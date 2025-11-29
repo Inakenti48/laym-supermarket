@@ -1408,35 +1408,30 @@ export const InventoryTab = () => {
           return;
         }
 
-        await retryOperation(
-          async () => {
-            await addToQueue({
-              barcode: currentProduct.barcode,
-              product_name: currentProduct.name,
-              category: currentProduct.category || undefined,
-              quantity: currentProduct.quantity ? parseInt(currentProduct.quantity) : 1,
-              front_photo: frontPhoto || undefined,
-              barcode_photo: barcodePhoto || undefined,
-              image_url: imageUrl || undefined,
-              created_by: currentUserId,
-            });
+        try {
+          await addToQueue({
+            barcode: currentProduct.barcode,
+            product_name: currentProduct.name,
+            category: currentProduct.category || undefined,
+            quantity: currentProduct.quantity ? parseInt(currentProduct.quantity) : 1,
+            front_photo: frontPhoto || undefined,
+            barcode_photo: barcodePhoto || undefined,
+            image_url: imageUrl || undefined,
+            created_by: currentUserId,
+          });
 
-            console.log('✅ Товар добавлен в очередь');
-            toast.success('✅ Товар добавлен в очередь для заполнения цен!');
-            addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
-          },
-          {
-            maxAttempts: 5,
-            initialDelay: 1000,
-            onRetry: (attempt) => {
-              console.log(`🔄 Повторная попытка добавления "${currentProduct.name}" в очередь (попытка ${attempt})...`);
-            }
-          }
-        ).catch((error) => {
-          console.error('❌ Не удалось добавить в очередь после нескольких попыток:', error);
-          toast.error(`❌ Ошибка добавления в очередь`);
+          console.log('✅ Товар добавлен в очередь');
+          toast.success('✅ Товар добавлен в очередь для заполнения цен!');
+          addLog(`Товар ${currentProduct.name} (${currentProduct.barcode}) добавлен в очередь`);
+          
+          // Обновляем локальный счётчик очереди
+          const updatedQueue = await getQueueProducts();
+          setQueueTotal(updatedQueue.length);
+        } catch (error: any) {
+          console.error('❌ Ошибка добавления в очередь:', error);
+          toast.error(`❌ Ошибка добавления в очередь: ${error.message || 'Неизвестная ошибка'}`);
           return;
-        });
+        }
       }
       
       // Очищаем форму и временные фото

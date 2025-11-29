@@ -63,31 +63,56 @@ const convertToStoredProduct = (p: Product): StoredProduct => ({
   }]
 });
 
-// Сохранение фото товара в S3
+// Сохранение фото товара в S3 с именованием по штрихкоду
 export const saveProductImage = async (
   barcode: string, 
   productName: string, 
   imageBase64: string,
-  userId?: string
-): Promise<boolean> => {
+  userId?: string,
+  photoType: 'front' | 'barcode' | 'other' = 'other'
+): Promise<string | null> => {
   try {
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    
+    // Имя файла зависит от типа фото
+    let fileName: string;
+    if (photoType === 'front') {
+      fileName = `${barcode}_front.jpg`;
+    } else if (photoType === 'barcode') {
+      fileName = `${barcode}_barcode.jpg`;
+    } else {
+      fileName = `${barcode}_${Date.now()}.jpg`;
+    }
+    
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/s3-upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'upload',
-        fileName: `${barcode}_${Date.now()}.jpg`,
-        fileData: imageBase64.replace(/^data:image\/\w+;base64,/, ''),
+        fileName: fileName,
+        fileData: base64Data,
         contentType: 'image/jpeg',
         folder: 'products'
       })
     });
     const result = await response.json();
-    return result.success;
+    
+    if (result.success) {
+      console.log(`✅ Фото сохранено: ${result.url}`);
+      return result.url;
+    }
+    return null;
   } catch (error) {
     console.error('❌ Ошибка загрузки фото:', error);
-    return false;
+    return null;
   }
+};
+
+// Получить URL фото товара по штрихкоду
+export const getProductPhotoUrl = (barcode: string, type: 'front' | 'barcode'): string => {
+  const s3Endpoint = 'https://s3.timeweb.cloud';
+  const bucket = 'b6f597e1-22bca3e1-d32e-432e-8f68-4fb3f3e85b63';
+  return `${s3Endpoint}/${bucket}/products/${barcode}_${type}.jpg`;
 };
 
 // === ФУНКЦИИ РАБОТЫ С ТОВАРАМИ ===

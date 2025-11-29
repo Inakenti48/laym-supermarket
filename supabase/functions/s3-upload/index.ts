@@ -140,11 +140,10 @@ serve(async (req) => {
       // Decode base64 file data
       const binaryData = Uint8Array.from(atob(fileData), c => c.charCodeAt(0));
       
-      // Generate file path
+      // Generate file path - используем имя файла как есть (для штрихкодов)
       const folderPath = folder || 'uploads';
-      const timestamp = Date.now();
-      const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const filePath = `/${S3_BUCKET}/${folderPath}/${timestamp}_${safeName}`;
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `/${S3_BUCKET}/${folderPath}/${safeName}`;
       
       const authHeaders = await signRequest('PUT', filePath);
       

@@ -21,7 +21,7 @@ import {
   updateSupplier as updateFirebaseSupplier,
   subscribeToSuppliers,
   Supplier as FirebaseSupplier
-} from '@/lib/firebaseCollections';
+} from '@/lib/mysqlCollections';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 
 interface PaymentHistoryItem {
@@ -169,11 +169,11 @@ export const SuppliersTab = () => {
         totalDebt: 0
       });
 
-      await addSystemLog({
-        action: 'supplier_added',
-        user_name: currentUser?.username || 'Система',
-        details: `Добавлен поставщик: ${newSupplier.name}`
-      });
+      await addSystemLog(
+        'supplier_added',
+        currentUser?.username || 'Система',
+        `Добавлен поставщик: ${newSupplier.name}`
+      );
 
       toast.dismiss();
       toast.success(`Поставщик "${newSupplier.name}" добавлен`);
@@ -236,11 +236,11 @@ export const SuppliersTab = () => {
         paymentHistory: updatedHistory as any
       });
 
-      await addSystemLog({
-        action: 'payment_added',
-        user_name: currentUser?.username || 'Система',
-        details: `Платеж поставщику ${supplier.name}: ${payment.productName} x${productQuantity}`
-      });
+      await addSystemLog(
+        'payment_added',
+        currentUser?.username || 'Система',
+        `Платеж поставщику ${supplier.name}: ${payment.productName} x${productQuantity}`
+      );
 
       toast.success('Платеж добавлен');
       
@@ -287,11 +287,11 @@ export const SuppliersTab = () => {
         paymentHistory: updatedHistory as any
       });
 
-      await addSystemLog({
-        action: 'debt_paid',
-        user_name: currentUser?.username || 'Система',
-        details: `Погашение долга поставщику ${supplier.name}: ${amount} ₽`
-      });
+      await addSystemLog(
+        'debt_paid',
+        currentUser?.username || 'Система',
+        `Погашение долга поставщику ${supplier.name}: ${amount} ₽`
+      );
 
       toast.success('Долг погашен');
       loadSuppliers();

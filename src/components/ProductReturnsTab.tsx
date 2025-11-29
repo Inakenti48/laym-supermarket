@@ -11,7 +11,7 @@ import { printReceiptBrowser } from '@/lib/printer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { getAllProducts, updateProductById, deleteProduct } from '@/lib/storage';
-import { getProductReturns, addProductReturn, ProductReturn as FirebaseReturn } from '@/lib/firebaseCollections';
+import { getProductReturns, addProductReturn, ProductReturn as FirebaseReturn } from '@/lib/mysqlCollections';
 
 interface ProductReturn {
   id: string;
@@ -77,13 +77,13 @@ export const ProductReturnsTab = () => {
 
     setLoading(true);
     try {
-      // Добавляем возврат в Firebase
+      // Добавляем возврат в MySQL
       await addProductReturn({
         barcode: '',
         product_name: formData.productName,
         quantity: parseInt(formData.quantity),
         reason: formData.note || formData.supplier || 'Возврат',
-        returned_by: 'Склад'
+        created_by: 'Склад'
       });
 
       // Находим товар по названию в Firebase и удаляем/уменьшаем

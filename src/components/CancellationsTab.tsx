@@ -4,14 +4,14 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
-import { updateFirebaseProductQuantity } from '@/lib/firebaseProducts';
+import { updateFirebaseProductQuantity } from '@/lib/mysqlCollections';
 import { 
   getCancellationRequests, 
   updateCancellationRequest, 
   subscribeToCancellations,
   CancellationRequest,
   addSystemLog
-} from '@/lib/firebaseCollections';
+} from '@/lib/mysqlCollections';
 
 export const CancellationsTab = () => {
   const currentUser = getCurrentLoginUserSync();
@@ -55,12 +55,11 @@ export const CancellationsTab = () => {
 
       await updateCancellationRequest(request.id, 'approved');
 
-      await addSystemLog({
-        action: `Заявка на отмену одобрена`,
-        user_id: currentUser.id,
-        user_name: currentUser.username || currentUser.cashierName,
-        details: `Товары: ${request.items.map(i => i.name).join(', ')}`
-      });
+      await addSystemLog(
+        `Заявка на отмену одобрена`,
+        currentUser.username || currentUser.cashierName,
+        `Товары: ${request.items.map(i => i.name).join(', ')}`
+      );
 
       toast.success('Заявка одобрена, товары возвращены на склад');
     } catch (error: any) {
@@ -78,12 +77,11 @@ export const CancellationsTab = () => {
     try {
       await updateCancellationRequest(request.id, 'rejected');
 
-      await addSystemLog({
-        action: `Заявка на отмену отклонена`,
-        user_id: currentUser.id,
-        user_name: currentUser.username || currentUser.cashierName,
-        details: `Кассир: ${request.cashier}`
-      });
+      await addSystemLog(
+        `Заявка на отмену отклонена`,
+        currentUser.username || currentUser.cashierName,
+        `Кассир: ${request.cashier}`
+      );
 
       toast.info('Заявка отклонена');
     } catch (error: any) {

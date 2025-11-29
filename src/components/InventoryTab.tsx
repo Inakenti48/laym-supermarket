@@ -21,9 +21,9 @@ import { findProductByBarcode, saveProduct, StoredProduct, saveProductImage, ups
 import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
-import { addToQueue, getQueueProducts, subscribeToQueue, deleteQueueItem } from '@/lib/firebaseCollections';
+import { addToQueue, getQueueProducts, subscribeToQueue, deleteQueueItem } from '@/lib/mysqlCollections';
 import { useFormSync } from '@/hooks/useFormSync';
-import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
+import { useProductsSync } from '@/hooks/useProductsSync';
 import { retryOperation } from '@/lib/retryUtils';
 
 import { getCurrentLoginUser } from '@/lib/loginAuth';
@@ -53,8 +53,8 @@ export const InventoryTab = () => {
     loadUserRole();
   }, []);
 
-  // Firebase realtime синхронизация товаров
-  const { refetch: refetchProducts } = useFirebaseProducts();
+  // MySQL realtime синхронизация товаров
+  const { refetch: refetchProducts } = useProductsSync();
 
   const [suggestedProduct, setSuggestedProduct] = useState<StoredProduct | null>(null);
   const [showSuggestion, setShowSuggestion] = useState(false);

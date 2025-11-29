@@ -3,7 +3,7 @@ import { Monitor, Users, Wifi } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getDevices, subscribeToDevices, Device } from '@/lib/firebaseCollections';
+import { getDevices, subscribeToDevices, Device } from '@/lib/mysqlCollections';
 
 export const ActiveDevicesMonitor = () => {
   const [activeDevices, setActiveDevices] = useState<Device[]>([]);

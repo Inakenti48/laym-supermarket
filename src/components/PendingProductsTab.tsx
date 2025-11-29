@@ -14,9 +14,9 @@ import {
   updateQueueItem, 
   deleteQueueItem, 
   subscribeToQueue,
-  QueueProduct 
-} from '@/lib/firebaseCollections';
-import { subscribeToSuppliers } from '@/lib/firebaseCollections';
+  QueueProduct
+} from '@/lib/mysqlCollections';
+import { subscribeToSuppliers } from '@/lib/mysqlCollections';
 
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);

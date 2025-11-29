@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { getSystemLogs, SystemLog } from '@/lib/firebaseCollections';
+import { getSystemLogs, SystemLog } from '@/lib/mysqlCollections';
 
 export const LogsTab = () => {
   const [startDate, setStartDate] = useState('');

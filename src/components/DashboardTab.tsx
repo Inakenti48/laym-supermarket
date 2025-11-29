@@ -3,11 +3,11 @@ import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Do
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getAllProducts, getExpiringProducts, exportAllData } from '@/lib/storage';
+import { getAllProducts, getExpiringProducts } from '@/lib/storage';
 import { getEmployees, getLogs } from '@/lib/auth';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
+import { useProductsSync } from '@/hooks/useProductsSync';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -15,8 +15,8 @@ export const DashboardTab = () => {
   const [connectionError, setConnectionError] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   
-  // Firebase realtime синхронизация товаров
-  const { products: firebaseProducts, loading: firebaseLoading, refetch } = useFirebaseProducts();
+  // MySQL realtime синхронизация товаров
+  const { products: firebaseProducts, loading: firebaseLoading, refetch } = useProductsSync();
 
   // Перезагрузка при изменении Firebase товаров
   useEffect(() => {
@@ -151,7 +151,18 @@ export const DashboardTab = () => {
   ];
 
   const handleExport = () => {
-    exportAllData();
+    // Export all data to JSON
+    const data = {
+      products: firebaseProducts,
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
     toast.success('Резервная копия успешно скачана');
   };
 

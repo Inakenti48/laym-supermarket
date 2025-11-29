@@ -37,11 +37,6 @@ export function useProductsSync() {
       setProducts(mysqlProducts.map(convertToStoredProduct));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка загрузки');
-      // Fallback на кэш
-      const cached = localStorage.getItem('cached_products');
-      if (cached) {
-        setProducts(JSON.parse(cached));
-      }
     } finally {
       setLoading(false);
     }

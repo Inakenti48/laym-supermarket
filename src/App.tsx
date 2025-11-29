@@ -3,19 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect } from "react";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { initLocalDB } from "@/lib/localDatabase";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  useEffect(() => {
-    // Неблокирующая инициализация локальной БД
-    initLocalDB().catch(console.error);
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

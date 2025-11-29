@@ -1,4 +1,4 @@
-// MySQL Storage Layer - все операции через MySQL
+// MySQL Storage Layer - все операции через MySQL (без localStorage кэша)
 import {
   getAllProducts as mysqlGetAllProducts,
   getProductByBarcode as mysqlGetProductByBarcode,
@@ -11,11 +11,6 @@ import {
   insertSale,
   Product,
 } from './mysqlDatabase';
-import {
-  initLocalDB,
-  saveProductLocally,
-  getAllLocalData
-} from './localDatabase';
 
 export interface StoredProduct {
   id: string;
@@ -97,35 +92,28 @@ export const saveProductImage = async (
 
 // === ФУНКЦИИ РАБОТЫ С ТОВАРАМИ ===
 
-let localDbInitialized = false;
-const ensureLocalDb = async () => {
-  if (!localDbInitialized) {
-    await initLocalDB();
-    localDbInitialized = true;
-  }
-};
+// Memory cache для быстрого доступа
+let productsCache: StoredProduct[] = [];
+let cacheTime = 0;
+const CACHE_TTL = 30000; // 30 секунд
 
 export const getStoredProducts = async (): Promise<StoredProduct[]> => {
-  await ensureLocalDb();
+  const now = Date.now();
+  
+  // Используем кэш если он свежий
+  if (productsCache.length > 0 && (now - cacheTime) < CACHE_TTL) {
+    return productsCache;
+  }
   
   try {
     console.log('📦 Загрузка товаров из MySQL...');
     const products = await mysqlGetAllProducts();
-    const converted = products.map(convertToStoredProduct);
-    
-    // Кэшируем локально
-    if (converted.length > 0) {
-      localStorage.setItem('cached_products', JSON.stringify(converted));
-      localStorage.setItem('cached_products_time', Date.now().toString());
-    }
-    
-    return converted;
+    productsCache = products.map(convertToStoredProduct);
+    cacheTime = now;
+    return productsCache;
   } catch (error) {
-    console.warn('⚠️ MySQL недоступен, загружаем из кэша...');
-    const cached = localStorage.getItem('cached_products');
-    if (cached) return JSON.parse(cached);
-    const localData = await getAllLocalData();
-    return localData.products as StoredProduct[];
+    console.warn('⚠️ MySQL недоступен');
+    return productsCache;
   }
 };
 
@@ -137,13 +125,9 @@ export const findProductByBarcode = async (barcode: string): Promise<StoredProdu
     if (!product) return null;
     return convertToStoredProduct(product);
   } catch (error) {
-    console.warn('⚠️ MySQL недоступен, ищем локально...');
-    const cached = localStorage.getItem('cached_products');
-    if (cached) {
-      const products: StoredProduct[] = JSON.parse(cached);
-      return products.find(p => p.barcode === barcode) || null;
-    }
-    return null;
+    console.warn('⚠️ MySQL недоступен');
+    // Попробуем найти в кэше
+    return productsCache.find(p => p.barcode === barcode) || null;
   }
 };
 
@@ -151,18 +135,9 @@ export const saveProduct = async (
   product: Omit<StoredProduct, 'id' | 'lastUpdated' | 'priceHistory'>, 
   userId: string
 ): Promise<StoredProduct> => {
-  await ensureLocalDb();
-  
-  // Сохраняем локально
-  const localId = await saveProductLocally(product);
-  console.log('💾 Товар сохранен локально:', localId);
-  
-  // Обновляем кэш
-  const cached = localStorage.getItem('cached_products');
-  const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
   const newProduct: StoredProduct = {
     ...product,
-    id: localId,
+    id: crypto.randomUUID(),
     lastUpdated: new Date().toISOString(),
     priceHistory: [{
       date: new Date().toISOString(),
@@ -172,33 +147,33 @@ export const saveProduct = async (
     }]
   };
   
-  const existingIndex = products.findIndex(p => p.barcode === product.barcode);
+  // Сохраняем в MySQL
+  await mysqlInsertProduct({
+    barcode: product.barcode,
+    name: product.name,
+    category: product.category,
+    purchase_price: product.purchasePrice,
+    sale_price: product.retailPrice,
+    quantity: product.quantity,
+    unit: product.unit,
+    supplier_id: product.supplier,
+    expiry_date: product.expiryDate,
+    created_by: userId
+  });
+  
+  // Обновляем кэш
+  const existingIndex = productsCache.findIndex(p => p.barcode === product.barcode);
   if (existingIndex >= 0) {
-    products[existingIndex] = { ...products[existingIndex], ...newProduct, quantity: products[existingIndex].quantity + product.quantity };
+    productsCache[existingIndex] = { 
+      ...productsCache[existingIndex], 
+      ...newProduct, 
+      quantity: productsCache[existingIndex].quantity + product.quantity 
+    };
   } else {
-    products.push(newProduct);
-  }
-  localStorage.setItem('cached_products', JSON.stringify(products));
-  
-  // Синхронизируем с MySQL
-  try {
-    await mysqlInsertProduct({
-      barcode: product.barcode,
-      name: product.name,
-      category: product.category,
-      purchase_price: product.purchasePrice,
-      sale_price: product.retailPrice,
-      quantity: product.quantity,
-      unit: product.unit,
-      supplier_id: product.supplier,
-      expiry_date: product.expiryDate,
-      created_by: userId
-    });
-    console.log('☁️ Товар синхронизирован с MySQL');
-  } catch (err) {
-    console.warn('⚠️ Не удалось синхронизировать с MySQL:', err);
+    productsCache.push(newProduct);
   }
   
+  console.log('☁️ Товар сохранен в MySQL');
   return newProduct;
 };
 
@@ -220,14 +195,9 @@ export const isProductExpired = (product: StoredProduct): boolean => {
 
 export const updateProductQuantity = async (barcode: string, quantityChange: number): Promise<void> => {
   // Обновляем кэш
-  const cached = localStorage.getItem('cached_products');
-  if (cached) {
-    const products: StoredProduct[] = JSON.parse(cached);
-    const index = products.findIndex(p => p.barcode === barcode);
-    if (index >= 0) {
-      products[index].quantity += quantityChange;
-      localStorage.setItem('cached_products', JSON.stringify(products));
-    }
+  const index = productsCache.findIndex(p => p.barcode === barcode);
+  if (index >= 0) {
+    productsCache[index].quantity += quantityChange;
   }
   
   // Синхронизируем с MySQL
@@ -242,17 +212,12 @@ export const updateProductQuantity = async (barcode: string, quantityChange: num
 };
 
 export const removeExpiredProduct = async (barcode: string): Promise<StoredProduct | null> => {
-  const cached = localStorage.getItem('cached_products');
   let removedProduct: StoredProduct | null = null;
   
-  if (cached) {
-    const products: StoredProduct[] = JSON.parse(cached);
-    const index = products.findIndex(p => p.barcode === barcode);
-    if (index >= 0) {
-      removedProduct = products[index];
-      products.splice(index, 1);
-      localStorage.setItem('cached_products', JSON.stringify(products));
-    }
+  const index = productsCache.findIndex(p => p.barcode === barcode);
+  if (index >= 0) {
+    removedProduct = productsCache[index];
+    productsCache.splice(index, 1);
   }
   
   try {
@@ -279,25 +244,23 @@ export const upsertProduct = async (
     created_by?: string;
   }
 ): Promise<{ success: boolean; isUpdate: boolean; newQuantity?: number }> => {
-  const cached = localStorage.getItem('cached_products');
-  const products: StoredProduct[] = cached ? JSON.parse(cached) : [];
-  const existingIndex = products.findIndex(p => p.barcode === productData.barcode);
+  const existingIndex = productsCache.findIndex(p => p.barcode === productData.barcode);
   
   let newQuantity = productData.quantity;
   let isUpdate = false;
   
   if (existingIndex >= 0) {
     isUpdate = true;
-    newQuantity = products[existingIndex].quantity + productData.quantity;
-    products[existingIndex] = {
-      ...products[existingIndex],
+    newQuantity = productsCache[existingIndex].quantity + productData.quantity;
+    productsCache[existingIndex] = {
+      ...productsCache[existingIndex],
       name: productData.name,
-      category: productData.category || products[existingIndex].category,
-      supplier: productData.supplier || products[existingIndex].supplier,
+      category: productData.category || productsCache[existingIndex].category,
+      supplier: productData.supplier || productsCache[existingIndex].supplier,
       purchasePrice: productData.purchase_price,
       retailPrice: productData.sale_price,
       quantity: newQuantity,
-      expiryDate: productData.expiry_date || products[existingIndex].expiryDate,
+      expiryDate: productData.expiry_date || productsCache[existingIndex].expiryDate,
       lastUpdated: new Date().toISOString()
     };
   } else {
@@ -325,10 +288,8 @@ export const upsertProduct = async (
         changedBy: productData.created_by || ''
       }]
     };
-    products.push(newProduct);
+    productsCache.push(newProduct);
   }
-  
-  localStorage.setItem('cached_products', JSON.stringify(products));
   
   // Синхронизируем с MySQL
   try {
@@ -357,7 +318,7 @@ export const upsertProduct = async (
     }
     return { success: true, isUpdate, newQuantity };
   } catch (error) {
-    console.warn('⚠️ MySQL недоступен, данные сохранены локально:', error);
+    console.warn('⚠️ MySQL недоступен:', error);
     return { success: true, isUpdate, newQuantity };
   }
 };
@@ -376,23 +337,21 @@ export const updateProductById = async (
   }>
 ): Promise<boolean> => {
   try {
-    // Найдем товар по ID в кэше
-    const cached = localStorage.getItem('cached_products');
-    if (cached) {
-      const products: StoredProduct[] = JSON.parse(cached);
-      const product = products.find(p => p.id === id);
-      if (product) {
-        const mysqlUpdates: Partial<Product> = {};
-        if (updates.quantity !== undefined) mysqlUpdates.quantity = updates.quantity;
-        if (updates.name !== undefined) mysqlUpdates.name = updates.name;
-        if (updates.category !== undefined) mysqlUpdates.category = updates.category;
-        if (updates.purchasePrice !== undefined) mysqlUpdates.purchase_price = updates.purchasePrice;
-        if (updates.salePrice !== undefined) mysqlUpdates.sale_price = updates.salePrice;
-        if (updates.expiryDate !== undefined) mysqlUpdates.expiry_date = updates.expiryDate || undefined;
-        
-        await mysqlUpdateProduct(product.barcode, mysqlUpdates);
-        return true;
-      }
+    const product = productsCache.find(p => p.id === id);
+    if (product) {
+      const mysqlUpdates: Partial<Product> = {};
+      if (updates.quantity !== undefined) mysqlUpdates.quantity = updates.quantity;
+      if (updates.name !== undefined) mysqlUpdates.name = updates.name;
+      if (updates.category !== undefined) mysqlUpdates.category = updates.category;
+      if (updates.purchasePrice !== undefined) mysqlUpdates.purchase_price = updates.purchasePrice;
+      if (updates.salePrice !== undefined) mysqlUpdates.sale_price = updates.salePrice;
+      if (updates.expiryDate !== undefined) mysqlUpdates.expiry_date = updates.expiryDate || undefined;
+      
+      await mysqlUpdateProduct(product.barcode, mysqlUpdates);
+      
+      // Обновляем кэш
+      Object.assign(product, updates);
+      return true;
     }
     return false;
   } catch (error) {
@@ -403,12 +362,7 @@ export const updateProductById = async (
 
 // Получить товар по ID
 export const getProductById = async (id: string): Promise<StoredProduct | null> => {
-  const cached = localStorage.getItem('cached_products');
-  if (cached) {
-    const products: StoredProduct[] = JSON.parse(cached);
-    return products.find(p => p.id === id) || null;
-  }
-  return null;
+  return productsCache.find(p => p.id === id) || null;
 };
 
 // Удалить товар
@@ -417,11 +371,9 @@ export const deleteProduct = async (barcode: string): Promise<boolean> => {
     await mysqlDeleteProduct(barcode);
     
     // Удаляем из кэша
-    const cached = localStorage.getItem('cached_products');
-    if (cached) {
-      const products: StoredProduct[] = JSON.parse(cached);
-      const filtered = products.filter(p => p.barcode !== barcode);
-      localStorage.setItem('cached_products', JSON.stringify(filtered));
+    const index = productsCache.findIndex(p => p.barcode === barcode);
+    if (index >= 0) {
+      productsCache.splice(index, 1);
     }
     return true;
   } catch (error) {
@@ -500,14 +452,8 @@ export const recordSale = async (
   }
 };
 
-// === ПОИСК ===
-
-export const searchProducts = async (query: string): Promise<StoredProduct[]> => {
-  const products = await getStoredProducts();
-  const q = query.toLowerCase();
-  return products.filter(p => 
-    p.name.toLowerCase().includes(q) || 
-    p.barcode.includes(q) ||
-    p.category?.toLowerCase().includes(q)
-  );
+// Invalidate cache
+export const invalidateProductsCache = (): void => {
+  productsCache = [];
+  cacheTime = 0;
 };

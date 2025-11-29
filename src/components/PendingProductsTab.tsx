@@ -40,7 +40,7 @@ export const PendingProductsTab = () => {
 
     loadSuppliers();
 
-    // Подписка на изменения поставщиков
+    // Поставщики в Supabase - подписка на них остается
     const channel = supabase
       .channel('suppliers_changes_pending')
       .on(

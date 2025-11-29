@@ -8,7 +8,6 @@ import { getSuppliers } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
 import {
   Table,
   TableBody,
@@ -45,42 +44,21 @@ export const ReportsTab = () => {
     };
     loadData();
 
-    // Подписка на реалтайм обновления товаров и поставщиков
-    const productsChannel = supabase
-      .channel('products_changes_reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products'
-        },
-        () => {
-          console.log('🔄 Products updated on another device - reloading reports');
-          loadData();
-        }
-      )
-      .subscribe();
-
-    const suppliersChannel = supabase
-      .channel('suppliers_changes_reports')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers'
-        },
-        () => {
-          console.log('🔄 Suppliers updated on another device - reloading reports');
-          loadData();
-        }
-      )
-      .subscribe();
+    // Подписка на Firebase realtime обновления товаров
+    const { collection, onSnapshot } = require('firebase/firestore');
+    const { firebaseDb } = require('@/lib/firebase');
+    
+    const unsubscribe = onSnapshot(
+      collection(firebaseDb, 'products'),
+      () => {
+        console.log('🔄 Products updated - reloading reports');
+        loadData();
+      },
+      (error: any) => console.error('Firebase error:', error)
+    );
 
     return () => {
-      supabase.removeChannel(productsChannel);
-      supabase.removeChannel(suppliersChannel);
+      unsubscribe();
     };
   }, [activeTab]);
 

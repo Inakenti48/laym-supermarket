@@ -40,25 +40,8 @@ export const ProductReturnsTab = () => {
     loadReturns();
     loadSuppliers();
     
-    // Realtime подписка
-    const channel = supabase
-      .channel('product_returns_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'product_returns'
-        },
-        () => {
-          loadReturns();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // Firebase realtime подписка на возвраты не нужна - они в Supabase
+    // Просто загружаем данные при монтировании
   }, []);
 
   const loadSuppliers = async () => {

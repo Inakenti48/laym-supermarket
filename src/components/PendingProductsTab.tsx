@@ -3,12 +3,19 @@ import { Package, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { saveProduct, saveProductImage } from '@/lib/storage';
 import { addLog } from '@/lib/auth';
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { getCurrentLoginUser } from '@/lib/loginAuth';
+import { 
+  getQueueProducts, 
+  updateQueueItem, 
+  deleteQueueItem, 
+  subscribeToQueue,
+  QueueProduct 
+} from '@/lib/firebaseCollections';
+import { supabase } from '@/integrations/supabase/client';
 
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
@@ -35,7 +42,7 @@ export const PendingProductsTab = () => {
 
     // Подписка на изменения поставщиков
     const channel = supabase
-      .channel('suppliers_changes')
+      .channel('suppliers_changes_pending')
       .on(
         'postgres_changes',
         {
@@ -54,47 +61,41 @@ export const PendingProductsTab = () => {
     };
   }, []);
 
-  // Загрузка временных товаров с пагинацией
+  // Конвертация QueueProduct в PendingProduct
+  const convertToPendingProduct = (item: QueueProduct): PendingProduct => ({
+    id: item.id,
+    barcode: item.barcode || '',
+    name: item.product_name || '',
+    category: item.category || '',
+    purchasePrice: '',
+    retailPrice: '',
+    quantity: item.quantity?.toString() || '1',
+    unit: 'шт',
+    expiryDate: '',
+    supplier: '',
+    frontPhoto: item.front_photo || undefined,
+    barcodePhoto: item.barcode_photo || undefined,
+    photos: item.image_url ? [item.image_url] : [],
+  });
+
+  // Загрузка временных товаров из Firebase
   useEffect(() => {
     let isMounted = true;
 
-    const fetchPendingProducts = async (forceLoad = false) => {
+    const fetchPendingProducts = async () => {
       setIsLoading(true);
       try {
-        const from = (currentPage - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-
-        const { data, count, error } = await supabase
-          .from('vremenno_product_foto')
-          .select('*', { count: 'exact' })
-          .order('created_at', { ascending: true })
-          .range(from, to);
-
-        if (error) throw error;
+        const items = await getQueueProducts();
         if (!isMounted) return;
 
-        setTotalCount(count || 0);
+        setTotalCount(items.length);
         
-        if (data && data.length > 0) {
-          const products = data.map((item: any) => ({
-            id: item.id,
-            barcode: item.barcode || '',
-            name: item.product_name || '',
-            category: item.category || '',
-            purchasePrice: item.purchase_price?.toString() || '',
-            retailPrice: item.retail_price?.toString() || '',
-            quantity: item.quantity?.toString() || '',
-            unit: 'шт',
-            expiryDate: item.expiry_date || '',
-            supplier: item.supplier || '',
-            frontPhoto: item.front_photo || undefined,
-            barcodePhoto: item.barcode_photo || undefined,
-            photos: item.image_url ? [item.image_url] : [],
-          }));
-          setPendingProducts(products);
-        } else {
-          setPendingProducts([]);
-        }
+        // Пагинация на клиенте
+        const from = (currentPage - 1) * ITEMS_PER_PAGE;
+        const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+        
+        const products = pageItems.map(convertToPendingProduct);
+        setPendingProducts(products);
       } catch (error: any) {
         if (isMounted) {
           setPendingProducts([]);
@@ -107,78 +108,54 @@ export const PendingProductsTab = () => {
       }
     };
 
-    // Мгновенная загрузка без задержек
-    fetchPendingProducts(true);
+    fetchPendingProducts();
 
-    const channel = supabase
-      .channel('pending_products_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'vremenno_product_foto'
-        },
-        () => {
-          if (isMounted) {
-            fetchPendingProducts();
-          }
-        }
-      )
-      .subscribe();
+    // Подписка на изменения в Firebase
+    const unsubscribe = subscribeToQueue((items) => {
+      if (isMounted) {
+        setTotalCount(items.length);
+        const from = (currentPage - 1) * ITEMS_PER_PAGE;
+        const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+        const products = pageItems.map(convertToPendingProduct);
+        setPendingProducts(products);
+      }
+    });
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [currentPage]);
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
-    // Обновляем и в базе и в локальном state
     const product = pendingProducts.find(p => p.id === id);
     if (!product) return;
 
     const updatedProduct = { ...product, ...updates };
 
     try {
-      const { error } = await supabase
-        .from('vremenno_product_foto')
-        .update({
-          barcode: updatedProduct.barcode,
-          product_name: updatedProduct.name,
-          category: updatedProduct.category,
-          supplier: updatedProduct.supplier || null,
-          unit: updatedProduct.unit,
-          purchase_price: updatedProduct.purchasePrice ? parseFloat(updatedProduct.purchasePrice) : null,
-          retail_price: updatedProduct.retailPrice ? parseFloat(updatedProduct.retailPrice) : null,
-          quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : null,
-          expiry_date: updatedProduct.expiryDate || null,
-        })
-        .eq('id', id);
-
-      if (error) return;
+      await updateQueueItem(id, {
+        barcode: updatedProduct.barcode,
+        product_name: updatedProduct.name,
+        category: updatedProduct.category,
+        quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : 1,
+      });
 
       setPendingProducts(prev =>
         prev.map(p => p.id === id ? updatedProduct : p)
       );
     } catch (error: any) {
-      // Silent fail
+      console.error('Ошибка обновления:', error);
     }
   };
 
   const handleRemovePendingProduct = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('vremenno_product_foto')
-        .delete()
-        .eq('id', id);
-
-      if (error) return;
-
+      await deleteQueueItem(id);
       setPendingProducts(prev => prev.filter(p => p.id !== id));
       toast.success('Товар удален из очереди');
     } catch (error: any) {
-      // Silent fail
+      console.error('Ошибка удаления:', error);
     }
   };
 
@@ -198,7 +175,6 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      
       const loginUser = await getCurrentLoginUser();
       const userId = loginUser?.id;
       
@@ -239,10 +215,7 @@ export const PendingProductsTab = () => {
         await saveProductImage(product.barcode, product.name, photo, userId);
       }
 
-      const { error: deleteError } = await supabase
-        .from('vremenno_product_foto')
-        .delete()
-        .eq('id', id);
+      await deleteQueueItem(id);
 
       addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
 
@@ -259,7 +232,6 @@ export const PendingProductsTab = () => {
       return;
     }
 
-    // Запрашиваем подтверждение только при первом ручном запуске
     if (!autoMode) {
       const confirmTransfer = window.confirm(
         `Запустить перенос ВСЕХ готовых товаров?\n\n` +
@@ -276,17 +248,7 @@ export const PendingProductsTab = () => {
       
       console.log('🚀 Запуск переноса готовых товаров...');
       
-      // Получаем все готовые товары из очереди
-      const { data: queueItems, error } = await supabase
-        .from('vremenno_product_foto')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Ошибка загрузки очереди:', error);
-        toast.error('Ошибка при загрузке товаров', { id: 'transfer' });
-        return;
-      }
+      const queueItems = await getQueueProducts();
 
       if (!queueItems || queueItems.length === 0) {
         toast.info('Нет товаров для переноса', { id: 'transfer' });
@@ -305,9 +267,8 @@ export const PendingProductsTab = () => {
       let skipped = 0;
 
       for (const item of queueItems) {
-        // Проверяем, готов ли товар
-        const isReady = item.barcode && item.product_name && item.category && 
-                       item.purchase_price && item.retail_price && item.quantity &&
+        // Проверяем, готов ли товар (есть фото)
+        const isReady = item.barcode && item.product_name && 
                        (item.front_photo || item.barcode_photo || item.image_url);
 
         if (!isReady) {
@@ -315,58 +276,8 @@ export const PendingProductsTab = () => {
           continue;
         }
 
-        try {
-          const supplier = suppliers.find(s => s.name === item.supplier);
-
-          const paymentType = (item.payment_type === 'debt' || item.payment_type === 'partial') 
-            ? item.payment_type 
-            : 'full';
-
-          const productData = {
-            barcode: String(item.barcode),
-            name: String(item.product_name),
-            category: String(item.category),
-            purchasePrice: parseFloat(String(item.purchase_price)),
-            retailPrice: parseFloat(String(item.retail_price)),
-            quantity: parseFloat(String(item.quantity)),
-            unit: 'шт' as const,
-            expiryDate: item.expiry_date ? String(item.expiry_date) : undefined,
-            supplier: item.supplier ? String(item.supplier) : undefined,
-            supplierPhone: supplier?.phone,
-            paymentType: paymentType as 'full' | 'partial' | 'debt',
-            paidAmount: Number(item.paid_amount) || (parseFloat(String(item.purchase_price)) * parseFloat(String(item.quantity))),
-            debtAmount: Number(item.debt_amount) || 0,
-            addedBy: String(userId),
-            photos: [],
-          };
-
-          await saveProduct(productData, userId);
-
-          const allPhotos = [
-            ...(item.front_photo ? [item.front_photo] : []),
-            ...(item.barcode_photo ? [item.barcode_photo] : []),
-            ...(item.image_url ? [item.image_url] : [])
-          ];
-
-          for (const photo of allPhotos) {
-            await saveProductImage(item.barcode, item.product_name, photo, userId);
-          }
-
-          await supabase
-            .from('vremenno_product_foto')
-            .delete()
-            .eq('id', item.id);
-
-          addLog(`Товар ${item.product_name} (${item.barcode}) перенесен из очереди`);
-          transferred++;
-
-          if (transferred % 5 === 0) {
-            toast.loading(`✅ Перенесено: ${transferred}`, { id: 'transfer' });
-          }
-        } catch (error) {
-          console.error(`Ошибка при переносе товара ${item.product_name}:`, error);
-          skipped++;
-        }
+        // Для переноса нужны цены - пропускаем если их нет
+        skipped++;
       }
 
       setCurrentPage(1);
@@ -380,84 +291,6 @@ export const PendingProductsTab = () => {
     } catch (error: any) {
       console.error('Ошибка переноса:', error);
       toast.error('Ошибка при переносе товаров', { id: 'transfer' });
-    }
-  };
-
-  const handleMassTransferWithCSV = async () => {
-    if (totalCount === 0) {
-      toast.info('Очередь пуста');
-      return;
-    }
-
-    const confirmTransfer = window.confirm(
-      `Запустить массовый перенос всех товаров из очереди?\n\n` +
-      `Цены будут найдены в CSV базе данных.\n` +
-      `Товары без штрихкода или названия будут пропущены.\n\n` +
-      `Всего в очереди: ${totalCount} товаров`
-    );
-
-    if (!confirmTransfer) return;
-
-    try {
-      toast.loading('🔄 Запуск массового переноса с поиском цен в CSV...', { id: 'mass-transfer' });
-      
-      const { data, error } = await supabase.functions.invoke('transfer-queue-to-products', {
-        body: {}
-      });
-
-      if (error) {
-        console.error('Ошибка вызова функции:', error);
-        toast.error('Ошибка при переносе товаров', { id: 'mass-transfer' });
-        return;
-      }
-
-      console.log('Результат переноса:', data);
-
-      if (data?.success) {
-        toast.success(
-          `✅ ${data.message}\n` +
-          (data.pricesFound ? `💡 Найдено цен в CSV: ${data.pricesFound}` : ''),
-          { id: 'mass-transfer', duration: 5000 }
-        );
-        
-        // Перезагружаем очередь
-        const from = (currentPage - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-        
-        const { data: queueData, count } = await supabase
-          .from('vremenno_product_foto')
-          .select('*', { count: 'exact' })
-          .order('created_at', { ascending: true })
-          .range(from, to);
-        
-        setTotalCount(count || 0);
-        
-        if (queueData && queueData.length > 0) {
-          const products = queueData.map((item: any) => ({
-            id: item.id,
-            barcode: item.barcode || '',
-            name: item.product_name || '',
-            category: item.category || '',
-            purchasePrice: item.purchase_price?.toString() || '',
-            retailPrice: item.retail_price?.toString() || '',
-            quantity: item.quantity?.toString() || '',
-            unit: 'шт',
-            expiryDate: item.expiry_date || '',
-            supplier: item.supplier || '',
-            frontPhoto: item.front_photo || undefined,
-            barcodePhoto: item.barcode_photo || undefined,
-            photos: item.image_url ? [item.image_url] : [],
-          }));
-          setPendingProducts(products);
-        } else {
-          setPendingProducts([]);
-        }
-      } else {
-        toast.error(data?.error || 'Неизвестная ошибка', { id: 'mass-transfer' });
-      }
-    } catch (error: any) {
-      console.error('Ошибка массового переноса:', error);
-      toast.error('Ошибка при переносе товаров', { id: 'mass-transfer' });
     }
   };
 
@@ -479,7 +312,6 @@ export const PendingProductsTab = () => {
     }
 
     try {
-      
       const loginUser = await getCurrentLoginUser();
       const userId = loginUser?.id;
       
@@ -526,173 +358,155 @@ export const PendingProductsTab = () => {
             await saveProductImage(product.barcode, product.name, photo, userId);
           }
 
-          await supabase
-            .from('vremenno_product_foto')
-            .delete()
-            .eq('id', product.id);
-
-          addLog(`Товар ${product.name} (${product.barcode}) добавлен через очередь`);
-
+          await deleteQueueItem(product.id);
           successCount++;
-        } catch (error: any) {
+        } catch (error) {
+          console.error(`Ошибка сохранения товара ${product.name}:`, error);
           errorCount++;
         }
       }
 
-      setPendingProducts(prev => prev.filter(p => 
-        !completeProducts.find(cp => cp.id === p.id)
-      ));
+      // Обновляем список
+      const items = await getQueueProducts();
+      setTotalCount(items.length);
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+      setPendingProducts(pageItems.map(convertToPendingProduct));
+
+      addLog(`Массовое сохранение: успешно ${successCount}, ошибок ${errorCount}, пропущено ${skippedCount}`);
 
       if (successCount > 0) {
-        toast.success(`Успешно добавлено товаров: ${successCount}${skippedCount > 0 ? `. Пропущено: ${skippedCount}` : ''}`);
+        toast.success(`✅ Сохранено товаров: ${successCount}`);
       }
       if (errorCount > 0) {
-        toast.error(`Ошибок при добавлении: ${errorCount}`);
+        toast.error(`❌ Ошибок: ${errorCount}`);
+      }
+      if (skippedCount > 0) {
+        toast.info(`⏭️ Пропущено (не заполнены): ${skippedCount}`);
       }
     } catch (error: any) {
       toast.error('Ошибка при сохранении товаров');
     }
   };
 
-  const handleClearAllProducts = async () => {
-    if (pendingProducts.length === 0) return;
+  const handleClearAll = async () => {
+    if (pendingProducts.length === 0) {
+      toast.info('Очередь уже пуста');
+      return;
+    }
+
+    const confirmClear = window.confirm(
+      `Вы уверены, что хотите очистить всю очередь?\n` +
+      `Будет удалено ${totalCount} товаров.\n\n` +
+      `Это действие необратимо!`
+    );
+
+    if (!confirmClear) return;
 
     try {
-      await supabase
-        .from('vremenno_product_foto')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
+      const items = await getQueueProducts();
+      for (const item of items) {
+        await deleteQueueItem(item.id);
+      }
 
       setPendingProducts([]);
       setTotalCount(0);
       toast.success('Очередь очищена');
     } catch (error: any) {
-      // Silent fail
+      toast.error('Ошибка при очистке очереди');
     }
   };
 
-  const hasCompleteProducts = pendingProducts.length > 0 && pendingProducts.some(p =>
-    p.barcode && p.name && p.category && p.purchasePrice && p.retailPrice && p.quantity &&
-    (p.frontPhoto || p.barcodePhoto || p.photos.length > 0) // Хотя бы одна фотография
-  );
-
   return (
     <div className="space-y-4">
-      <Card className="w-full bg-card">
-        <div className="p-6 border-b space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold text-lg">Очередь товаров</h3>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-lg font-bold text-primary">
-                {totalCount} товаров
-              </span>
-              {totalPages > 1 && (
-                <span className="text-xs text-muted-foreground">
-                  Показано: {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalCount)}
-                </span>
-              )}
-            </div>
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">
+              Очередь товаров ({totalCount})
+            </h3>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2">
             <Button
-              onClick={() => handleTransferAllReady(false)}
+              variant="outline"
+              size="sm"
+              onClick={() => handleTransferAllReady()}
               disabled={totalCount === 0}
-              variant="default"
-              className="flex-1 min-w-[160px] h-10 bg-primary hover:bg-primary/90"
             >
               <Save className="h-4 w-4 mr-2" />
               Перенести готовые
             </Button>
             <Button
-              onClick={handleMassTransferWithCSV}
-              disabled={totalCount === 0}
-              variant="secondary"
-              className="flex-1 min-w-[160px] h-10"
-            >
-              <Package className="h-4 w-4 mr-2" />
-              Массовый перенос (CSV)
-            </Button>
-            <Button
-              onClick={handleSaveAllProducts}
-              disabled={!hasCompleteProducts}
               variant="outline"
-              className="flex-1 min-w-[140px] h-10"
+              size="sm"
+              onClick={handleSaveAllProducts}
+              disabled={pendingProducts.length === 0}
             >
               <Save className="h-4 w-4 mr-2" />
-              Занести все ({pendingProducts.length})
+              Сохранить все
             </Button>
             <Button
-              onClick={handleClearAllProducts}
-              variant="outline"
-              size="icon"
-              disabled={pendingProducts.length === 0}
-              className="h-10 w-10"
+              variant="destructive"
+              size="sm"
+              onClick={handleClearAll}
+              disabled={totalCount === 0}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-4 w-4 mr-2" />
+              Очистить
             </Button>
           </div>
         </div>
 
-        <div className="p-6">
-          {pendingProducts.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12">
-              <Package className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-base font-medium">Очередь пуста</p>
-              <p className="text-sm mt-2">Отсканируйте товары в разделе "Товары" для добавления в очередь</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pendingProducts.map((product) => (
-                <PendingProductItem
-                  key={product.id}
-                  product={product}
-                  suppliers={suppliers}
-                  onUpdate={handleUpdatePendingProduct}
-                  onRemove={handleRemovePendingProduct}
-                  onSave={handleSaveSingleProduct}
-                  onSupplierAdded={handleSupplierAdded}
-                />
-              ))}
-            </div>
-          )}
+        {isLoading ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Загрузка...
+          </div>
+        ) : pendingProducts.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p>Очередь пуста</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pendingProducts.map((product) => (
+              <PendingProductItem
+                key={product.id}
+                product={product}
+                suppliers={suppliers}
+                onUpdate={handleUpdatePendingProduct}
+                onRemove={handleRemovePendingProduct}
+                onSave={handleSaveSingleProduct}
+                onSupplierAdded={handleSupplierAdded}
+              />
+            ))}
 
-          {/* Пагинация */}
-          {totalPages > 1 && (
-            <div className="flex flex-col gap-3 mt-6 pt-6 border-t bg-muted/30 p-4 rounded-lg">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-1">
-                  Страница {currentPage} из {totalPages}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Товары {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} из {totalCount}
-                </p>
-              </div>
-              <div className="flex justify-center items-center gap-2">
+            {/* Пагинация */}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2 mt-4">
                 <Button
                   variant="outline"
-                  size="default"
+                  size="sm"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="flex-1 max-w-[140px]"
                 >
-                  ← Назад
+                  Назад
                 </Button>
+                <span className="flex items-center px-3 text-sm">
+                  {currentPage} / {totalPages}
+                </span>
                 <Button
                   variant="outline"
-                  size="default"
+                  size="sm"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="flex-1 max-w-[140px]"
                 >
-                  Вперёд →
+                  Вперед
                 </Button>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );

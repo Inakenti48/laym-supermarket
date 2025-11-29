@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { addSystemLog } from '@/lib/firebaseCollections';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
 import { getPendingSuppliersCount, syncSuppliersToCloud, setupSuppliersAutoSync } from '@/lib/suppliersOffline';
 
@@ -245,12 +246,13 @@ export const SuppliersTab = () => {
 
       if (error) throw error;
 
-      // Добавляем лог
+      // Добавляем лог в Firebase
       try {
-        await supabase.from('system_logs').insert({
+        await addSystemLog({
+          action: 'supplier_added',
           user_id: user.id,
           user_name: currentUser?.username || 'Неизвестно',
-          message: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
+          details: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
         });
       } catch (logError) {
         console.warn('Ошибка записи лога:', logError);
@@ -346,14 +348,15 @@ export const SuppliersTab = () => {
         payment.paymentType === 'partial' ? `Частичная оплата (${paidAmount}₽ из ${totalCost}₽)` :
         `Долг (${totalCost}₽)`;
 
-      // Добавляем лог
+      // Добавляем лог в Firebase
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase.from('system_logs').insert({
+          await addSystemLog({
+            action: 'supplier_payment',
             user_id: user.id,
             user_name: currentUser?.username || 'Неизвестно',
-            message: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
+            details: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
           });
         }
       } catch (logError) {
@@ -431,14 +434,15 @@ export const SuppliersTab = () => {
 
       if (updateError) throw updateError;
 
-      // Добавляем лог
+      // Добавляем лог в Firebase
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase.from('system_logs').insert({
+          await addSystemLog({
+            action: 'supplier_debt_paid',
             user_id: user.id,
             user_name: currentUser?.username || 'Неизвестно',
-            message: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
+            details: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
           });
         }
       } catch (logError) {

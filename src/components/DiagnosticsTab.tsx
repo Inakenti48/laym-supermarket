@@ -7,23 +7,12 @@ import { toast } from 'sonner';
 import { getCurrentSession } from '@/lib/firebase';
 import { initFirebaseUsers } from '@/lib/firebase';
 import { testFirebaseConnection, initializeWithTestProducts, getFirebaseStatus, retryFirebaseConnection, clearAllFirebaseProducts, enableFirebaseSync, disableFirebaseSync, isFirebaseEnabled } from '@/lib/firebaseProducts';
-import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { getDevices, saveDevice, type Device } from '@/lib/firebaseCollections';
 import { ActiveDevicesMonitor } from './ActiveDevicesMonitor';
 import { WiFiPrinterSettings } from './WiFiPrinterSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-interface Device {
-  id: string;
-  user_id: string;
-  user_name: string;
-  device_name: string;
-  can_save_single: boolean;
-  can_save_queue: boolean;
-  last_active: string;
-  created_at: string;
-}
 
 export const DiagnosticsTab = () => {
   const [userRole, setUserRole] = useState<string>('');
@@ -159,13 +148,8 @@ export const DiagnosticsTab = () => {
 
   const loadAllDevices = async () => {
     try {
-      const { data, error } = await supabase
-        .from('devices')
-        .select('*')
-        .order('last_active', { ascending: false });
-
-      if (error) throw error;
-      setAllDevices(data || []);
+      const devices = await getDevices();
+      setAllDevices(devices);
     } catch (error) {
       console.error('Ошибка загрузки устройств:', error);
     }
@@ -181,47 +165,21 @@ export const DiagnosticsTab = () => {
     localStorage.setItem('can_save_single', String(finalCanSaveSingle));
     localStorage.setItem('can_save_queue', String(finalCanSaveQueue));
 
-    // Сохраняем в базу данных
+    // Сохраняем в Firebase
     try {
       if (!currentUserId || !currentUserLogin || !deviceName) {
         toast.error('⚠️ Необходимо заполнить название устройства');
         return;
       }
 
-      // Проверяем, существует ли уже запись для этого пользователя
-      const { data: existingDevice } = await supabase
-        .from('devices')
-        .select('id')
-        .eq('user_id', currentUserId)
-        .single();
-
-      if (existingDevice) {
-        // Обновляем существующую запись
-        const { error } = await supabase
-          .from('devices')
-          .update({
-            device_name: deviceName,
-            can_save_single: finalCanSaveSingle,
-            can_save_queue: finalCanSaveQueue,
-            last_active: new Date().toISOString(),
-          })
-          .eq('user_id', currentUserId);
-
-        if (error) throw error;
-      } else {
-        // Создаем новую запись
-        const { error } = await supabase
-          .from('devices')
-          .insert({
-            user_id: currentUserId,
-            user_name: currentUserLogin,
-            device_name: deviceName,
-            can_save_single: finalCanSaveSingle,
-            can_save_queue: finalCanSaveQueue,
-          });
-
-        if (error) throw error;
-      }
+      await saveDevice({
+        user_id: currentUserId,
+        user_name: currentUserLogin,
+        device_name: deviceName,
+        can_save_single: finalCanSaveSingle,
+        can_save_queue: finalCanSaveQueue,
+        last_active: new Date().toISOString(),
+      });
 
       const roleMessage = (userRole === 'admin' || userRole === 'inventory') ? ' (Все права включены автоматически)' : '';
       toast.success('✅ Настройки сохранены' + roleMessage);

@@ -11,6 +11,12 @@ import {
 } from './firebaseProducts';
 import { firebaseDb } from './firebase';
 import { collection, query, where, getDocs, updateDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { 
+  getCancellationRequests as getFirebaseCancellations,
+  createCancellationRequest as createFirebaseCancellation,
+  updateCancellationRequest as updateFirebaseCancellation,
+  CancellationRequest as FirebaseCancellationRequest
+} from './firebaseCollections';
 
 export interface StoredProduct {
   id: string;
@@ -349,7 +355,7 @@ export const deleteProduct = async (barcode: string): Promise<boolean> => {
   }
 };
 
-// === СИСТЕМА ОТМЕНЫ ТОВАРОВ (остаётся в Supabase) ===
+// === СИСТЕМА ОТМЕНЫ ТОВАРОВ (Firebase) ===
 
 export interface CancellationRequest {
   id: string;
@@ -360,22 +366,13 @@ export interface CancellationRequest {
 }
 
 export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
-  const { data, error } = await supabase
-    .from('cancellation_requests')
-    .select('*')
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching cancellation requests:', error);
-    return [];
-  }
-  
-  return (data || []).map(r => ({
+  const requests = await getFirebaseCancellations();
+  return requests.map(r => ({
     id: r.id,
-    items: [{ barcode: r.barcode, name: r.product_name, quantity: r.quantity, price: 0 }],
-    cashier: r.requested_by || '',
+    items: r.items,
+    cashier: r.cashier,
     requestedAt: r.created_at,
-    status: r.status as 'pending' | 'approved' | 'rejected'
+    status: r.status
   }));
 };
 
@@ -383,54 +380,35 @@ export const createCancellationRequest = async (
   items: Array<{ barcode: string; name: string; quantity: number; price: number }>, 
   cashier: string
 ): Promise<CancellationRequest> => {
-  const now = new Date().toISOString();
-  const newRequest: CancellationRequest = {
-    id: '',
+  const id = await createFirebaseCancellation(items, cashier);
+  return {
+    id,
     items,
     cashier,
-    requestedAt: now,
+    requestedAt: new Date().toISOString(),
     status: 'pending'
   };
-  
-  const { data: userData } = await supabase.auth.getUser();
-  
-  for (const item of items) {
-    await supabase.from('cancellation_requests').insert({
-      barcode: item.barcode,
-      product_name: item.name,
-      quantity: item.quantity,
-      reason: 'Отмена продажи',
-      status: 'pending',
-      requested_by: userData?.user?.id || null
-    });
-  }
-  
-  return newRequest;
 };
 
 export const updateCancellationRequest = async (id: string, status: 'approved' | 'rejected'): Promise<void> => {
-  const { data, error } = await supabase
-    .from('cancellation_requests')
-    .update({ status })
-    .eq('id', id)
-    .select()
-    .single();
+  await updateFirebaseCancellation(id, status);
   
-  if (error) throw error;
-  
-  if (status === 'approved' && data) {
-    await updateProductQuantity(data.barcode, data.quantity);
+  if (status === 'approved') {
+    // Получаем заявку для восстановления товаров
+    const requests = await getFirebaseCancellations();
+    const request = requests.find(r => r.id === id);
+    if (request) {
+      for (const item of request.items) {
+        await updateProductQuantity(item.barcode, item.quantity);
+      }
+    }
   }
 };
 
 export const cleanupOldCancellations = async (): Promise<void> => {
-  const dayAgo = new Date();
-  dayAgo.setDate(dayAgo.getDate() - 1);
-  
-  await supabase
-    .from('cancellation_requests')
-    .delete()
-    .lt('created_at', dayAgo.toISOString());
+  // Firebase автоматически не очищает старые записи
+  // Можно добавить логику очистки позже если нужно
+  console.log('cleanupOldCancellations: Not implemented for Firebase');
 };
 
 export const exportAllData = async () => {

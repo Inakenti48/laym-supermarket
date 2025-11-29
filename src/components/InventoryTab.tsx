@@ -22,6 +22,7 @@ import { saveProductWithBarcodeGeneration } from '@/lib/productWithBarcodePrint'
 import { getSuppliers, Supplier } from '@/lib/suppliersDb';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { addToQueue } from '@/lib/firebaseCollections';
 import { useFormSync } from '@/hooks/useFormSync';
 import { useFirebaseProducts } from '@/hooks/useFirebaseProducts';
 import { retryOperation } from '@/lib/retryUtils';
@@ -340,41 +341,20 @@ export const InventoryTab = () => {
           created_by: currentUserId,
         };
 
-        // Проверяем существование товара в очереди
-        const { data: existingQueue } = await supabase
-          .from('vremenno_product_foto')
-          .select('id, quantity')
-          .eq('barcode', currentProduct.barcode)
-          .eq('product_name', currentProduct.name)
-          .single();
-
+        // Добавляем в очередь Firebase
         await retryOperation(
           async () => {
-            if (existingQueue) {
-              // Товар уже в очереди - обновляем
-              const newQuantity = (existingQueue.quantity || 0) + (queueData.quantity || 0);
-              
-              const { error: updateError } = await supabase
-                .from('vremenno_product_foto')
-                .update({
-                  ...queueData,
-                  quantity: newQuantity > 0 ? newQuantity : queueData.quantity,
-                })
-                .eq('id', existingQueue.id);
-
-              if (updateError) throw updateError;
-
-              toast.success(`✅ Товар "${currentProduct.name}" обновлен в очереди!`);
-            } else {
-              // Товара нет - добавляем новый
-              const { error: insertError } = await supabase
-                .from('vremenno_product_foto')
-                .insert([queueData]);
-
-              if (insertError) throw insertError;
-
-              toast.success(`✅ Товар "${currentProduct.name}" добавлен в очередь!`);
-            }
+            await addToQueue({
+              barcode: currentProduct.barcode,
+              product_name: currentProduct.name,
+              category,
+              quantity: currentProduct.quantity ? parseInt(currentProduct.quantity) : 1,
+              front_photo: frontPhoto || undefined,
+              barcode_photo: barcodePhoto || undefined,
+              image_url: frontPhoto || barcodePhoto || undefined,
+              created_by: currentUserId
+            });
+            toast.success(`✅ Товар "${currentProduct.name}" добавлен в очередь!`);
           },
           {
             maxAttempts: 5,
@@ -878,16 +858,19 @@ export const InventoryTab = () => {
           
           setPendingProducts(prev => [...prev, newPendingProduct]);
           
-          // Сохраняем в временную таблицу для синхронизации между устройствами
+          // Сохраняем в Firebase очередь для синхронизации между устройствами
           try {
-            await supabase.from('vremenno_product_foto').insert({
+            await addToQueue({
               barcode: sanitizedBarcode,
               product_name: barcodeData.name || '',
-              image_url: barcodeData.frontPhoto || barcodeData.barcodePhoto || '',
-              storage_path: null
+              category: finalCategory,
+              quantity: 1,
+              front_photo: barcodeData.frontPhoto || undefined,
+              barcode_photo: barcodeData.barcodePhoto || undefined,
+              image_url: barcodeData.frontPhoto || barcodeData.barcodePhoto || undefined,
             });
           } catch (e) {
-            console.log('Ошибка сохранения в временную таблицу:', e);
+            console.log('Ошибка сохранения в очередь Firebase:', e);
           }
           
           toast.info(`📦 Товар добавлен в очередь: ${barcodeData.name || sanitizedBarcode}`, { 

@@ -54,25 +54,19 @@ serve(async (req) => {
           db: Deno.env.get('MYSQL_DATABASE'),
         });
 
-        // Получаем всех активных сотрудников с логинами
+        // Получаем всех активных сотрудников с логинами (без колонки role, она может не существовать)
         const employees = await client.query(
-          'SELECT id, name, role, login FROM employees WHERE login IS NOT NULL AND active = true'
+          'SELECT id, name, login FROM employees WHERE login IS NOT NULL AND active = true'
         );
 
         for (const emp of employees) {
           if (emp.login) {
             const empHash = await hashSHA256(emp.login);
             if (empHash === loginHash) {
-              // Маппинг ролей сотрудников
-              let role = 'warehouse';
-              if (emp.role === 'admin' || emp.role === 'администратор') role = 'admin';
-              else if (emp.role === 'cashier' || emp.role === 'кассир' || emp.role === 'cashier1') role = 'cashier1';
-              else if (emp.role === 'cashier2' || emp.role === 'кассир 2') role = 'cashier2';
-              else if (emp.role === 'warehouse' || emp.role === 'склад') role = 'warehouse';
-
+              // По умолчанию роль warehouse для сотрудников из MySQL
               foundUser = {
                 login: emp.login,
-                role: role,
+                role: 'warehouse',
                 name: emp.name,
                 user_id: emp.id,
                 source: 'mysql'

@@ -3,20 +3,14 @@ import { Activity, Calendar, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-
-interface SystemLog {
-  id: string;
-  message: string;
-  user_name: string | null;
-  created_at: string;
-}
+import { getSystemLogs, SystemLog } from '@/lib/firebaseCollections';
 
 export const LogsTab = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [filteredLogs, setFilteredLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,25 +19,9 @@ export const LogsTab = () => {
 
   const loadLogs = async () => {
     try {
-      let query = supabase
-        .from('system_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000);
-
-      if (startDate) {
-        query = query.gte('created_at', new Date(startDate).toISOString());
-      }
-      if (endDate) {
-        const endDateTime = new Date(endDate);
-        endDateTime.setHours(23, 59, 59, 999);
-        query = query.lte('created_at', endDateTime.toISOString());
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setLogs(data || []);
+      const data = await getSystemLogs(1000);
+      setLogs(data);
+      setFilteredLogs(data);
     } catch (error: any) {
       console.error('Error loading logs:', error);
       toast.error('Ошибка загрузки логов');
@@ -53,15 +31,25 @@ export const LogsTab = () => {
   };
 
   const handleFilter = () => {
-    setLoading(true);
-    loadLogs();
+    let filtered = logs;
+    
+    if (startDate) {
+      const start = new Date(startDate).getTime();
+      filtered = filtered.filter(log => new Date(log.created_at).getTime() >= start);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(log => new Date(log.created_at).getTime() <= end.getTime());
+    }
+    
+    setFilteredLogs(filtered);
   };
 
   const handleReset = () => {
     setStartDate('');
     setEndDate('');
-    setLoading(true);
-    loadLogs();
+    setFilteredLogs(logs);
   };
 
   if (loading) {
@@ -76,7 +64,7 @@ export const LogsTab = () => {
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <Activity className="h-5 w-5" />
-        Журнал активности ({logs.length})
+        Журнал активности ({filteredLogs.length})
       </h3>
 
       <Card className="p-4 mb-4 bg-muted/50">
@@ -110,16 +98,16 @@ export const LogsTab = () => {
         </div>
       </Card>
 
-      {logs.length === 0 ? (
+      {filteredLogs.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           Нет записей в журнале
         </div>
       ) : (
         <div className="space-y-2 max-h-[600px] overflow-y-auto">
-          {logs.map((log) => (
+          {filteredLogs.map((log) => (
             <div key={log.id} className="p-3 bg-muted/50 rounded-lg">
               <div className="flex justify-between items-start mb-1">
-                <span className="font-medium text-sm">{log.message}</span>
+                <span className="font-medium text-sm">{log.action}</span>
                 <span className="text-xs text-muted-foreground">
                   {new Date(log.created_at).toLocaleString('ru-RU')}
                 </span>
@@ -128,6 +116,11 @@ export const LogsTab = () => {
                 <span className="text-xs text-muted-foreground">
                   Пользователь: {log.user_name}
                 </span>
+              )}
+              {log.details && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  {log.details}
+                </div>
               )}
             </div>
           ))}

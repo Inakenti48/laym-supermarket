@@ -7,7 +7,8 @@ import { getAllProducts } from '@/lib/storage';
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
-import { isLocalOnlyMode, saveOrUpdateLocalProduct, saveToLocalQueue } from '@/lib/localOnlyMode';
+import { saveOrUpdateLocalProduct } from '@/lib/localOnlyMode';
+import { addToQueue } from '@/lib/firebaseCollections';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -208,80 +209,21 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
     return canvas.toDataURL('image/jpeg', 0.85);
   };
 
+  // Сохранение в Firebase очередь (без Supabase storage)
   const saveToTemporaryStorage = async (imageBase64: string, barcode: string, productName: string): Promise<string | null> => {
     try {
-      // Конвертируем base64 в blob с высоким качеством
-      const base64Data = imageBase64.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
-
-      // Генерируем уникальное имя файла
-      const fileName = `temp-${barcode}-${Date.now()}.jpg`;
-      const filePath = `temporary/${fileName}`;
-
-      // Загружаем в storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('product-photos')
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError);
-        return null;
-      }
-
-      // Получаем публичный URL
-      const { data: urlData } = supabase.storage
-        .from('product-photos')
-        .getPublicUrl(filePath);
-
-      // Проверяем, есть ли уже такой товар во временной базе
-      const { data: existing } = await supabase
-        .from('vremenno_product_foto')
-        .select('id')
-        .eq('barcode', barcode)
-        .eq('product_name', productName)
-        .maybeSingle();
-
-      // Если товара нет, добавляем в временную базу с повторными попытками
-      if (!existing) {
-        await retryOperation(
-          async () => {
-            const { error: dbError } = await supabase
-              .from('vremenno_product_foto')
-              .insert({
-                barcode,
-                product_name: productName,
-                image_url: urlData.publicUrl,
-                storage_path: filePath
-              });
-
-            if (dbError) throw dbError;
-            
-            console.log('Photo saved to temporary storage');
-          },
-          {
-            maxAttempts: 5,
-            initialDelay: 1000,
-            onRetry: (attempt) => {
-              console.log(`🔄 Повторная попытка сохранения в очередь (попытка ${attempt})...`);
-            }
-          }
-        );
-      } else {
-        console.log('Product already exists in temporary storage');
-      }
-
-      return urlData.publicUrl;
+      // Сохраняем в Firebase очередь с base64 изображением
+      await addToQueue({
+        barcode,
+        product_name: productName,
+        front_photo: imageBase64,
+        quantity: 1,
+        created_by: 'system'
+      });
+      console.log('📋 Фото сохранено в Firebase очередь');
+      return imageBase64; // Возвращаем base64 вместо URL
     } catch (err) {
-      console.error('Error saving to temporary storage:', err);
+      console.error('Error saving to Firebase queue:', err);
       return null;
     }
   };
@@ -611,121 +553,38 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       let savedTo = '';
       let saveError = '';
       
-      // ЛОКАЛЬНЫЙ РЕЖИМ - сохраняем в IndexedDB
-      if (isLocalOnlyMode()) {
-        console.log('📦 Локальный режим: сохранение в IndexedDB');
-        
-        if (priceInfo && priceInfo.purchasePrice > 0) {
-          try {
-            const result = await saveOrUpdateLocalProduct({
-              barcode: scannedBarcode,
-              name: priceInfo.name || scannedName,
-              purchasePrice: priceInfo.purchasePrice,
-              salePrice: Math.round(priceInfo.purchasePrice * 1.3),
-              quantity: 1,
-              category: priceInfo.category || scannedCategory,
-              addedBy: userName,
-            });
-            savedTo = result.isNew ? 'products' : 'products_updated';
-          } catch (err: any) {
-            saveError = err.message;
-          }
-        } else {
-          try {
-            await saveToLocalQueue({
-              barcode: scannedBarcode || `auto-${Date.now()}`,
-              recognizedName: scannedName,
-              imageData: tempFrontPhoto,
-              addedBy: userName,
-            });
-            savedTo = 'queue';
-          } catch (err: any) {
-            saveError = err.message;
-          }
+      // FIREBASE РЕЖИМ - сохраняем в Firebase
+      console.log('🔥 Firebase режим: сохранение');
+      
+      if (priceInfo && priceInfo.purchasePrice > 0) {
+        try {
+          const result = await saveOrUpdateLocalProduct({
+            barcode: scannedBarcode,
+            name: priceInfo.name || scannedName,
+            purchasePrice: priceInfo.purchasePrice,
+            salePrice: Math.round(priceInfo.purchasePrice * 1.3),
+            quantity: 1,
+            category: priceInfo.category || scannedCategory,
+            addedBy: userName,
+          });
+          savedTo = result.isNew ? 'products' : 'products_updated';
+        } catch (err: any) {
+          saveError = err.message;
         }
       } else {
-        // ОБЛАЧНЫЙ РЕЖИМ - Supabase
-        if (priceInfo && priceInfo.purchasePrice > 0) {
-          console.log(`✅ Цена найдена: ${priceInfo.purchasePrice}₽`);
-          
-          try {
-            const { data: existing } = await supabase
-              .from('products')
-              .select('id, quantity')
-              .eq('barcode', scannedBarcode)
-              .maybeSingle();
-
-            if (existing) {
-              await supabase
-                .from('products')
-                .update({ quantity: (existing.quantity || 0) + 1 })
-                .eq('id', existing.id);
-              savedTo = 'products_updated';
-            } else {
-              const { error: insertError } = await supabase
-                .from('products')
-                .insert([{
-                  barcode: scannedBarcode,
-                  name: priceInfo.name || scannedName,
-                  category: priceInfo.category || scannedCategory,
-                  purchase_price: priceInfo.purchasePrice,
-                  sale_price: Math.round(priceInfo.purchasePrice * 1.3),
-                  quantity: 1,
-                  unit: priceInfo.unit || 'шт',
-                  created_by: userName
-                }]);
-              
-              if (insertError) {
-                console.error('Insert error:', insertError);
-                saveError = insertError.message;
-              } else {
-                savedTo = 'products';
-              }
-            }
-          } catch (dbErr: any) {
-            console.error('DB error:', dbErr);
-            saveError = dbErr.message;
-          }
-        } else {
-          console.log(`⏳ Цена не найдена, в очередь`);
-          
-          try {
-            const effectiveBarcode = scannedBarcode || `auto-${Date.now()}`;
-            
-            const { data: existingQueue } = await supabase
-              .from('vremenno_product_foto')
-              .select('id')
-              .eq('barcode', effectiveBarcode)
-              .maybeSingle();
-
-            if (existingQueue) {
-              savedTo = 'queue_exists';
-            } else {
-              const { error: queueError } = await supabase
-                .from('vremenno_product_foto')
-                .insert([{
-                  barcode: effectiveBarcode,
-                  product_name: scannedName || 'Неизвестный товар',
-                  category: scannedCategory,
-                  front_photo: tempFrontPhoto,
-                  barcode_photo: tempBarcodePhoto,
-                  image_url: tempFrontPhoto || '',
-                  storage_path: '',
-                  quantity: 1,
-                  created_by: userName
-                }]);
-              
-              if (queueError) {
-                console.error('Queue insert error:', queueError);
-                saveError = queueError.message;
-              } else {
-                savedTo = 'queue';
-              }
-            }
-          } catch (qErr: any) {
-            console.error('Queue error:', qErr);
-            saveError = qErr.message;
-          }
+        try {
+          await addToQueue({
+            barcode: scannedBarcode || `auto-${Date.now()}`,
+            product_name: scannedName || 'Неизвестный товар',
+            category: scannedCategory,
+            front_photo: tempFrontPhoto,
+            barcode_photo: tempBarcodePhoto,
+            quantity: 1,
+            created_by: userName,
+          });
+          savedTo = 'queue';
+        } catch (err: any) {
+          saveError = err.message;
         }
       }
 

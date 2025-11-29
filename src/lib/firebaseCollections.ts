@@ -315,3 +315,188 @@ export const getSales = async (limitCount: number = 100): Promise<Sale[]> => {
     return [];
   }
 };
+
+// ============ SUPPLIERS ============
+export interface Supplier {
+  id: string;
+  name: string;
+  phone: string;
+  notes: string;
+  totalDebt: number;
+  paymentHistory: Array<{
+    date: string;
+    amount: number;
+    paymentType: string;
+    productName: string;
+    productQuantity: number;
+    productPrice: number;
+    changedBy: string;
+  }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getSuppliers = async (): Promise<Supplier[]> => {
+  try {
+    const q = query(
+      collection(firebaseDb, 'suppliers'),
+      orderBy('created_at', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+  } catch (err) {
+    console.warn('⚠️ Ошибка загрузки поставщиков:', err);
+    return [];
+  }
+};
+
+export const saveSupplier = async (supplier: Omit<Supplier, 'id' | 'created_at' | 'updated_at' | 'paymentHistory'>): Promise<Supplier> => {
+  try {
+    const now = new Date().toISOString();
+    const docRef = await addDoc(collection(firebaseDb, 'suppliers'), {
+      ...supplier,
+      paymentHistory: [],
+      created_at: now,
+      updated_at: now
+    });
+    return {
+      id: docRef.id,
+      ...supplier,
+      paymentHistory: [],
+      created_at: now,
+      updated_at: now
+    };
+  } catch (err) {
+    console.error('❌ Ошибка сохранения поставщика:', err);
+    throw err;
+  }
+};
+
+export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
+  try {
+    await updateDoc(doc(firebaseDb, 'suppliers', id), {
+      ...updates,
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('❌ Ошибка обновления поставщика:', err);
+    throw err;
+  }
+};
+
+export const deleteSupplier = async (id: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(firebaseDb, 'suppliers', id));
+  } catch (err) {
+    console.error('❌ Ошибка удаления поставщика:', err);
+    throw err;
+  }
+};
+
+export const subscribeToSuppliers = (callback: (suppliers: Supplier[]) => void): (() => void) => {
+  return onSnapshot(
+    query(collection(firebaseDb, 'suppliers'), orderBy('created_at', 'desc')),
+    (snapshot) => {
+      const suppliers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+      callback(suppliers);
+    },
+    (error) => console.warn('⚠️ Ошибка подписки на поставщиков:', error)
+  );
+};
+
+// ============ PRODUCT RETURNS ============
+export interface ProductReturn {
+  id: string;
+  barcode: string;
+  product_name: string;
+  quantity: number;
+  reason: string;
+  returned_by: string;
+  created_at: string;
+}
+
+export const getProductReturns = async (): Promise<ProductReturn[]> => {
+  try {
+    const q = query(
+      collection(firebaseDb, 'product_returns'),
+      orderBy('created_at', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductReturn));
+  } catch (err) {
+    console.warn('⚠️ Ошибка загрузки возвратов:', err);
+    return [];
+  }
+};
+
+export const addProductReturn = async (ret: Omit<ProductReturn, 'id' | 'created_at'>): Promise<string> => {
+  try {
+    const docRef = await addDoc(collection(firebaseDb, 'product_returns'), {
+      ...ret,
+      created_at: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (err) {
+    console.error('❌ Ошибка добавления возврата:', err);
+    throw err;
+  }
+};
+
+// ============ PRODUCT IMAGES (локальное хранение base64) ============
+export interface ProductImage {
+  id: string;
+  barcode: string;
+  product_name: string;
+  image_url: string;
+  created_at: string;
+}
+
+export const saveProductImageFirebase = async (
+  barcode: string,
+  productName: string,
+  imageBase64: string
+): Promise<boolean> => {
+  try {
+    // Проверяем существование
+    const q = query(
+      collection(firebaseDb, 'product_images'),
+      where('barcode', '==', barcode)
+    );
+    const existing = await getDocs(q);
+    
+    if (!existing.empty) {
+      await updateDoc(existing.docs[0].ref, {
+        image_url: imageBase64,
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      await addDoc(collection(firebaseDb, 'product_images'), {
+        barcode,
+        product_name: productName,
+        image_url: imageBase64,
+        created_at: new Date().toISOString()
+      });
+    }
+    console.log('✅ Фото сохранено в Firebase');
+    return true;
+  } catch (err) {
+    console.error('❌ Ошибка сохранения фото:', err);
+    return false;
+  }
+};
+
+export const getProductImage = async (barcode: string): Promise<string | null> => {
+  try {
+    const q = query(
+      collection(firebaseDb, 'product_images'),
+      where('barcode', '==', barcode)
+    );
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data().image_url;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};

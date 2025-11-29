@@ -1,5 +1,10 @@
-import { supabase } from '@/integrations/supabase/client';
-import { saveSupplierOffline, syncSuppliersToCloud } from './suppliersOffline';
+// Firebase версия поставщиков (без Supabase)
+import { 
+  getSuppliers as getFirebaseSuppliers, 
+  saveSupplier as saveFirebaseSupplier,
+  updateSupplier as updateFirebaseSupplier,
+  Supplier as FirebaseSupplier
+} from './firebaseCollections';
 import { toast } from 'sonner';
 
 export interface Supplier {
@@ -22,137 +27,63 @@ export interface Supplier {
 }
 
 /**
- * Получить всех поставщиков из базы данных
+ * Получить всех поставщиков из Firebase
  */
 export const getSuppliers = async (): Promise<Supplier[]> => {
-  const { data, error } = await supabase
-    .from('suppliers')
-    .select('*')
-    .order('created_at', { ascending: false });
-  
-  if (error) {
-    console.error('Error fetching suppliers:', error);
-    return [];
-  }
-  
-  return (data || []).map(s => ({
+  const suppliers = await getFirebaseSuppliers();
+  return suppliers.map(s => ({
     id: s.id,
     name: s.name,
     phone: s.phone || '',
-    notes: s.address || '',
-    totalDebt: Number(s.debt || 0),
-    paymentHistory: (s.payment_history as any) || [],
+    notes: s.notes || '',
+    totalDebt: Number(s.totalDebt || 0),
+    paymentHistory: (s.paymentHistory as any) || [],
     createdAt: s.created_at,
     lastUpdated: s.updated_at
   }));
 };
 
 /**
- * Сохранить нового поставщика (с резервным локальным хранилищем)
+ * Сохранить нового поставщика в Firebase
  */
 export const saveSupplier = async (
   supplier: Omit<Supplier, 'id' | 'createdAt' | 'lastUpdated' | 'paymentHistory'>, 
   userId: string
-): Promise<Supplier | { isOffline: true; localId: string }> => {
-  console.log('💾 Сохранение поставщика:', supplier.name);
+): Promise<Supplier> => {
+  console.log('💾 Сохранение поставщика в Firebase:', supplier.name);
   
-  const supplierData = {
+  const result = await saveFirebaseSupplier({
     name: supplier.name,
-    phone: supplier.phone || null,
-    contact_person: supplier.name,
-    address: supplier.notes || null,
-    debt: supplier.totalDebt || 0,
-    payment_history: [] as any,
-    created_by: userId
-  };
+    phone: supplier.phone || '',
+    notes: supplier.notes || '',
+    totalDebt: supplier.totalDebt || 0
+  });
   
-  try {
-    // Пытаемся сохранить в основную БД
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError) {
-      console.error('❌ Ошибка авторизации, сохраняем локально:', authError.message);
-      const localId = await saveSupplierOffline(supplierData);
-      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
-      return { isOffline: true, localId };
-    }
-    
-    if (!user) {
-      console.warn('⚠️ Пользователь не авторизован, сохраняем локально');
-      const localId = await saveSupplierOffline(supplierData);
-      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
-      return { isOffline: true, localId };
-    }
-    
-    console.log('✅ Пользователь авторизован:', user.id);
-    
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert(supplierData)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('❌ Ошибка сохранения в Supabase, сохраняем локально:', error);
-      const localId = await saveSupplierOffline(supplierData);
-      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
-      return { isOffline: true, localId };
-    }
-    
-    console.log('✅ Поставщик сохранен в Supabase:', data.id);
-    
-    // Пытаемся синхронизировать локальные данные
-    syncSuppliersToCloud().catch(err => 
-      console.warn('⚠️ Фоновая синхронизация не удалась:', err)
-    );
-    
-    return {
-      id: data.id,
-      name: data.name,
-      phone: data.phone || '',
-      notes: data.address || '',
-      totalDebt: Number(data.debt || 0),
-      paymentHistory: [],
-      createdAt: data.created_at,
-      lastUpdated: data.updated_at
-    };
-  } catch (error: any) {
-    console.error('❌ Критическая ошибка, сохраняем локально:', error);
-    try {
-      const localId = await saveSupplierOffline(supplierData);
-      toast.warning('Поставщик сохранен локально. Синхронизация при восстановлении связи.');
-      return { isOffline: true, localId };
-    } catch (offlineError) {
-      console.error('❌ Не удалось сохранить даже локально:', offlineError);
-      throw new Error('Не удалось сохранить поставщика ни в облаке, ни локально');
-    }
-  }
+  return {
+    id: result.id,
+    name: result.name,
+    phone: result.phone || '',
+    notes: result.notes || '',
+    totalDebt: Number(result.totalDebt || 0),
+    paymentHistory: [],
+    createdAt: result.created_at,
+    lastUpdated: result.updated_at
+  };
 };
 
 /**
  * Обновить данные поставщика
  */
 export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
-  const updateData: any = {
-    updated_at: new Date().toISOString()
-  };
+  const updateData: any = {};
   
   if (updates.name) updateData.name = updates.name;
-  if (updates.phone !== undefined) updateData.phone = updates.phone || null;
-  if (updates.notes !== undefined) updateData.address = updates.notes || null;
-  if (updates.totalDebt !== undefined) updateData.debt = updates.totalDebt;
-  if (updates.paymentHistory !== undefined) updateData.payment_history = updates.paymentHistory;
+  if (updates.phone !== undefined) updateData.phone = updates.phone || '';
+  if (updates.notes !== undefined) updateData.notes = updates.notes || '';
+  if (updates.totalDebt !== undefined) updateData.totalDebt = updates.totalDebt;
+  if (updates.paymentHistory !== undefined) updateData.paymentHistory = updates.paymentHistory;
   
-  const { error } = await supabase
-    .from('suppliers')
-    .update(updateData)
-    .eq('id', id);
-  
-  if (error) {
-    console.error('❌ Ошибка обновления поставщика:', error);
-    throw error;
-  }
-  
+  await updateFirebaseSupplier(id, updateData);
   console.log('✅ Поставщик обновлен:', id);
 };
 
@@ -170,18 +101,13 @@ export const addSupplierPayment = async (
   },
   userId: string
 ): Promise<void> => {
-  // Получаем текущего поставщика
-  const { data: supplier, error: supplierError } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('id', supplierId)
-    .single();
+  const suppliers = await getSuppliers();
+  const supplier = suppliers.find(s => s.id === supplierId);
 
-  if (supplierError || !supplier) {
+  if (!supplier) {
     throw new Error('Поставщик не найден');
   }
 
-  // Создаем новую запись в истории платежей
   const newPaymentRecord = {
     productName: payment.productName,
     productQuantity: payment.productQuantity,
@@ -192,10 +118,8 @@ export const addSupplierPayment = async (
     date: new Date().toISOString()
   };
 
-  const currentHistory = Array.isArray(supplier.payment_history) ? supplier.payment_history : [];
-  const updatedHistory = [...currentHistory, newPaymentRecord];
+  const updatedHistory = [...(supplier.paymentHistory || []), newPaymentRecord];
 
-  // Обновляем поставщика
   await updateSupplier(supplierId, {
     paymentHistory: updatedHistory as any
   });
@@ -207,37 +131,30 @@ export const addSupplierPayment = async (
  * Погасить долг поставщику
  */
 export const paySupplierDebt = async (supplierId: string, amount: number, userId: string): Promise<void> => {
-  // Получаем текущего поставщика
-  const { data: supplier, error: supplierError } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('id', supplierId)
-    .single();
+  const suppliers = await getSuppliers();
+  const supplier = suppliers.find(s => s.id === supplierId);
 
-  if (supplierError || !supplier) {
+  if (!supplier) {
     throw new Error('Поставщик не найден');
   }
 
-  if (amount > (supplier.debt || 0)) {
+  if (amount > (supplier.totalDebt || 0)) {
     throw new Error('Сумма больше текущего долга');
   }
 
-  // Создаем запись о погашении долга
   const debtPaymentRecord = {
     productName: 'Погашение долга',
     productQuantity: 0,
     productPrice: 0,
-    paymentType: 'debt_payment',
+    paymentType: 'debt_payment' as any,
     amount: -amount,
     changedBy: userId,
     date: new Date().toISOString()
   };
 
-  const currentHistory = Array.isArray(supplier.payment_history) ? supplier.payment_history : [];
-  const updatedHistory = [...currentHistory, debtPaymentRecord];
-  const newDebt = (supplier.debt || 0) - amount;
+  const updatedHistory = [...(supplier.paymentHistory || []), debtPaymentRecord];
+  const newDebt = (supplier.totalDebt || 0) - amount;
 
-  // Обновляем поставщика
   await updateSupplier(supplierId, {
     totalDebt: newDebt,
     paymentHistory: updatedHistory as any

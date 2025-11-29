@@ -14,10 +14,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
-import { addSystemLog } from '@/lib/firebaseCollections';
+import { 
+  addSystemLog, 
+  getSuppliers as getFirebaseSuppliers, 
+  saveSupplier as saveFirebaseSupplier,
+  updateSupplier as updateFirebaseSupplier,
+  subscribeToSuppliers,
+  Supplier as FirebaseSupplier
+} from '@/lib/firebaseCollections';
 import { getCurrentLoginUserSync } from '@/lib/loginAuth';
-import { getPendingSuppliersCount, syncSuppliersToCloud, setupSuppliersAutoSync } from '@/lib/suppliersOffline';
 
 interface PaymentHistoryItem {
   productName: string;
@@ -31,13 +36,12 @@ interface PaymentHistoryItem {
 interface Supplier {
   id: string;
   name: string;
-  contact_person: string | null;
-  phone: string | null;
-  address: string | null;
-  debt: number;
-  payment_history: PaymentHistoryItem[] | any;
-  created_at: string;
-  updated_at: string;
+  phone: string;
+  notes: string;
+  totalDebt: number;
+  paymentHistory: PaymentHistoryItem[];
+  createdAt: string;
+  lastUpdated: string;
 }
 
 export const SuppliersTab = () => {
@@ -47,7 +51,6 @@ export const SuppliersTab = () => {
   const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
   
   const [newSupplier, setNewSupplier] = useState(() => {
     const saved = localStorage.getItem('supplier_form_data');
@@ -55,10 +58,10 @@ export const SuppliersTab = () => {
       try {
         return JSON.parse(saved);
       } catch {
-        return { name: '', phone: '', contact_person: '', address: '' };
+        return { name: '', phone: '', notes: '' };
       }
     }
-    return { name: '', phone: '', contact_person: '', address: '' };
+    return { name: '', phone: '', notes: '' };
   });
 
   const [payment, setPayment] = useState(() => {
@@ -87,19 +90,7 @@ export const SuppliersTab = () => {
     };
   });
 
-  const [debtPayment, setDebtPayment] = useState(() => {
-    const saved = localStorage.getItem('debt_payment_form_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return { supplierId: '', amount: '' };
-      }
-    }
-    return { supplierId: '', amount: '' };
-  });
-
-  // Сохраняем состояния форм при изменении
+  // Сохраняем форму при изменении
   useEffect(() => {
     localStorage.setItem('supplier_form_data', JSON.stringify(newSupplier));
   }, [newSupplier]);
@@ -109,78 +100,41 @@ export const SuppliersTab = () => {
   }, [payment]);
 
   useEffect(() => {
-    localStorage.setItem('debt_payment_form_data', JSON.stringify(debtPayment));
-  }, [debtPayment]);
-
-  useEffect(() => {
     loadSuppliers();
-    checkPendingSuppliers();
-
-    // Настройка автоматической синхронизации
-    setupSuppliersAutoSync((result) => {
-      if (result.synced > 0) {
-        toast.success(`Синхронизировано ${result.synced} поставщиков`);
-        loadSuppliers();
-        checkPendingSuppliers();
-      }
-      if (result.failed > 0) {
-        toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
-      }
+    
+    // Подписка на Firebase
+    const unsubscribe = subscribeToSuppliers((data) => {
+      const mapped = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || '',
+        notes: s.notes || '',
+        totalDebt: Number(s.totalDebt || 0),
+        paymentHistory: (s.paymentHistory as any) || [],
+        createdAt: s.created_at,
+        lastUpdated: s.updated_at
+      }));
+      setSuppliers(mapped);
+      setLoading(false);
     });
 
-    // Подписка на реалтайм обновления
-    const channel = supabase
-      .channel('suppliers_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers'
-        },
-        () => {
-          loadSuppliers();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => unsubscribe();
   }, []);
-
-  const checkPendingSuppliers = async () => {
-    const count = await getPendingSuppliersCount();
-    setPendingCount(count);
-  };
-
-  const handleManualSync = async () => {
-    toast.loading('Синхронизация...');
-    const result = await syncSuppliersToCloud();
-    toast.dismiss();
-    
-    if (result.synced > 0) {
-      toast.success(`Синхронизировано ${result.synced} поставщиков`);
-      loadSuppliers();
-      checkPendingSuppliers();
-    }
-    if (result.failed > 0) {
-      toast.error(`Не удалось синхронизировать ${result.failed} поставщиков`);
-    }
-    if (result.synced === 0 && result.failed === 0) {
-      toast.info('Нет данных для синхронизации');
-    }
-  };
 
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setSuppliers((data || []) as Supplier[]);
+      const data = await getFirebaseSuppliers();
+      const mapped = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || '',
+        notes: s.notes || '',
+        totalDebt: Number(s.totalDebt || 0),
+        paymentHistory: (s.paymentHistory as any) || [],
+        createdAt: s.created_at,
+        lastUpdated: s.updated_at
+      }));
+      setSuppliers(mapped);
     } catch (error: any) {
       console.error('Error loading suppliers:', error);
       toast.error('Ошибка загрузки поставщиков');
@@ -196,7 +150,6 @@ export const SuppliersTab = () => {
     toast.loading('Добавление поставщика...');
     
     try {
-      // Валидация
       if (!newSupplier.name?.trim()) {
         toast.dismiss();
         toast.error('Введите название поставщика');
@@ -209,161 +162,88 @@ export const SuppliersTab = () => {
         return;
       }
 
-      // Проверка авторизации
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.error('❌ Ошибка авторизации:', {
-          message: authError.message,
-          code: authError.status
-        });
-        toast.dismiss();
-        toast.error('Ошибка авторизации. Войдите в систему.');
-        return;
-      }
-      
-      if (!user) {
-        console.warn('⚠️ Пользователь не авторизован');
-        toast.dismiss();
-        toast.error('Необходима авторизация');
-        return;
-      }
-
-      const supplierData = {
+      await saveFirebaseSupplier({
         name: newSupplier.name.trim(),
         phone: newSupplier.phone.trim(),
-        contact_person: newSupplier.contact_person?.trim() || null,
-        address: newSupplier.address?.trim() || null,
-        debt: 0,
-        payment_history: [],
-        created_by: user.id
-      };
-      
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert(supplierData)
-        .select()
-        .single();
+        notes: newSupplier.notes?.trim() || '',
+        totalDebt: 0
+      });
 
-      if (error) throw error;
-
-      // Добавляем лог в Firebase
-      try {
-        await addSystemLog({
-          action: 'supplier_added',
-          user_id: user.id,
-          user_name: currentUser?.username || 'Неизвестно',
-          details: `Добавлен поставщик: ${newSupplier.name} (${newSupplier.phone})`
-        });
-      } catch (logError) {
-        console.warn('Ошибка записи лога:', logError);
-      }
+      await addSystemLog({
+        action: 'supplier_added',
+        user_name: currentUser?.username || 'Система',
+        details: `Добавлен поставщик: ${newSupplier.name}`
+      });
 
       toast.dismiss();
-      toast.success('Поставщик успешно добавлен');
-      setNewSupplier({ name: '', phone: '', contact_person: '', address: '' });
+      toast.success(`Поставщик "${newSupplier.name}" добавлен`);
+      
+      setNewSupplier({ name: '', phone: '', notes: '' });
+      localStorage.removeItem('supplier_form_data');
       setShowAddForm(false);
       loadSuppliers();
-      localStorage.removeItem('supplier_form_data');
     } catch (error: any) {
       toast.dismiss();
-      
-      let errorMessage = 'Ошибка добавления поставщика';
-      if (error.code === '23505') {
-        errorMessage = 'Поставщик с такими данными уже существует';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast.error(errorMessage);
-      console.error('Ошибка добавления поставщика:', error);
+      toast.error('Ошибка добавления поставщика');
+      console.error('Error adding supplier:', error);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAddPayment = async () => {
+  const handlePaymentSubmit = async () => {
     if (!payment.supplierId || !payment.productName || !payment.productQuantity || !payment.productPrice) {
       toast.error('Заполните все поля');
       return;
     }
 
-    const quantity = parseFloat(payment.productQuantity);
-    const price = parseFloat(payment.productPrice);
-    const totalCost = quantity * price;
-    const paidAmount = payment.paymentType === 'full' 
-      ? totalCost 
-      : payment.paymentType === 'debt'
-      ? 0
-      : parseFloat(payment.paidAmount) || 0;
+    const productPrice = parseFloat(payment.productPrice);
+    const productQuantity = parseInt(payment.productQuantity);
+    const totalAmount = productPrice * productQuantity;
+    
+    let paidAmount = totalAmount;
+    let debtAmount = 0;
 
-    if (payment.paymentType === 'partial' && paidAmount <= 0) {
-      toast.error('Укажите сумму частичной оплаты');
-      return;
-    }
-
-    if (payment.paymentType === 'partial' && paidAmount >= totalCost) {
-      toast.error('Частичная оплата не может быть больше или равна полной сумме');
-      return;
+    if (payment.paymentType === 'partial') {
+      paidAmount = parseFloat(payment.paidAmount) || 0;
+      debtAmount = totalAmount - paidAmount;
+    } else if (payment.paymentType === 'debt') {
+      paidAmount = 0;
+      debtAmount = totalAmount;
     }
 
     try {
-      // Получаем текущего поставщика
-      const { data: supplier, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('id', payment.supplierId)
-        .single();
+      const supplier = suppliers.find(s => s.id === payment.supplierId);
+      if (!supplier) {
+        toast.error('Поставщик не найден');
+        return;
+      }
 
-      if (supplierError || !supplier) throw supplierError;
-
-      // Создаем новую запись в истории платежей
-      const newPaymentRecord = {
+      const newPaymentRecord: PaymentHistoryItem = {
         productName: payment.productName,
-        productQuantity: quantity,
-        productPrice: price,
+        productQuantity,
+        productPrice,
         paymentType: payment.paymentType,
         amount: paidAmount,
         date: new Date().toISOString()
       };
 
-      const currentHistory = Array.isArray(supplier.payment_history) ? supplier.payment_history : [];
-      const updatedHistory = [...currentHistory, newPaymentRecord];
-      const debtChange = totalCost - paidAmount;
-      const newDebt = (supplier.debt || 0) + debtChange;
+      const updatedHistory = [...(supplier.paymentHistory || []), newPaymentRecord];
+      const newDebt = (supplier.totalDebt || 0) + debtAmount;
 
-      // Обновляем поставщика
-      const { error: updateError } = await supabase
-        .from('suppliers')
-        .update({
-          debt: newDebt,
-          payment_history: updatedHistory,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', payment.supplierId);
+      await updateFirebaseSupplier(payment.supplierId, {
+        totalDebt: newDebt,
+        paymentHistory: updatedHistory as any
+      });
 
-      if (updateError) throw updateError;
+      await addSystemLog({
+        action: 'payment_added',
+        user_name: currentUser?.username || 'Система',
+        details: `Платеж поставщику ${supplier.name}: ${payment.productName} x${productQuantity}`
+      });
 
-      const paymentStatus = 
-        payment.paymentType === 'full' ? 'Полная оплата' :
-        payment.paymentType === 'partial' ? `Частичная оплата (${paidAmount}₽ из ${totalCost}₽)` :
-        `Долг (${totalCost}₽)`;
-
-      // Добавляем лог в Firebase
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await addSystemLog({
-            action: 'supplier_payment',
-            user_id: user.id,
-            user_name: currentUser?.username || 'Неизвестно',
-            details: `Операция с поставщиком "${supplier.name}": ${payment.productName} (${quantity} шт) - ${paymentStatus}`
-          });
-        }
-      } catch (logError) {
-        console.warn('⚠️ Не удалось записать лог:', logError);
-      }
-
-      toast.success('Операция добавлена');
+      toast.success('Платеж добавлен');
+      
       setPayment({
         supplierId: '',
         productName: '',
@@ -372,89 +252,50 @@ export const SuppliersTab = () => {
         paymentType: 'full',
         paidAmount: '',
       });
-      loadSuppliers();
-      // Очищаем сохраненное состояние формы
       localStorage.removeItem('payment_form_data');
+      loadSuppliers();
     } catch (error: any) {
       console.error('Error adding payment:', error);
-      toast.error('Ошибка добавления операции');
+      toast.error('Ошибка добавления платежа');
     }
   };
 
-  const handlePayDebt = async () => {
-    if (!debtPayment.supplierId || !debtPayment.amount) {
-      toast.error('Выберите поставщика и укажите сумму');
-      return;
-    }
-
-    const amount = parseFloat(debtPayment.amount);
-    if (amount <= 0) {
-      toast.error('Сумма должна быть больше 0');
-      return;
-    }
-
+  const handlePayDebt = async (supplierId: string, amount: number) => {
     try {
-      // Получаем текущего поставщика
-      const { data: supplier, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('id', debtPayment.supplierId)
-        .single();
+      const supplier = suppliers.find(s => s.id === supplierId);
+      if (!supplier) return;
 
-      if (supplierError || !supplier) throw supplierError;
-
-      if (amount > (supplier.debt || 0)) {
+      if (amount > supplier.totalDebt) {
         toast.error('Сумма больше текущего долга');
         return;
       }
 
-      // Создаем запись о погашении долга
-      const debtPaymentRecord = {
+      const debtPaymentRecord: PaymentHistoryItem = {
         productName: 'Погашение долга',
         productQuantity: 0,
         productPrice: 0,
         paymentType: 'debt_payment',
-        amount: -amount, // Отрицательная сумма для обозначения погашения
+        amount: -amount,
         date: new Date().toISOString()
       };
 
-      const currentHistory = Array.isArray(supplier.payment_history) ? supplier.payment_history : [];
-      const updatedHistory = [...currentHistory, debtPaymentRecord];
-      const newDebt = (supplier.debt || 0) - amount;
+      const updatedHistory = [...(supplier.paymentHistory || []), debtPaymentRecord];
+      const newDebt = supplier.totalDebt - amount;
 
-      // Обновляем поставщика
-      const { error: updateError } = await supabase
-        .from('suppliers')
-        .update({
-          debt: newDebt,
-          payment_history: updatedHistory,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', debtPayment.supplierId);
+      await updateFirebaseSupplier(supplierId, {
+        totalDebt: newDebt,
+        paymentHistory: updatedHistory as any
+      });
 
-      if (updateError) throw updateError;
-
-      // Добавляем лог в Firebase
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await addSystemLog({
-            action: 'supplier_debt_paid',
-            user_id: user.id,
-            user_name: currentUser?.username || 'Неизвестно',
-            details: `Погашен долг поставщику "${supplier.name}": ${amount}₽`
-          });
-        }
-      } catch (logError) {
-        console.warn('⚠️ Не удалось записать лог:', logError);
-      }
+      await addSystemLog({
+        action: 'debt_paid',
+        user_name: currentUser?.username || 'Система',
+        details: `Погашение долга поставщику ${supplier.name}: ${amount} ₽`
+      });
 
       toast.success('Долг погашен');
-      setDebtPayment({ supplierId: '', amount: '' });
       loadSuppliers();
-      // Очищаем сохраненное состояние формы
-      localStorage.removeItem('debt_payment_form_data');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error paying debt:', error);
       toast.error('Ошибка погашения долга');
     }
@@ -462,385 +303,243 @@ export const SuppliersTab = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Поставщики ({suppliers.length})
-            </h3>
-            {pendingCount > 0 && (
-              <div className="text-sm text-orange-500 mt-1">
-                {pendingCount} не синхронизировано
-              </div>
-            )}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Users className="h-6 w-6" />
+          Поставщики ({suppliers.length})
+        </h2>
+        <Button onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Добавить
+        </Button>
+      </div>
+
+      {/* Add Form */}
+      {showAddForm && (
+        <Card className="p-4">
+          <h3 className="font-semibold mb-4">Новый поставщик</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              placeholder="Название *"
+              value={newSupplier.name}
+              onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+            />
+            <Input
+              placeholder="Телефон *"
+              value={newSupplier.phone}
+              onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
+            />
+            <Input
+              placeholder="Примечание"
+              value={newSupplier.notes}
+              onChange={(e) => setNewSupplier({ ...newSupplier, notes: e.target.value })}
+            />
           </div>
-          <div className="flex gap-2">
-            {pendingCount > 0 && (
-              <Button variant="outline" onClick={handleManualSync}>
-                Синхронизировать ({pendingCount})
-              </Button>
-            )}
-            <Button onClick={() => setShowAddForm(!showAddForm)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить поставщика
+          <div className="mt-4 flex gap-2">
+            <Button onClick={handleAddSupplier} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Сохранить
+            </Button>
+            <Button variant="outline" onClick={() => setShowAddForm(false)}>
+              Отмена
             </Button>
           </div>
+        </Card>
+      )}
+
+      {/* Payment Form */}
+      <Card className="p-4">
+        <h3 className="font-semibold mb-4">Добавить платеж</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <Select
+            value={payment.supplierId}
+            onValueChange={(value) => setPayment({ ...payment, supplierId: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Поставщик" />
+            </SelectTrigger>
+            <SelectContent>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Input
+            placeholder="Товар"
+            value={payment.productName}
+            onChange={(e) => setPayment({ ...payment, productName: e.target.value })}
+          />
+          
+          <Input
+            type="number"
+            placeholder="Кол-во"
+            value={payment.productQuantity}
+            onChange={(e) => setPayment({ ...payment, productQuantity: e.target.value })}
+          />
+          
+          <Input
+            type="number"
+            placeholder="Цена"
+            value={payment.productPrice}
+            onChange={(e) => setPayment({ ...payment, productPrice: e.target.value })}
+          />
+          
+          <Select
+            value={payment.paymentType}
+            onValueChange={(value: 'full' | 'partial' | 'debt') => setPayment({ ...payment, paymentType: value })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="full">Полная оплата</SelectItem>
+              <SelectItem value="partial">Частичная</SelectItem>
+              <SelectItem value="debt">В долг</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {payment.paymentType === 'partial' && (
+            <Input
+              type="number"
+              placeholder="Оплачено"
+              value={payment.paidAmount}
+              onChange={(e) => setPayment({ ...payment, paidAmount: e.target.value })}
+            />
+          )}
         </div>
+        <Button className="mt-4" onClick={handlePaymentSubmit}>
+          Добавить платеж
+        </Button>
+      </Card>
 
-        {showAddForm && (
-          <Card className="p-4 mb-6 bg-muted/50">
-            <h4 className="font-medium mb-4">Новый поставщик</h4>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Название *</label>
-                <Input
-                  value={newSupplier.name}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
-                  placeholder="Например: ООО Поставщик"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Телефон *</label>
-                <Input
-                  value={newSupplier.phone}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
-                  placeholder="+7 (999) 123-45-67"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Контактное лицо</label>
-                <Input
-                  value={newSupplier.contact_person}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, contact_person: e.target.value })}
-                  placeholder="Иван Иванов"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Адрес</label>
-                <Textarea
-                  value={newSupplier.address}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
-                  placeholder="Адрес поставщика"
-                  rows={2}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={handleAddSupplier} disabled={saving}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Сохранить
-                </Button>
-                <Button variant="outline" onClick={() => setShowAddForm(false)} disabled={saving}>Отмена</Button>
-              </div>
+      {/* Suppliers List */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {suppliers.map((supplier) => (
+          <Card key={supplier.id} className="p-4">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="font-semibold">{supplier.name}</h4>
+              {supplier.totalDebt > 0 && (
+                <Badge variant="destructive">
+                  Долг: {supplier.totalDebt.toFixed(2)} ₽
+                </Badge>
+              )}
             </div>
-          </Card>
-        )}
+            
+            {supplier.phone && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                {supplier.phone}
+              </p>
+            )}
+            
+            {supplier.notes && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                <FileText className="h-3 w-3" />
+                {supplier.notes}
+              </p>
+            )}
 
-        <div className="grid gap-4">
-          {suppliers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Нет поставщиков
-            </div>
-          ) : (
-            suppliers.map((supplier) => (
-              <Card key={supplier.id} className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <h4 
-                          className="font-semibold text-lg hover:text-primary cursor-pointer transition-colors"
-                          onClick={() => setSelectedSupplier(supplier)}
-                        >
-                          {supplier.name}
-                        </h4>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Управление долгом: {supplier.name}</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div className="p-4 bg-muted rounded-lg">
-                            <div className="text-sm text-muted-foreground mb-1">Текущий долг</div>
-                            <div className="text-2xl font-bold text-destructive">
-                              {(supplier.debt || 0).toFixed(2)}₽
-                            </div>
+            <div className="mt-4 flex gap-2">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedSupplier(supplier)}>
+                    История
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>История платежей - {supplier.name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    {(supplier.paymentHistory || []).length === 0 ? (
+                      <p className="text-muted-foreground">Нет платежей</p>
+                    ) : (
+                      supplier.paymentHistory.map((p, i) => (
+                        <div key={i} className="p-2 border rounded text-sm">
+                          <div className="flex justify-between">
+                            <span>{p.productName}</span>
+                            <span>{new Date(p.date).toLocaleDateString('ru-RU')}</span>
                           </div>
-
+                          <div className="text-muted-foreground">
+                            {p.productQuantity} x {p.productPrice} ₽ = {(p.productQuantity * p.productPrice).toFixed(2)} ₽
+                          </div>
                           <div>
-                            <label className="text-sm font-medium mb-2 block">
-                              Сумма оплаты (₽)
-                            </label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="Введите сумму"
-                              value={debtPayment.supplierId === supplier.id ? debtPayment.amount : ''}
-                              onChange={(e) => {
-                                setDebtPayment({ 
-                                  supplierId: supplier.id, 
-                                  amount: e.target.value 
-                                });
-                              }}
-                            />
-                            {debtPayment.supplierId === supplier.id && debtPayment.amount && (
-                              <div className="mt-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                                <div className="text-sm text-muted-foreground mb-1">
-                                  Останется долга
-                                </div>
-                                <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                                  {Math.max(0, (supplier.debt || 0) - parseFloat(debtPayment.amount || '0')).toFixed(2)}₽
-                                </div>
-                              </div>
-                            )}
+                            {p.paymentType === 'full' && 'Полная оплата'}
+                            {p.paymentType === 'partial' && `Частично: ${p.amount} ₽`}
+                            {p.paymentType === 'debt' && 'В долг'}
+                            {p.paymentType === 'debt_payment' && `Погашение: ${Math.abs(p.amount)} ₽`}
                           </div>
-
-                          <Button 
-                            onClick={() => {
-                              handlePayDebt();
-                            }}
-                            className="w-full"
-                            disabled={!debtPayment.amount || parseFloat(debtPayment.amount) <= 0}
-                          >
-                            Оплатить
-                          </Button>
                         </div>
-                      </DialogContent>
-                    </Dialog>
-
-                    {supplier.contact_person && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        <Users className="h-4 w-4" />
-                        {supplier.contact_person}
-                      </div>
-                    )}
-                    {supplier.phone && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        <Phone className="h-4 w-4" />
-                        {supplier.phone}
-                      </div>
-                    )}
-                    {supplier.address && (
-                      <div className="flex items-start gap-2 text-sm text-muted-foreground mt-1">
-                        <FileText className="h-4 w-4 mt-0.5" />
-                        <span>{supplier.address}</span>
-                      </div>
+                      ))
                     )}
                   </div>
-                  <div className="text-right">
-                    <Badge variant={(supplier.debt || 0) > 0 ? 'destructive' : 'secondary'} className="text-base">
-                      Долг: {(supplier.debt || 0).toFixed(2)}₽
-                    </Badge>
-                  </div>
-                </div>
+                </DialogContent>
+              </Dialog>
 
+              {supplier.totalDebt > 0 && (
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSelectedSupplier(supplier)}
-                    >
-                      История операций ({Array.isArray(supplier.payment_history) ? supplier.payment_history.length : 0})
+                    <Button size="sm" variant="default">
+                      <DollarSign className="h-3 w-3 mr-1" />
+                      Погасить
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>История операций: {supplier.name}</DialogTitle>
+                      <DialogTitle>Погашение долга - {supplier.name}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-2">
-                      {(!Array.isArray(supplier.payment_history) || supplier.payment_history.length === 0) ? (
-                        <div className="text-center py-4 text-muted-foreground">
-                          Нет операций
-                        </div>
-                      ) : (
-                        (supplier.payment_history as PaymentHistoryItem[]).map((payment, idx) => (
-                          <div key={idx} className="p-3 bg-muted/50 rounded-lg">
-                            <div className="flex justify-between items-start mb-1">
-                              <div>
-                                <span className="font-medium">{payment.productName}</span>
-                                {payment.productQuantity > 0 && (
-                                  <span className="text-sm text-muted-foreground ml-2">
-                                    ({payment.productQuantity} шт × {payment.productPrice}₽)
-                                  </span>
-                                )}
-                              </div>
-                              <Badge variant={
-                                payment.paymentType === 'full' ? 'secondary' :
-                                payment.paymentType === 'debt' ? 'destructive' : 
-                                payment.paymentType === 'debt_payment' ? 'default' : 'default'
-                              }>
-                                {payment.paymentType === 'full' ? 'Полная оплата' :
-                                 payment.paymentType === 'debt' ? 'Долг' : 
-                                 payment.paymentType === 'debt_payment' ? 'Погашение долга' : 'Частичная оплата'}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground flex justify-between">
-                              <span>{new Date(payment.date).toLocaleString('ru-RU')}</span>
-                              <span className={payment.amount < 0 ? 'text-green-600' : ''}>
-                                {payment.amount < 0 ? 'Погашение: ' : 'Оплачено: '}
-                                {Math.abs(payment.amount).toFixed(2)}₽
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
+                    <div className="space-y-4">
+                      <p>Текущий долг: <strong>{supplier.totalDebt.toFixed(2)} ₽</strong></p>
+                      <Input
+                        type="number"
+                        placeholder="Сумма погашения"
+                        id={`debt-${supplier.id}`}
+                      />
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => {
+                            const input = document.getElementById(`debt-${supplier.id}`) as HTMLInputElement;
+                            const amount = parseFloat(input?.value || '0');
+                            if (amount > 0) {
+                              handlePayDebt(supplier.id, amount);
+                            }
+                          }}
+                        >
+                          Погасить
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={() => handlePayDebt(supplier.id, supplier.totalDebt)}
+                        >
+                          Погасить полностью
+                        </Button>
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
-              </Card>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* Добавление операции */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
-          Добавить операцию
-        </h3>
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Поставщик *</label>
-            <Select
-              value={payment.supplierId}
-              onValueChange={(value) => setPayment({ ...payment, supplierId: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите поставщика" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.map((supplier) => (
-                  <SelectItem key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">Название товара *</label>
-            <Input
-              value={payment.productName}
-              onChange={(e) => setPayment({ ...payment, productName: e.target.value })}
-              placeholder="Введите название товара"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Количество *</label>
-              <Input
-                type="number"
-                step="0.01"
-                value={payment.productQuantity}
-                onChange={(e) => setPayment({ ...payment, productQuantity: e.target.value })}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Цена за шт *</label>
-              <Input
-                type="number"
-                step="0.01"
-                value={payment.productPrice}
-                onChange={(e) => setPayment({ ...payment, productPrice: e.target.value })}
-                placeholder="0"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">Тип оплаты</label>
-            <Select
-              value={payment.paymentType}
-              onValueChange={(value: 'full' | 'partial' | 'debt') => 
-                setPayment({ ...payment, paymentType: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">Полная оплата</SelectItem>
-                <SelectItem value="partial">Частичная оплата</SelectItem>
-                <SelectItem value="debt">Долг</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {payment.paymentType === 'partial' && (
-            <div>
-              <label className="text-sm font-medium mb-2 block">Оплачено (₽) *</label>
-              <Input
-                type="number"
-                step="0.01"
-                value={payment.paidAmount}
-                onChange={(e) => setPayment({ ...payment, paidAmount: e.target.value })}
-                placeholder="0"
-              />
-              {payment.productQuantity && payment.productPrice && payment.paidAmount && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Остаток долга: {(parseFloat(payment.productQuantity) * parseFloat(payment.productPrice) - parseFloat(payment.paidAmount)).toFixed(2)}₽
-                </p>
               )}
             </div>
-          )}
+          </Card>
+        ))}
+      </div>
 
-          <Button onClick={handleAddPayment}>Добавить операцию</Button>
+      {suppliers.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          Нет поставщиков. Добавьте первого!
         </div>
-      </Card>
-
-      {/* Погашение долга */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
-          Погасить долг
-        </h3>
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Поставщик *</label>
-            <Select
-              value={debtPayment.supplierId}
-              onValueChange={(value) => setDebtPayment({ ...debtPayment, supplierId: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите поставщика" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.filter(s => (s.debt || 0) > 0).map((supplier) => (
-                  <SelectItem key={supplier.id} value={supplier.id}>
-                    {supplier.name} (Долг: {(supplier.debt || 0).toFixed(2)}₽)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-2 block">Сумма погашения (₽) *</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={debtPayment.amount}
-              onChange={(e) => setDebtPayment({ ...debtPayment, amount: e.target.value })}
-              placeholder="0"
-            />
-          </div>
-
-          <Button onClick={handlePayDebt}>Погасить долг</Button>
-        </div>
-      </Card>
+      )}
     </div>
   );
 };

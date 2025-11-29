@@ -165,7 +165,9 @@ export const hasRole = (role: UserRole): boolean => {
   return isAuthenticated(role);
 };
 
-// Logging system
+// Logging system - uses MySQL with local cache
+import { addSystemLog, getSystemLogs } from './mysqlCollections';
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -173,11 +175,28 @@ export interface LogEntry {
   user?: string;
 }
 
+// Async function to load logs
+export const loadLogs = async (): Promise<LogEntry[]> => {
+  try {
+    const logs = await getSystemLogs();
+    logsCache = logs.map(l => ({
+      id: l.id,
+      timestamp: l.created_at || new Date().toISOString(),
+      message: l.action,
+      user: l.user_name
+    }));
+    return logsCache;
+  } catch (error) {
+    console.error('Error loading logs from MySQL:', error);
+    return logsCache;
+  }
+};
+
+// Sync add log (fire and forget)
 export const addLog = (message: string) => {
-  const logs = getLogs();
   const user = getCurrentUser();
   
-  // Format user display name without showing login credentials
+  // Format user display name
   let userDisplay = 'Система';
   if (user) {
     if (user.role === 'admin') {
@@ -193,46 +212,51 @@ export const addLog = (message: string) => {
     }
   }
   
+  // Add to local cache immediately
   const newLog: LogEntry = {
-    id: Date.now().toString(),
+    id: crypto.randomUUID(),
     timestamp: new Date().toLocaleString('ru-RU'),
     message,
     user: userDisplay
   };
-  logs.unshift(newLog);
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs.slice(0, 1000))); // Keep last 1000 logs
+  logsCache.unshift(newLog);
+  
+  // Save to MySQL in background (fire and forget)
+  addSystemLog(message, userDisplay).catch(err => 
+    console.error('Error saving log to MySQL:', err)
+  );
 };
 
+// Sync getter with cache
 export const getLogs = (startDate?: string, endDate?: string): LogEntry[] => {
-  const logsStr = localStorage.getItem(LOGS_KEY);
-  if (!logsStr) return [];
-  try {
-    const logs = JSON.parse(logsStr);
+  // Trigger async load in background
+  loadLogs();
+  
+  if (!startDate && !endDate) return logsCache;
+  
+  return logsCache.filter((log) => {
+    const logDate = new Date(log.timestamp);
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
     
-    if (!startDate && !endDate) return logs;
+    if (start && end) {
+      return logDate >= start && logDate <= end;
+    } else if (start) {
+      return logDate >= start;
+    } else if (end) {
+      return logDate <= end;
+    }
     
-    return logs.filter((log: LogEntry) => {
-      const logDate = new Date(log.timestamp);
-      const start = startDate ? new Date(startDate) : null;
-      const end = endDate ? new Date(endDate) : null;
-      
-      if (start && end) {
-        return logDate >= start && logDate <= end;
-      } else if (start) {
-        return logDate >= start;
-      } else if (end) {
-        return logDate <= end;
-      }
-      
-      return true;
-    });
-  } catch {
-    return [];
-  }
+    return true;
+  });
 };
 
-// Employee management
-const EMPLOYEES_KEY = 'system_employees';
+// Employee management - uses MySQL with local cache
+import { 
+  getAllEmployees as mysqlGetEmployees, 
+  insertEmployee as mysqlInsertEmployee, 
+  updateEmployee as mysqlUpdateEmployee 
+} from './mysqlDatabase';
 
 export interface Employee {
   id: string;
@@ -245,37 +269,69 @@ export interface Employee {
   createdAt: string;
 }
 
-export const getEmployees = (): Employee[] => {
-  const employeesStr = localStorage.getItem(EMPLOYEES_KEY);
-  if (!employeesStr) return [];
+// Local cache for sync access
+let employeesCache: Employee[] = [];
+let logsCache: LogEntry[] = [];
+
+// Load employees from MySQL and update cache
+export const loadEmployees = async (): Promise<Employee[]> => {
   try {
-    return JSON.parse(employeesStr);
-  } catch {
-    return [];
+    const employees = await mysqlGetEmployees();
+    employeesCache = employees.map(e => ({
+      id: e.id,
+      name: e.name,
+      position: e.role || '',
+      workConditions: '',
+      schedule: 'full' as const,
+      hourlyRate: 0,
+      login: e.login || '',
+      createdAt: e.created_at || ''
+    }));
+    return employeesCache;
+  } catch (error) {
+    console.error('Error loading employees from MySQL:', error);
+    return employeesCache;
   }
 };
 
-export const saveEmployee = (employee: Omit<Employee, 'id' | 'createdAt'>): Employee => {
-  const employees = getEmployees();
+// Sync getter for cache
+export const getEmployees = (): Employee[] => {
+  // Trigger async load in background
+  loadEmployees();
+  return employeesCache;
+};
+
+export const saveEmployee = async (employee: Omit<Employee, 'id' | 'createdAt'>): Promise<Employee> => {
+  const result = await mysqlInsertEmployee({
+    name: employee.name,
+    role: employee.position,
+    phone: '',
+    login: employee.login,
+    active: true
+  });
+  
   const newEmployee: Employee = {
     ...employee,
-    id: Date.now().toString(),
+    id: result.id || crypto.randomUUID(),
     createdAt: new Date().toISOString()
   };
-  employees.push(newEmployee);
-  localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
+  
+  employeesCache.push(newEmployee);
   addLog(`Добавлен сотрудник: ${employee.name} (${employee.login})`);
   return newEmployee;
 };
 
-export const updateEmployee = (id: string, updates: Partial<Employee>): void => {
-  const employees = getEmployees();
-  const updated = employees.map(e => {
-    if (e.id === id) {
-      return { ...e, ...updates };
-    }
-    return e;
+export const updateEmployee = async (id: string, updates: Partial<Employee>): Promise<void> => {
+  await mysqlUpdateEmployee(id, {
+    name: updates.name,
+    role: updates.position,
+    login: updates.login
   });
-  localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(updated));
+  
+  const index = employeesCache.findIndex(e => e.id === id);
+  if (index !== -1) {
+    employeesCache[index] = { ...employeesCache[index], ...updates };
+  }
+  
   addLog(`Обновлён сотрудник: ${updates.name || 'ID ' + id}`);
 };

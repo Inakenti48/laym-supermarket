@@ -1,5 +1,5 @@
-const TASKS_KEY = 'employee_tasks';
-const TASK_REPORTS_KEY = 'task_reports';
+// MySQL-based employees tasks and reports with sync cache
+import { mysqlRequest } from './mysqlDatabase';
 
 export interface Task {
   id: string;
@@ -26,68 +26,107 @@ export interface TaskReport {
   adminNote?: string;
 }
 
-export const getTasks = (employeeId?: string): Task[] => {
-  const tasksStr = localStorage.getItem(TASKS_KEY);
-  if (!tasksStr) return [];
+// Local cache for sync access
+let tasksCache: Task[] = [];
+let reportsCache: TaskReport[] = [];
+
+// Async load from MySQL
+export const loadTasks = async (employeeId?: string): Promise<Task[]> => {
   try {
-    const tasks = JSON.parse(tasksStr);
-    return employeeId ? tasks.filter((t: Task) => t.employeeId === employeeId) : tasks;
-  } catch {
-    return [];
+    const result = await mysqlRequest<Task[]>('get_tasks', employeeId ? { employee_id: employeeId } : {});
+    if (result.success && result.data) {
+      tasksCache = result.data;
+    }
+  } catch (error) {
+    console.error('Error loading tasks from MySQL:', error);
   }
+  return employeeId ? tasksCache.filter(t => t.employeeId === employeeId) : tasksCache;
 };
 
-export const saveTask = (task: Omit<Task, 'id' | 'createdAt' | 'completed' | 'photos' | 'needsMorePhotos'>): Task => {
-  const tasks = getTasks();
+// Sync getter with background refresh
+export const getTasks = (employeeId?: string): Task[] => {
+  // Trigger async load in background
+  loadTasks(employeeId);
+  return employeeId ? tasksCache.filter(t => t.employeeId === employeeId) : tasksCache;
+};
+
+export const saveTask = async (task: Omit<Task, 'id' | 'createdAt' | 'completed' | 'photos' | 'needsMorePhotos'>): Promise<Task> => {
   const newTask: Task = {
     ...task,
-    id: Date.now().toString(),
+    id: crypto.randomUUID(),
     completed: false,
     photos: [],
     needsMorePhotos: false,
     createdAt: new Date().toISOString()
   };
-  tasks.push(newTask);
-  localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+  
+  tasksCache.push(newTask);
+  
+  // Save to MySQL in background
+  mysqlRequest('save_task', { task: newTask }).catch(err =>
+    console.error('Error saving task to MySQL:', err)
+  );
+  
   return newTask;
 };
 
 export const updateTask = (taskId: string, updates: Partial<Task>): void => {
-  const tasks = getTasks();
-  const index = tasks.findIndex(t => t.id === taskId);
+  const index = tasksCache.findIndex(t => t.id === taskId);
   if (index !== -1) {
-    tasks[index] = { ...tasks[index], ...updates };
-    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+    tasksCache[index] = { ...tasksCache[index], ...updates };
   }
+  
+  // Update MySQL in background
+  mysqlRequest('update_task', { id: taskId, updates }).catch(err =>
+    console.error('Error updating task in MySQL:', err)
+  );
 };
 
-export const getTaskReports = (): TaskReport[] => {
-  const reportsStr = localStorage.getItem(TASK_REPORTS_KEY);
-  if (!reportsStr) return [];
+// Async load reports
+export const loadTaskReports = async (): Promise<TaskReport[]> => {
   try {
-    return JSON.parse(reportsStr);
-  } catch {
-    return [];
+    const result = await mysqlRequest<TaskReport[]>('get_task_reports');
+    if (result.success && result.data) {
+      reportsCache = result.data;
+    }
+  } catch (error) {
+    console.error('Error loading task reports from MySQL:', error);
   }
+  return reportsCache;
+};
+
+// Sync getter with background refresh
+export const getTaskReports = (): TaskReport[] => {
+  // Trigger async load in background
+  loadTaskReports();
+  return reportsCache;
 };
 
 export const saveTaskReport = (report: Omit<TaskReport, 'id' | 'status'>): TaskReport => {
-  const reports = getTaskReports();
   const newReport: TaskReport = {
     ...report,
-    id: Date.now().toString(),
+    id: crypto.randomUUID(),
     status: 'pending'
   };
-  reports.push(newReport);
-  localStorage.setItem(TASK_REPORTS_KEY, JSON.stringify(reports));
+  
+  reportsCache.push(newReport);
+  
+  // Save to MySQL in background
+  mysqlRequest('save_task_report', { report: newReport }).catch(err =>
+    console.error('Error saving task report to MySQL:', err)
+  );
+  
   return newReport;
 };
 
 export const updateTaskReport = (reportId: string, status: 'approved' | 'rejected', adminNote?: string): void => {
-  const reports = getTaskReports();
-  const index = reports.findIndex(r => r.id === reportId);
+  const index = reportsCache.findIndex(r => r.id === reportId);
   if (index !== -1) {
-    reports[index] = { ...reports[index], status, adminNote };
-    localStorage.setItem(TASK_REPORTS_KEY, JSON.stringify(reports));
+    reportsCache[index] = { ...reportsCache[index], status, adminNote };
   }
+  
+  // Update MySQL in background
+  mysqlRequest('update_task_report', { id: reportId, status, admin_note: adminNote }).catch(err =>
+    console.error('Error updating task report in MySQL:', err)
+  );
 };

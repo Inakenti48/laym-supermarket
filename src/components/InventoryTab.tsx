@@ -35,7 +35,7 @@ export const InventoryTab = () => {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserLogin, setCurrentUserLogin] = useState<string>('');
   const isAdmin = userRole === 'admin';
-  const canUseAI = userRole === 'admin' || userRole === 'inventory' || userRole === 'system';
+  const canUseAI = userRole === 'admin' || userRole === 'inventory' || userRole === 'warehouse' || userRole === 'system';
 
   // Получаем роль пользователя при загрузке
   useEffect(() => {
@@ -77,8 +77,8 @@ export const InventoryTab = () => {
   const ITEMS_PER_PAGE = 50;
   
   // Вычисляем права доступа на основе текущей роли
-  const canSaveSingle = userRole === 'admin' || userRole === 'inventory';
-  const canSaveQueue = userRole === 'admin' || userRole === 'inventory';
+  const canSaveSingle = userRole === 'admin' || userRole === 'inventory' || userRole === 'warehouse';
+  const canSaveQueue = userRole === 'admin' || userRole === 'inventory' || userRole === 'warehouse';
 
   const [currentProduct, setCurrentProduct] = useState({
     barcode: '',

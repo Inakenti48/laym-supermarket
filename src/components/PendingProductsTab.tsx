@@ -6,7 +6,8 @@ import { PendingProductItem, PendingProduct } from './PendingProductItem';
 import { toast } from 'sonner';
 import { saveProduct, saveProductImage } from '@/lib/storage';
 import { addLog } from '@/lib/auth';
-import { getSuppliers, Supplier } from '@/lib/suppliersDb';
+import { getSuppliers } from '@/lib/suppliersDb';
+import type { Supplier } from '@/lib/suppliersDb';
 import { getCurrentLoginUser } from '@/lib/loginAuth';
 import { 
   getQueueProducts, 
@@ -40,24 +41,24 @@ export const PendingProductsTab = () => {
 
     loadSuppliers();
 
-    // Поставщики в Supabase - подписка на них остается
-    const channel = supabase
-      .channel('suppliers_changes_pending')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'suppliers'
-        },
-        () => {
-          loadSuppliers();
-        }
-      )
-      .subscribe();
+    // Подписка на изменения поставщиков в Firebase
+    const unsubscribe = subscribeToSuppliers((firebaseSuppliers) => {
+      // Преобразуем Firebase Supplier в формат suppliersDb.Supplier
+      const mapped: Supplier[] = firebaseSuppliers.map(s => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || '',
+        notes: s.notes || '',
+        totalDebt: Number(s.totalDebt || 0),
+        paymentHistory: s.paymentHistory || [],
+        createdAt: s.created_at || '',
+        lastUpdated: s.updated_at || ''
+      }));
+      setSuppliers(mapped);
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, []);
 

@@ -326,7 +326,7 @@ export interface Supplier {
   paymentHistory: Array<{
     date: string;
     amount: number;
-    paymentType: string;
+    paymentType: 'debt' | 'full' | 'partial';
     productName: string;
     productQuantity: number;
     productPrice: number;
@@ -334,6 +334,9 @@ export interface Supplier {
   }>;
   created_at: string;
   updated_at: string;
+  // Aliases for compatibility with suppliersDb
+  createdAt?: string;
+  lastUpdated?: string;
 }
 
 export const getSuppliers = async (): Promise<Supplier[]> => {

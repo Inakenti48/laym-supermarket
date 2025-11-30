@@ -27,12 +27,14 @@ const PhotoThumbnail = ({
   src, 
   label, 
   color, 
-  onClick 
+  onClick,
+  onOpenInNewTab
 }: { 
   src: string; 
   label?: string; 
   color?: 'green' | 'blue'; 
   onClick: () => void;
+  onOpenInNewTab?: () => void;
 }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,11 +44,24 @@ const PhotoThumbnail = ({
   
   const normalizedSrc = normalizePhotoUrl(src);
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClick();
+  };
+
+  const handleOpenInNewTab = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (onOpenInNewTab) {
+      onOpenInNewTab();
+    }
+  };
+
   if (hasError || !normalizedSrc) {
     return (
       <div 
         className={`relative w-14 h-14 rounded border-2 ${borderColor} bg-muted flex items-center justify-center cursor-pointer`}
-        onClick={onClick}
+        onClick={handleClick}
       >
         {label && (
           <div className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded`}>{label}</div>
@@ -59,7 +74,7 @@ const PhotoThumbnail = ({
   return (
     <div 
       className="relative cursor-pointer hover:opacity-80 transition-opacity group"
-      onClick={onClick}
+      onClick={handleClick}
     >
       {isLoading && (
         <div className={`absolute inset-0 w-14 h-14 rounded border-2 ${borderColor} bg-muted animate-pulse`} />
@@ -75,7 +90,13 @@ const PhotoThumbnail = ({
         }}
       />
       {label && (
-        <div className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded`}>{label}</div>
+        <div 
+          className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded cursor-pointer hover:scale-110 transition-transform z-10`}
+          onClick={handleOpenInNewTab}
+          title="Открыть в новой вкладке"
+        >
+          {label}
+        </div>
       )}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">
         <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -219,7 +240,15 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
     ...product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto)
   ];
 
-  const handlePhotoClick = (photo: string) => {
+  const handlePhotoClick = (photo: string, openInNewTab: boolean = false) => {
+    const normalizedUrl = normalizePhotoUrl(photo);
+    
+    if (openInNewTab && normalizedUrl) {
+      // Открываем фото в новой вкладке
+      window.open(normalizedUrl, '_blank');
+      return;
+    }
+    
     const index = allPhotos.indexOf(photo);
     setCurrentPhotoIndex(index);
     setEnlargedPhoto(photo);
@@ -360,6 +389,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                     label="Л" 
                     color="green" 
                     onClick={() => handlePhotoClick(product.frontPhoto!)} 
+                    onOpenInNewTab={() => handlePhotoClick(product.frontPhoto!, true)}
                   />
                 )}
                 {product.barcodePhoto && (
@@ -368,6 +398,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                     label="Ш" 
                     color="blue" 
                     onClick={() => handlePhotoClick(product.barcodePhoto!)} 
+                    onOpenInNewTab={() => handlePhotoClick(product.barcodePhoto!, true)}
                   />
                 )}
                 {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (

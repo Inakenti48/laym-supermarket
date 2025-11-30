@@ -1,4 +1,4 @@
-import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save, Plus, ImageOff } from 'lucide-react';
+import { X, Edit2, Check, ZoomIn, ChevronLeft, ChevronRight, Save, Plus, ImageOff, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -64,7 +64,14 @@ const PhotoThumbnail = ({
         onClick={handleClick}
       >
         {label && (
-          <div className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded`}>{label}</div>
+          <div 
+            className={`absolute -top-2 -left-2 ${bgColor} text-white text-xs px-2 py-1 rounded cursor-pointer hover:scale-125 hover:shadow-lg transition-all z-20 flex items-center gap-0.5 select-none`}
+            onClick={handleOpenInNewTab}
+            title="Нажмите чтобы открыть фото в новой вкладке"
+          >
+            {label}
+            <ExternalLink className="h-2.5 w-2.5" />
+          </div>
         )}
         <ImageOff className="h-5 w-5 text-muted-foreground" />
       </div>
@@ -91,11 +98,12 @@ const PhotoThumbnail = ({
       />
       {label && (
         <div 
-          className={`absolute -top-1 -left-1 ${bgColor} text-white text-xs px-1.5 py-0.5 rounded cursor-pointer hover:scale-110 transition-transform z-10`}
+          className={`absolute -top-2 -left-2 ${bgColor} text-white text-xs px-2 py-1 rounded cursor-pointer hover:scale-125 hover:shadow-lg transition-all z-20 flex items-center gap-0.5 select-none`}
           onClick={handleOpenInNewTab}
-          title="Открыть в новой вкладке"
+          title="Нажмите чтобы открыть фото в новой вкладке"
         >
           {label}
+          <ExternalLink className="h-2.5 w-2.5" />
         </div>
       )}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded flex items-center justify-center transition-all">

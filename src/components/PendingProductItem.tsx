@@ -248,18 +248,11 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
     ...product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto)
   ];
 
-  const handlePhotoClick = (photo: string, openInNewTab: boolean = false) => {
+  const handlePhotoClick = (photo: string) => {
     const normalizedUrl = normalizePhotoUrl(photo);
-    
-    if (openInNewTab && normalizedUrl) {
-      // Открываем фото в новой вкладке
+    if (normalizedUrl) {
       window.open(normalizedUrl, '_blank');
-      return;
     }
-    
-    const index = allPhotos.indexOf(photo);
-    setCurrentPhotoIndex(index);
-    setEnlargedPhoto(photo);
   };
 
   const handleNextPhoto = () => {
@@ -397,7 +390,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                     label="Л" 
                     color="green" 
                     onClick={() => handlePhotoClick(product.frontPhoto!)} 
-                    onOpenInNewTab={() => handlePhotoClick(product.frontPhoto!, true)}
+                    onOpenInNewTab={() => handlePhotoClick(product.frontPhoto!)}
                   />
                 )}
                 {product.barcodePhoto && (
@@ -406,7 +399,7 @@ export const PendingProductItem = ({ product, suppliers, onUpdate, onRemove, onS
                     label="Ш" 
                     color="blue" 
                     onClick={() => handlePhotoClick(product.barcodePhoto!)} 
-                    onOpenInNewTab={() => handlePhotoClick(product.barcodePhoto!, true)}
+                    onOpenInNewTab={() => handlePhotoClick(product.barcodePhoto!)}
                   />
                 )}
                 {product.photos.filter(p => p !== product.frontPhoto && p !== product.barcodePhoto).map((photo, idx) => (

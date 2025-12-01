@@ -310,8 +310,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
   const handleManualCapture = async () => {
     if (isProcessing) return;
     
-    console.log('🎯 handleManualCapture вызван, mode:', mode, 'tempFrontPhoto:', !!tempFrontPhoto, 'tempBarcodePhoto:', !!tempBarcodePhoto);
-    
     setIsProcessing(true);
 
     try {
@@ -328,11 +326,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       // КРИТИЧНО: Режим двух фото - ТОЛЬКО захват, БЕЗ распознавания
       if (mode === 'dual') {
-        console.log('📷 Режим dual: захват фото');
-        
         if (!tempFrontPhoto) {
           // Шаг 1: Захватываем ЛИЦЕВУЮ сторону
-          console.log('📸 Захвачена лицевая сторона (фото 1/2)');
           setTempFrontPhoto(image);
           setDualPhotoStep('barcode');
           setNotification('✅ Фото 1/2 - лицевая');
@@ -340,7 +335,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setTimeout(() => setNotification(''), 1500);
         } else if (!tempBarcodePhoto) {
           // Шаг 2: Захватываем ШТРИХКОД и АВТОМАТИЧЕСКИ запускаем распознавание
-          console.log('📸 Захвачен штрихкод (фото 2/2) - автозапуск распознавания');
           const barcodeImg = image;
           const frontImg = tempFrontPhoto;
           setTempBarcodePhoto(barcodeImg);
@@ -355,20 +349,18 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           }, 50);
           return;
         } else {
-          // Если оба фото уже есть, игнорируем дополнительные нажатия
-          console.log('⚠️ Обе фотографии уже захвачены, игнорируем нажатие');
-          toast.warning('Обе фотографии уже захвачены. Нажмите кнопку распознавания.', { position: 'top-center' });
+          // Если оба фото уже есть, игнорируем
+          toast.warning('Обе фотографии уже захвачены', { position: 'top-center' });
           setIsProcessing(false);
         }
-        return; // ВАЖНО: выходим БЕЗ распознавания
+        return;
       }
       
-      // Другие режимы (expiry, barcode, product) - используйте AI dual режим
+      // Другие режимы - используйте AI dual режим
       setNotification('⚠️ Используйте AI режим');
       toast.warning('Используйте AI сканирование (режим dual)', { position: 'top-center' });
       setTimeout(() => setNotification(''), 1500);
     } catch (err: any) {
-      console.error('Recognition error:', err);
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
         toast.error('Слишком много запросов', { position: 'top-center' });
       } else if (err.message?.includes('payment_required') || err.message?.includes('402')) {
@@ -384,16 +376,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
   // Функция AI сканирования с прямой передачей фото (обход async state)
   const handleAIScanWithPhotos = async (frontPhoto: string, barcodePhoto: string) => {
-    if (isProcessing) {
-      console.log('⚠️ handleAIScanWithPhotos заблокирован: уже обрабатывается');
-      return;
-    }
-    
-    console.log('🚀 handleAIScanWithPhotos: AI распознавание с переданными фото');
-    console.log('📸 Размеры фото:', { front: frontPhoto.length, barcode: barcodePhoto.length });
+    if (isProcessing) return;
     
     setIsProcessing(true);
-    setNotification('⚡ Быстрое AI сканирование...');
+    setNotification('⚡ AI сканирование...');
     
     try {
       const compressedFront = await compressForAI(frontPhoto);
@@ -405,56 +391,55 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       }
       const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      console.log('🤖 Вызов AI распознавания через Gemini...');
-      
+      // AI вызов с таймаутом 15 секунд
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          frontPhoto: compressedFront,
-          barcodePhoto: compressedBarcode,
-          deviceId,
-          userName
-        })
-      });
+      const aiController = new AbortController();
+      const aiTimeout = setTimeout(() => aiController.abort(), 15000);
+      
+      let response: Response;
+      try {
+        response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frontPhoto: compressedFront,
+            barcodePhoto: compressedBarcode,
+            deviceId,
+            userName
+          }),
+          signal: aiController.signal
+        });
+        clearTimeout(aiTimeout);
+      } catch (fetchError: any) {
+        clearTimeout(aiTimeout);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Таймаут AI - попробуйте снова');
+        }
+        throw fetchError;
+      }
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ AI ошибка:', response.status, errorText);
-        
         if (response.status === 429) {
-          toast.error('⚠️ Превышен лимит запросов, подождите немного');
+          toast.error('⚠️ Превышен лимит, подождите');
           throw new Error('rate_limit');
         }
         throw new Error(`AI error: ${response.status}`);
       }
       
       const aiResult = await response.json();
-      console.log('✅ AI результат:', aiResult);
       
       const scannedBarcode = aiResult.barcode || '';
       const scannedName = aiResult.name || '';
       const scannedCategory = aiResult.category || '';
       
-      // Ждем загрузки кэша если не загружен
-      if (!priceCacheLoaded) {
-        console.log('⏳ Ожидание загрузки кэша цен...');
-        await initPriceCache();
-      }
-      
-      // Поиск цены в кэше CSV
-      console.log('🔍 Поиск цены для штрихкода:', scannedBarcode, 'Размер кэша:', getCacheSize());
+      // Кэш цен загружен при монтировании - просто проверяем
       let priceInfo = scannedBarcode ? findPriceByBarcode(scannedBarcode) : null;
-      console.log('🔍 Результат поиска по штрихкоду:', priceInfo ? `найдено: ${priceInfo.name}, цена: ${priceInfo.purchasePrice}` : 'не найдено');
       
       if (!priceInfo && scannedName) {
         priceInfo = findPriceByName(scannedName);
-        console.log('🔍 Результат поиска по имени:', priceInfo ? `найдено: ${priceInfo.name}, цена: ${priceInfo.purchasePrice}` : 'не найдено');
       }
       
       const hasPrices = priceInfo && priceInfo.purchasePrice > 0;
-      console.log('💰 Цена найдена:', hasPrices, priceInfo);
       
       let savedTo = aiResult.savedTo || '';
       
@@ -462,16 +447,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       const purchasePrice = priceInfo?.purchasePrice || 0;
       const salePrice = purchasePrice > 0 ? Math.round(purchasePrice * 1.3) : 0;
       
-      console.log('💾 Сохраняем в MySQL...', { 
-        scannedBarcode, 
-        hasPrices,
-        purchasePrice,
-        salePrice,
-        destination: hasPrices ? 'products (база)' : 'queue (очередь)'
-      });
-      
       try {
-        // Используем processScannedProduct - загружает фото в S3, потом сохраняет
+        // Сохраняем товар (фото загружаются в фоне)
         const { processScannedProduct } = await import('@/lib/productScanner');
         
         const saveResult = await processScannedProduct(
@@ -490,19 +467,9 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         
         if (saveResult.success) {
           savedTo = saveResult.addedToQueue ? 'queue' : 'products';
-          console.log('✅ Сохранено:', savedTo, saveResult.message);
-          
-          // Предупреждение если цены были, но товар попал в очередь
-          if (hasPrices && saveResult.addedToQueue) {
-            console.warn('⚠️ ВНИМАНИЕ: Товар с ценами попал в очередь! Проверьте логику.');
-          }
-        } else {
-          console.error('❌ Ошибка сохранения:', saveResult.message);
-          toast.error(`Ошибка сохранения: ${saveResult.message}`);
         }
-      } catch (saveErr: any) {
-        console.error('❌ Ошибка сохранения в MySQL:', saveErr);
-        toast.error(`Ошибка сохранения: ${saveErr.message}`);
+      } catch {
+        // Ошибка сохранения - не критично, покажем результат AI
       }
       
       // Увеличиваем счетчик
@@ -538,21 +505,24 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setTimeout(() => setNotification(''), 2000);
       
     } catch (error: any) {
-      console.error('❌ AI scan error:', error);
       setIsProcessing(false);
       setNotification('');
+      setDualPhotoStep('none');
+      setTempFrontPhoto('');
+      setTempBarcodePhoto('');
       
       if (error.message?.includes('rate_limit')) {
         toast.error('Слишком много запросов, подождите');
+      } else if (error.message?.includes('Таймаут')) {
+        toast.error('Сервер не отвечает, попробуйте снова');
       } else {
-        toast.error('Ошибка AI распознавания');
+        toast.error('Ошибка распознавания, попробуйте снова');
       }
     }
   };
 
   const handleAIScan = async () => {
     if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
-      console.log('⚠️ handleAIScan заблокирован:', { isProcessing, hasFront: !!tempFrontPhoto, hasBarcode: !!tempBarcodePhoto });
       toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
       return;
     }
@@ -563,8 +533,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
   const handleConfirmExistingProduct = async () => {
     if (!existingProductData || !pendingRecognitionData) return;
-
-    console.log('✅ Пользователь подтвердил использование существующих цен');
     
     // Отправляем в onProductFound с флагом автодобавления
     onProductFound({

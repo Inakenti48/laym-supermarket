@@ -257,7 +257,7 @@ serve(async (req) => {
             p.name,
             p.purchase_price || 0,
             p.sale_price || 0,
-            p.quantity || 0,
+            p.quantity || 1,  // Минимум 1 штука, никогда 0
             p.unit || 'шт',
             p.category || null,
             p.supplier_id || null,
@@ -308,7 +308,7 @@ serve(async (req) => {
                purchase_price = VALUES(purchase_price),
                sale_price = VALUES(sale_price),
                quantity = quantity + VALUES(quantity)`,
-              [pId, prod.barcode, prod.name, prod.purchase_price || 0, prod.sale_price || 0, prod.quantity || 0, prod.unit || 'шт', prod.category || null]
+              [pId, prod.barcode, prod.name, prod.purchase_price || 0, prod.sale_price || 0, prod.quantity || 1, prod.unit || 'шт', prod.category || null]
             );
             inserted++;
           } catch (e) {

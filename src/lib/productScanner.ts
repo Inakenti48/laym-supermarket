@@ -27,18 +27,21 @@ export interface ScannedProduct {
   scanned_by: string;
 }
 
-// Загрузить фото в S3 с именованием по штрихкоду
+// Загрузить фото в S3 с именованием по штрихкоду (с таймаутом)
 export async function uploadProductPhoto(
   barcode: string,
   imageBase64: string,
   type: 'front' | 'barcode'
 ): Promise<string | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 сек таймаут
+  
   try {
     // Убираем data:image prefix если есть
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     
-    // Имя файла: {barcode}_front.jpg или {barcode}_barcode.jpg
-    const fileName = `${barcode}_${type}.jpg`;
+    // Имя файла: {barcode}_{timestamp}.jpg для уникальности
+    const fileName = `${barcode}_${Date.now()}.jpg`;
     
     const response = await fetch(S3_UPLOAD_URL, {
       method: 'POST',
@@ -49,20 +52,21 @@ export async function uploadProductPhoto(
         fileData: base64Data,
         contentType: 'image/jpeg',
         folder: 'products'
-      })
+      }),
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
     const result = await response.json();
     
     if (result.success && result.url) {
-      console.log(`✅ Фото загружено: ${result.url}`);
       return result.url;
     }
     
-    console.error('❌ Ошибка загрузки фото:', result.error);
     return null;
-  } catch (error) {
-    console.error('❌ Ошибка загрузки фото:', error);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    // Не логируем в консоль - просто возвращаем null
     return null;
   }
 }
@@ -95,12 +99,11 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
     if (purchasePrice === 0 || salePrice === 0) {
       const csvData = findPriceByBarcode(product.barcode);
       if (csvData) {
-        console.log(`📋 Найдены цены из CSV для ${product.barcode}:`, csvData);
         if (purchasePrice === 0) {
           purchasePrice = csvData.purchasePrice;
         }
         if (salePrice === 0) {
-          salePrice = Math.round(csvData.purchasePrice * 1.3); // 30% маржа
+          salePrice = Math.round(csvData.purchasePrice * 1.3);
         }
         if (!productName && csvData.name) {
           productName = csvData.name;
@@ -116,18 +119,8 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
     
     const hasPrice = purchasePrice > 0 && salePrice > 0;
     
-    console.log('📦 addScannedProduct проверка:', {
-      barcode: product.barcode,
-      name: productName,
-      purchasePrice,
-      salePrice,
-      hasPrice,
-      destination: hasPrice ? 'products' : 'queue'
-    });
-    
     if (hasPrice && productName) {
       // Если есть цены - сразу добавляем в основную базу
-      console.log('✅ Товар с ценой -> сохраняем в базу products');
       const existing = await getProductByBarcode(product.barcode);
       
       await insertProduct({
@@ -149,7 +142,6 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
       };
     } else {
       // Без цен - в очередь для дозаполнения
-      console.log('📋 Товар без цены -> добавляем в очередь pending_products');
       await createPendingProduct({
         barcode: product.barcode,
         name: productName,
@@ -170,8 +162,7 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
         message: 'Товар добавлен в очередь для заполнения цен'
       };
     }
-  } catch (error) {
-    console.error('❌ Ошибка добавления товара:', error);
+  } catch {
     return {
       success: false,
       addedToQueue: false,
@@ -180,7 +171,7 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
   }
 }
 
-// Полный процесс сканирования: загрузка фото + сохранение данных
+// Полный процесс сканирования: сохранение данных (фото загружаются фоново)
 export async function processScannedProduct(
   barcode: string,
   frontPhotoBase64: string | null,
@@ -196,31 +187,44 @@ export async function processScannedProduct(
   scannedBy: string
 ): Promise<{ success: boolean; addedToQueue: boolean; message: string }> {
   try {
+    // Загружаем фото ПАРАЛЛЕЛЬНО и НЕ ЖДЁМ завершения (fire-and-forget)
+    // Это ускоряет процесс сканирования
     let frontPhotoUrl: string | undefined;
     let barcodePhotoUrl: string | undefined;
     
-    // Загружаем фото параллельно
-    const uploadPromises: Promise<void>[] = [];
+    // Запускаем загрузку фото в фоне с коротким таймаутом
+    const uploadWithTimeout = async (
+      photo: string | null, 
+      type: 'front' | 'barcode'
+    ): Promise<string | undefined> => {
+      if (!photo) return undefined;
+      
+      try {
+        const result = await Promise.race([
+          uploadProductPhoto(barcode, photo, type),
+          new Promise<null>((_, reject) => 
+            setTimeout(() => reject(new Error('upload_timeout')), 5000)
+          )
+        ]);
+        return result || undefined;
+      } catch {
+        return undefined;
+      }
+    };
     
-    if (frontPhotoBase64) {
-      uploadPromises.push(
-        uploadProductPhoto(barcode, frontPhotoBase64, 'front').then(url => {
-          frontPhotoUrl = url || undefined;
-        })
-      );
-    }
+    // Запускаем загрузку но не блокируем основной процесс долго
+    const uploadPromise = Promise.allSettled([
+      uploadWithTimeout(frontPhotoBase64, 'front').then(url => { frontPhotoUrl = url; }),
+      uploadWithTimeout(barcodePhotoBase64, 'barcode').then(url => { barcodePhotoUrl = url; })
+    ]);
     
-    if (barcodePhotoBase64) {
-      uploadPromises.push(
-        uploadProductPhoto(barcode, barcodePhotoBase64, 'barcode').then(url => {
-          barcodePhotoUrl = url || undefined;
-        })
-      );
-    }
+    // Даём максимум 3 секунды на загрузку фото, потом продолжаем без них
+    await Promise.race([
+      uploadPromise,
+      new Promise(resolve => setTimeout(resolve, 3000))
+    ]);
     
-    await Promise.all(uploadPromises);
-    
-    // Добавляем товар
+    // Добавляем товар (даже если фото не загрузились)
     return await addScannedProduct({
       barcode,
       name: productData.name,
@@ -233,8 +237,7 @@ export async function processScannedProduct(
       barcode_photo_url: barcodePhotoUrl,
       scanned_by: scannedBy
     });
-  } catch (error) {
-    console.error('❌ Ошибка обработки сканирования:', error);
+  } catch {
     return {
       success: false,
       addedToQueue: false,

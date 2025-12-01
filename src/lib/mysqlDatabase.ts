@@ -9,7 +9,17 @@ interface MySQLResponse<T = unknown> {
   message?: string;
 }
 
-export async function mysqlRequest<T = unknown>(action: string, data?: Record<string, unknown>): Promise<MySQLResponse<T>> {
+// Таймаут по умолчанию - 8 секунд
+const DEFAULT_TIMEOUT = 8000;
+
+export async function mysqlRequest<T = unknown>(
+  action: string, 
+  data?: Record<string, unknown>,
+  timeoutMs: number = DEFAULT_TIMEOUT
+): Promise<MySQLResponse<T>> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
   try {
     const response = await fetch(MYSQL_FUNCTION_URL, {
       method: 'POST',
@@ -17,12 +27,19 @@ export async function mysqlRequest<T = unknown>(action: string, data?: Record<st
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ action, data }),
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
     const result = await response.json();
     return result;
-  } catch (error) {
-    console.error('❌ MySQL request error:', error);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      return { success: false, error: 'Timeout - сервер не отвечает' };
+    }
+    
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

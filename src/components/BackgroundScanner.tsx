@@ -33,8 +33,7 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         return { barcode: product.barcode, name: product.name };
       }
       return { barcode, name: undefined };
-    } catch (error) {
-      console.error('❌ Ошибка поиска:', error);
+    } catch {
       return null;
     }
   };
@@ -67,8 +66,6 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
           // Предотвращаем повторное сканирование того же кода
           if (now - lastScanTime < 2000) return;
           setLastScanTime(now);
-
-          console.log('📸 Сканирован штрихкод:', decodedText);
           
           const result = await findProduct(decodedText);
           if (result) {
@@ -80,8 +77,7 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         },
         () => {} // Игнорируем ошибки сканирования
       );
-    } catch (error) {
-      console.error('Ошибка запуска сканера:', error);
+    } catch {
       setIsScanning(false);
     }
   };
@@ -92,8 +88,8 @@ export const BackgroundScanner = ({ onProductFound, autoStart = false }: Backgro
         await scannerRef.current.stop();
         scannerRef.current = null;
       }
-    } catch (error) {
-      console.error('Ошибка остановки сканера:', error);
+    } catch {
+      // Ignore stop errors
     }
     setIsScanning(false);
   };

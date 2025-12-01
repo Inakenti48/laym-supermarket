@@ -912,6 +912,37 @@ serve(async (req) => {
         result = { success: true, data: stats };
         break;
 
+      // ==================== FIX ZERO QUANTITY ====================
+      case 'fix_zero_quantity':
+        const fixResult = await client.execute(
+          'UPDATE products SET quantity = 1 WHERE quantity = 0 OR quantity IS NULL'
+        );
+        const [countResult] = await client.query('SELECT COUNT(*) as total FROM products WHERE quantity > 0');
+        result = { 
+          success: true, 
+          message: 'Товары с quantity=0 исправлены',
+          data: { 
+            affectedRows: fixResult.affectedRows || 0,
+            totalProducts: countResult?.total || 0
+          }
+        };
+        break;
+
+      // ==================== GET PRODUCTS STATS ====================
+      case 'get_products_stats':
+        const [productsStats] = await client.query(`
+          SELECT 
+            COUNT(*) as total_products,
+            SUM(quantity) as total_quantity,
+            SUM(purchase_price * quantity) as total_purchase_cost,
+            SUM(sale_price * quantity) as total_sale_value,
+            COUNT(CASE WHEN quantity = 0 THEN 1 END) as zero_quantity_count,
+            COUNT(CASE WHEN quantity < 10 AND quantity > 0 THEN 1 END) as low_stock_count
+          FROM products
+        `);
+        result = { success: true, data: productsStats };
+        break;
+
       // ==================== TEST ====================
       case 'test_connection':
         const [testResult] = await client.query('SELECT 1 as test');

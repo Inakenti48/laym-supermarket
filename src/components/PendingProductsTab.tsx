@@ -68,12 +68,12 @@ export const PendingProductsTab = () => {
     barcode: item.barcode || '',
     name: item.product_name || '',
     category: item.category || '',
-    purchasePrice: '',
-    retailPrice: '',
+    purchasePrice: item.purchase_price ? item.purchase_price.toString() : '',
+    retailPrice: item.sale_price ? item.sale_price.toString() : '',
     quantity: item.quantity?.toString() || '1',
     unit: 'шт',
     expiryDate: '',
-    supplier: '',
+    supplier: item.supplier || '',
     frontPhoto: item.front_photo || undefined,
     barcodePhoto: item.barcode_photo || undefined,
     photos: item.image_url ? [item.image_url] : [],
@@ -140,6 +140,9 @@ export const PendingProductsTab = () => {
         product_name: updatedProduct.name,
         category: updatedProduct.category,
         quantity: updatedProduct.quantity ? parseFloat(updatedProduct.quantity) : 1,
+        purchase_price: updatedProduct.purchasePrice ? parseFloat(updatedProduct.purchasePrice) : undefined,
+        sale_price: updatedProduct.retailPrice ? parseFloat(updatedProduct.retailPrice) : undefined,
+        supplier: updatedProduct.supplier,
       });
 
       setPendingProducts(prev =>

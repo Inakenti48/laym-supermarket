@@ -221,8 +221,32 @@ serve(async (req) => {
             INDEX idx_expires (expires_at)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+        // Миграции: добавить недостающие колонки
+        const migrations = [
+          { col: 'sale_price', sql: `ALTER TABLE products ADD COLUMN sale_price DECIMAL(10,2) DEFAULT 0` },
+          { col: 'purchase_price', sql: `ALTER TABLE products ADD COLUMN purchase_price DECIMAL(10,2) DEFAULT 0` },
+          { col: 'quantity', sql: `ALTER TABLE products ADD COLUMN quantity INT DEFAULT 0` },
+          { col: 'unit', sql: `ALTER TABLE products ADD COLUMN unit VARCHAR(50) DEFAULT 'шт'` },
+          { col: 'category', sql: `ALTER TABLE products ADD COLUMN category VARCHAR(255)` },
+          { col: 'supplier_id', sql: `ALTER TABLE products ADD COLUMN supplier_id VARCHAR(36)` },
+          { col: 'image_url', sql: `ALTER TABLE products ADD COLUMN image_url TEXT` },
+          { col: 'expiry_date', sql: `ALTER TABLE products ADD COLUMN expiry_date DATE` },
+          { col: 'created_by', sql: `ALTER TABLE products ADD COLUMN created_by VARCHAR(36)` },
+          { col: 'created_at', sql: `ALTER TABLE products ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP` },
+          { col: 'updated_at', sql: `ALTER TABLE products ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` },
+        ];
+        
+        for (const m of migrations) {
+          try {
+            await client.execute(m.sql);
+            console.log(`✅ Added ${m.col} column to products table`);
+          } catch (e: any) {
+            // Колонка уже существует - это нормально
+            console.log(`Column ${m.col} might already exist:`, e.message?.substring(0, 50));
+          }
+        }
 
-        result = { success: true, message: 'All tables created successfully' };
+        result = { success: true, message: 'All tables created/migrated successfully' };
         break;
 
       // ==================== PRODUCTS ====================

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Package, Save, Trash2, CheckCheck, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Package, Save, Trash2, CheckCheck, RefreshCw, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
@@ -18,6 +18,7 @@ import {
 } from '@/lib/mysqlCollections';
 import { subscribeToSuppliers } from '@/lib/mysqlCollections';
 import { findPriceByBarcode, initPriceCache } from '@/lib/localPriceCache';
+import { insertProduct } from '@/lib/mysqlDatabase';
 
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
@@ -26,8 +27,82 @@ export const PendingProductsTab = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [csvLoaded, setCsvLoaded] = useState(false);
+  const [isAutoTransferring, setIsAutoTransferring] = useState(false);
+  const autoTransferRan = useRef(false);
   const ITEMS_PER_PAGE = 50;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
+  // Автоматический перенос товаров с ценами в MySQL (products)
+  const autoTransferProductsWithPrices = useCallback(async (products: PendingProduct[]) => {
+    if (autoTransferRan.current || products.length === 0) return;
+    autoTransferRan.current = true;
+    
+    // Находим товары с ценами
+    const productsWithPrices = products.filter(p => {
+      const purchasePrice = parseFloat(p.purchasePrice) || 0;
+      const retailPrice = parseFloat(p.retailPrice) || 0;
+      return p.barcode && p.name && purchasePrice > 0 && retailPrice > 0;
+    });
+
+    if (productsWithPrices.length === 0) {
+      console.log('📋 Нет товаров с ценами для автопереноса');
+      return;
+    }
+
+    console.log(`🚀 Автоперенос: найдено ${productsWithPrices.length} товаров с ценами`);
+    setIsAutoTransferring(true);
+    toast.loading(`🚀 Автоперенос ${productsWithPrices.length} товаров в базу...`, { id: 'auto-transfer' });
+
+    const loginUser = await getCurrentLoginUser();
+    const userId = loginUser?.id || 'system';
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const product of productsWithPrices) {
+      try {
+        // Добавляем в таблицу products
+        await insertProduct({
+          barcode: product.barcode,
+          name: product.name,
+          category: product.category || 'Без категории',
+          purchase_price: parseFloat(product.purchasePrice),
+          sale_price: parseFloat(product.retailPrice),
+          quantity: parseFloat(product.quantity) || 1,
+          unit: 'шт',
+          expiry_date: product.expiryDate || undefined,
+          created_by: userId
+        });
+
+        // Удаляем из очереди
+        await deleteQueueItem(product.id);
+        successCount++;
+        console.log(`✅ Перенесён: ${product.name} (${product.barcode})`);
+      } catch (error) {
+        console.error(`❌ Ошибка переноса ${product.barcode}:`, error);
+        errorCount++;
+      }
+    }
+
+    setIsAutoTransferring(false);
+
+    if (successCount > 0) {
+      addLog(`Автоперенос: перенесено ${successCount} товаров в базу`);
+      toast.success(
+        `✅ Автоперенос: ${successCount} в базу${errorCount > 0 ? ` | Ошибок: ${errorCount}` : ''}`,
+        { id: 'auto-transfer', duration: 5000 }
+      );
+      
+      // Обновляем список
+      const items = await getQueueProducts();
+      setTotalCount(items.length);
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+      setPendingProducts(pageItems.map(convertToPendingProduct));
+    } else {
+      toast.dismiss('auto-transfer');
+    }
+  }, [currentPage]);
 
   // Загрузка CSV кэша при монтировании
   useEffect(() => {
@@ -170,6 +245,76 @@ export const PendingProductsTab = () => {
       unsubscribe();
     };
   }, [currentPage]);
+
+  // Автоперенос товаров с ценами после загрузки CSV
+  useEffect(() => {
+    if (csvLoaded && pendingProducts.length > 0 && !isLoading && !isAutoTransferring) {
+      autoTransferProductsWithPrices(pendingProducts);
+    }
+  }, [csvLoaded, pendingProducts, isLoading, isAutoTransferring, autoTransferProductsWithPrices]);
+
+  // Ручной перенос товаров с ценами в MySQL
+  const handleTransferWithPrices = async () => {
+    const productsWithPrices = pendingProducts.filter(p => {
+      const purchasePrice = parseFloat(p.purchasePrice) || 0;
+      const retailPrice = parseFloat(p.retailPrice) || 0;
+      return p.barcode && p.name && purchasePrice > 0 && retailPrice > 0;
+    });
+
+    if (productsWithPrices.length === 0) {
+      toast.info('Нет товаров с ценами для переноса');
+      return;
+    }
+
+    const confirmTransfer = window.confirm(
+      `Перенести ${productsWithPrices.length} товаров с ценами в базу MySQL?`
+    );
+
+    if (!confirmTransfer) return;
+
+    toast.loading(`🔄 Переносим ${productsWithPrices.length} товаров...`, { id: 'manual-transfer' });
+
+    const loginUser = await getCurrentLoginUser();
+    const userId = loginUser?.id || 'system';
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const product of productsWithPrices) {
+      try {
+        await insertProduct({
+          barcode: product.barcode,
+          name: product.name,
+          category: product.category || 'Без категории',
+          purchase_price: parseFloat(product.purchasePrice),
+          sale_price: parseFloat(product.retailPrice),
+          quantity: parseFloat(product.quantity) || 1,
+          unit: 'шт',
+          expiry_date: product.expiryDate || undefined,
+          created_by: userId
+        });
+
+        await deleteQueueItem(product.id);
+        successCount++;
+      } catch (error) {
+        console.error(`❌ Ошибка переноса ${product.barcode}:`, error);
+        errorCount++;
+      }
+    }
+
+    // Обновляем список
+    const items = await getQueueProducts();
+    setTotalCount(items.length);
+    const from = (currentPage - 1) * ITEMS_PER_PAGE;
+    const pageItems = items.slice(from, from + ITEMS_PER_PAGE);
+    setPendingProducts(pageItems.map(convertToPendingProduct));
+
+    addLog(`Ручной перенос: ${successCount} товаров в базу`);
+    toast.success(
+      `✅ Перенесено: ${successCount}${errorCount > 0 ? ` | Ошибок: ${errorCount}` : ''}`,
+      { id: 'manual-transfer', duration: 5000 }
+    );
+  };
 
   const handleUpdatePendingProduct = async (id: string, updates: Partial<PendingProduct>) => {
     const product = pendingProducts.find(p => p.id === id);
@@ -565,6 +710,13 @@ export const PendingProductsTab = () => {
     );
   };
 
+  // Подсчёт товаров с ценами для отображения
+  const productsWithPricesCount = pendingProducts.filter(p => {
+    const purchasePrice = parseFloat(p.purchasePrice) || 0;
+    const retailPrice = parseFloat(p.retailPrice) || 0;
+    return purchasePrice > 0 && retailPrice > 0 && p.name;
+  }).length;
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -573,6 +725,11 @@ export const PendingProductsTab = () => {
             <Package className="h-5 w-5" />
             <h3 className="text-lg font-semibold">
               Очередь товаров ({totalCount})
+              {productsWithPricesCount > 0 && (
+                <span className="text-sm text-green-600 ml-2">
+                  ({productsWithPricesCount} с ценами)
+                </span>
+              )}
             </h3>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -585,6 +742,17 @@ export const PendingProductsTab = () => {
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Заполнить цены
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleTransferWithPrices}
+              disabled={productsWithPricesCount === 0 || isAutoTransferring}
+              className="bg-blue-600 hover:bg-blue-700"
+              title="Перенести товары с ценами в базу MySQL"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              В базу ({productsWithPricesCount})
             </Button>
             <Button
               variant="default"

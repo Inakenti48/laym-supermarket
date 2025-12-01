@@ -11,37 +11,62 @@ interface MySQLResponse<T = unknown> {
 
 // Таймаут по умолчанию - 8 секунд
 const DEFAULT_TIMEOUT = 8000;
+const MAX_RETRIES = 2;
 
+// Запрос с автоповтором при ошибке
 export async function mysqlRequest<T = unknown>(
   action: string, 
   data?: Record<string, unknown>,
   timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<MySQLResponse<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   
-  try {
-    const response = await fetch(MYSQL_FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action, data }),
-      signal: controller.signal
-    });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
-    clearTimeout(timeoutId);
-    const result = await response.json();
-    return result;
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    
-    if (error.name === 'AbortError') {
-      return { success: false, error: 'Timeout - сервер не отвечает' };
+    try {
+      const response = await fetch(MYSQL_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, data }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      const result = await response.json();
+      
+      // Если успех - возвращаем
+      if (result.success) {
+        return result;
+      }
+      
+      // Если не последняя попытка - повторяем
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      
+      return result;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      
+      // Если не последняя попытка - повторяем
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      
+      if (error.name === 'AbortError') {
+        return { success: false, error: 'Timeout - сервер не отвечает' };
+      }
+      
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
-    
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+  
+  return { success: false, error: 'Все попытки исчерпаны' };
 }
 
 // === PRODUCTS ===

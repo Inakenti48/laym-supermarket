@@ -120,29 +120,57 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
     const hasPrice = purchasePrice > 0 && salePrice > 0;
     
     if (hasPrice && productName) {
-      // Если есть цены - сразу добавляем в основную базу
-      const existing = await getProductByBarcode(product.barcode);
-      
-      await insertProduct({
-        barcode: product.barcode,
-        name: productName,
-        category: productCategory,
-        purchase_price: purchasePrice,
-        sale_price: salePrice,
-        quantity: productQuantity,
-        unit: 'шт',
-        expiry_date: product.expiry_date,
-        created_by: product.scanned_by
-      });
-      
-      return {
-        success: true,
-        addedToQueue: false,
-        message: existing ? 'Количество товара обновлено' : `Товар "${productName}" добавлен в базу`
-      };
+      // Если есть цены - пробуем добавить в основную базу
+      try {
+        const existing = await getProductByBarcode(product.barcode);
+        
+        const insertResult = await insertProduct({
+          barcode: product.barcode,
+          name: productName,
+          category: productCategory,
+          purchase_price: purchasePrice,
+          sale_price: salePrice,
+          quantity: productQuantity,
+          unit: 'шт',
+          expiry_date: product.expiry_date,
+          created_by: product.scanned_by
+        });
+        
+        if (insertResult.success) {
+          return {
+            success: true,
+            addedToQueue: false,
+            message: existing ? 'Количество обновлено' : `"${productName}" добавлен в базу`
+          };
+        }
+        
+        // Если не удалось в базу - fallback в очередь
+        throw new Error('Insert failed');
+      } catch {
+        // Fallback: добавляем в очередь чтобы не потерять данные
+        await createPendingProduct({
+          barcode: product.barcode,
+          name: productName,
+          purchase_price: purchasePrice,
+          sale_price: salePrice,
+          quantity: productQuantity,
+          category: productCategory,
+          expiry_date: product.expiry_date,
+          front_photo: product.front_photo_url,
+          barcode_photo: product.barcode_photo_url,
+          image_url: product.front_photo_url,
+          added_by: product.scanned_by
+        });
+        
+        return {
+          success: true,
+          addedToQueue: true,
+          message: 'Добавлен в очередь (ошибка базы)'
+        };
+      }
     } else {
       // Без цен - в очередь для дозаполнения
-      await createPendingProduct({
+      const queueResult = await createPendingProduct({
         barcode: product.barcode,
         name: productName,
         purchase_price: purchasePrice,
@@ -157,16 +185,16 @@ export async function addScannedProduct(product: ScannedProduct): Promise<{
       });
       
       return {
-        success: true,
+        success: queueResult.success,
         addedToQueue: true,
-        message: 'Товар добавлен в очередь для заполнения цен'
+        message: queueResult.success ? 'Добавлен в очередь' : 'Ошибка очереди'
       };
     }
   } catch {
     return {
       success: false,
       addedToQueue: false,
-      message: 'Ошибка сохранения товара'
+      message: 'Ошибка сохранения'
     };
   }
 }

@@ -506,28 +506,49 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
     } catch (error: any) {
       setIsProcessing(false);
-      setNotification('');
-      setDualPhotoStep('none');
-      setTempFrontPhoto('');
-      setTempBarcodePhoto('');
+      
+      // НЕ СБРАСЫВАЕМ фото при ошибке! Пользователь может повторить
+      // Сбрасываем только dualPhotoStep чтобы можно было нажать кнопку повторно
+      setDualPhotoStep('ready');
       
       if (error.message?.includes('rate_limit')) {
-        toast.error('Слишком много запросов, подождите');
+        setNotification('⚠️ Лимит - повторите');
+        toast.error('Лимит запросов, нажмите кнопку повторно');
       } else if (error.message?.includes('Таймаут')) {
-        toast.error('Сервер не отвечает, попробуйте снова');
+        setNotification('⚠️ Таймаут - повторите');
+        toast.error('Сервер не ответил, нажмите кнопку повторно');
       } else {
-        toast.error('Ошибка распознавания, попробуйте снова');
+        setNotification('⚠️ Ошибка - повторите');
+        toast.error('Ошибка, нажмите кнопку распознавания повторно');
       }
+      
+      // Через 3 сек скрываем уведомление но НЕ сбрасываем фото
+      setTimeout(() => setNotification(''), 3000);
+    }
+  };
+
+  // Повторная попытка распознавания (фото уже есть)
+  const handleRetryAIScan = async () => {
+    if (isProcessing) return;
+    
+    if (tempFrontPhoto && tempBarcodePhoto) {
+      await handleAIScanWithPhotos(tempFrontPhoto, tempBarcodePhoto);
+    } else {
+      toast.warning('Сначала сделайте 2 фото', { position: 'top-center' });
     }
   };
 
   const handleAIScan = async () => {
-    if (isProcessing || !tempFrontPhoto || !tempBarcodePhoto) {
-      toast.warning('⚠️ Нужны обе фотографии для распознавания', { position: 'top-center' });
+    if (isProcessing) {
+      toast.info('Обработка...', { position: 'top-center' });
       return;
     }
     
-    // Делегируем в функцию с прямой передачей
+    if (!tempFrontPhoto || !tempBarcodePhoto) {
+      toast.warning('⚠️ Нужны обе фотографии', { position: 'top-center' });
+      return;
+    }
+    
     await handleAIScanWithPhotos(tempFrontPhoto, tempBarcodePhoto);
   };
 

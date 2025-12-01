@@ -140,7 +140,7 @@ ${productsInfo}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',  // Используем более быструю модель
+        model: 'google/gemini-2.5-flash-lite',  // Самая быстрая модель!
         messages: [
           { role: 'system', content: systemPrompt },
           {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft, RefreshCw, Wifi, WifiOff, Bell } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, Users, AlertTriangle, DollarSign, Download, ArrowLeft, RefreshCw, Wifi, WifiOff, Bell, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,18 +10,43 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useProductsSync } from '@/hooks/useProductsSync';
 import { useAdminNotifications } from '@/hooks/useAdminNotifications';
 import { Badge } from '@/components/ui/badge';
+import { mysqlRequest, PendingProduct as MySQLPendingProduct } from '@/lib/mysqlDatabase';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [pendingProducts, setPendingProducts] = useState<MySQLPendingProduct[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
   
   // MySQL realtime синхронизация товаров
   const { products: firebaseProducts, loading: firebaseLoading, refetch } = useProductsSync();
   
   // Уведомления о новых товарах в очереди (для админа)
   const { queueCount, newItems } = useAdminNotifications();
+
+  // Загрузка товаров из очереди
+  const loadPendingProducts = async () => {
+    setPendingLoading(true);
+    try {
+      const result = await mysqlRequest<MySQLPendingProduct[]>('get_pending_products');
+      if (result.success && result.data) {
+        setPendingProducts(result.data);
+        console.log(`📋 Товаров в очереди: ${result.data.length}`);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки очереди:', error);
+    } finally {
+      setPendingLoading(false);
+    }
+  };
+
+  // Загружаем pending при монтировании и при обновлении
+  useEffect(() => {
+    loadPendingProducts();
+  }, [refreshTrigger]);
 
   // Логирование количества товаров для дебага
   useEffect(() => {
@@ -123,6 +148,7 @@ export const DashboardTab = () => {
 
   const handleManualRefresh = () => {
     refetch();
+    loadPendingProducts();
     setRefreshTrigger(prev => prev + 1);
     toast.info('Обновление данных...');
   };
@@ -327,63 +353,142 @@ export const DashboardTab = () => {
         </Card>
       </div>
 
-      {/* MySQL Products Table */}
+      {/* Товары - табы для базы и очереди */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
-            Товары из MySQL ({firebaseProducts.length})
+            Все товары ({firebaseProducts.length + pendingProducts.length})
           </CardTitle>
-          <CardDescription>Все товары из базы данных MySQL</CardDescription>
+          <CardDescription>Товары в базе и в очереди на проверку</CardDescription>
         </CardHeader>
         <CardContent>
-          {firebaseLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
-              Загрузка товаров...
-            </div>
-          ) : firebaseProducts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              Нет товаров в MySQL
-            </div>
-          ) : (
-            <div className="max-h-[400px] overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Штрихкод</TableHead>
-                    <TableHead>Название</TableHead>
-                    <TableHead>Категория</TableHead>
-                    <TableHead className="text-right">Закуп</TableHead>
-                    <TableHead className="text-right">Продажа</TableHead>
-                    <TableHead className="text-right">Кол-во</TableHead>
-                    <TableHead>Обновлено</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {firebaseProducts.slice(0, 50).map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{product.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.category || '-'}</TableCell>
-                      <TableCell className="text-right">₽{product.purchasePrice?.toFixed(2) || '0'}</TableCell>
-                      <TableCell className="text-right">₽{product.retailPrice?.toFixed(2) || '0'}</TableCell>
-                      <TableCell className="text-right font-medium">{product.quantity || 0}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {product.lastUpdated ? new Date(product.lastUpdated).toLocaleDateString('ru-RU') : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {firebaseProducts.length > 50 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Показано 50 из {firebaseProducts.length} товаров
-                </p>
+          <Tabs defaultValue="products" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="products" className="gap-2">
+                <Package className="h-4 w-4" />
+                В базе ({firebaseProducts.length})
+              </TabsTrigger>
+              <TabsTrigger value="pending" className="gap-2">
+                <Clock className="h-4 w-4" />
+                В очереди ({pendingProducts.length})
+                {pendingProducts.length > 0 && (
+                  <Badge variant="destructive" className="ml-1 text-xs">
+                    {pendingProducts.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="products">
+              {firebaseLoading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                  Загрузка товаров...
+                </div>
+              ) : firebaseProducts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  Нет товаров в базе
+                  {pendingProducts.length > 0 && (
+                    <p className="text-sm mt-2">
+                      Товары находятся в очереди ({pendingProducts.length} шт.)
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="max-h-[400px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Штрихкод</TableHead>
+                        <TableHead>Название</TableHead>
+                        <TableHead>Категория</TableHead>
+                        <TableHead className="text-right">Закуп</TableHead>
+                        <TableHead className="text-right">Продажа</TableHead>
+                        <TableHead className="text-right">Кол-во</TableHead>
+                        <TableHead>Обновлено</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {firebaseProducts.slice(0, 50).map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{product.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{product.category || '-'}</TableCell>
+                          <TableCell className="text-right">₽{product.purchasePrice?.toFixed(2) || '0'}</TableCell>
+                          <TableCell className="text-right">₽{product.retailPrice?.toFixed(2) || '0'}</TableCell>
+                          <TableCell className="text-right font-medium">{product.quantity || 0}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {product.lastUpdated ? new Date(product.lastUpdated).toLocaleDateString('ru-RU') : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {firebaseProducts.length > 50 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Показано 50 из {firebaseProducts.length} товаров
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-          )}
+            </TabsContent>
+
+            <TabsContent value="pending">
+              {pendingLoading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                  Загрузка очереди...
+                </div>
+              ) : pendingProducts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  Очередь пуста
+                </div>
+              ) : (
+                <div className="max-h-[400px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Штрихкод</TableHead>
+                        <TableHead>Название</TableHead>
+                        <TableHead>Категория</TableHead>
+                        <TableHead className="text-right">Закуп</TableHead>
+                        <TableHead className="text-right">Продажа</TableHead>
+                        <TableHead className="text-right">Кол-во</TableHead>
+                        <TableHead>Добавил</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingProducts.slice(0, 50).map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{product.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{product.category || '-'}</TableCell>
+                          <TableCell className="text-right">
+                            {product.purchase_price ? `₽${product.purchase_price}` : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {product.sale_price ? `₽${product.sale_price}` : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{product.quantity || 1}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {product.added_by || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {pendingProducts.length > 50 && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Показано 50 из {pendingProducts.length} товаров
+                    </p>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

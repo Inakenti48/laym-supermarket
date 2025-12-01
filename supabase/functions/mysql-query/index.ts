@@ -933,14 +933,45 @@ serve(async (req) => {
         const [productsStats] = await client.query(`
           SELECT 
             COUNT(*) as total_products,
-            SUM(quantity) as total_quantity,
-            SUM(purchase_price * quantity) as total_purchase_cost,
-            SUM(sale_price * quantity) as total_sale_value,
-            COUNT(CASE WHEN quantity = 0 THEN 1 END) as zero_quantity_count,
+            COALESCE(SUM(quantity), 0) as total_quantity,
+            COALESCE(SUM(purchase_price * quantity), 0) as total_purchase_cost,
+            COALESCE(SUM(sale_price * quantity), 0) as total_sale_value,
+            COUNT(CASE WHEN quantity = 0 OR quantity IS NULL THEN 1 END) as zero_quantity_count,
             COUNT(CASE WHEN quantity < 10 AND quantity > 0 THEN 1 END) as low_stock_count
           FROM products
         `);
-        result = { success: true, data: productsStats };
+        
+        // Также получаем статистику pending_products
+        const [pendingStats] = await client.query(`
+          SELECT 
+            COUNT(*) as pending_count,
+            COALESCE(SUM(quantity), 0) as pending_quantity
+          FROM pending_products 
+          WHERE status = 'pending'
+        `);
+        
+        result = { 
+          success: true, 
+          data: {
+            ...productsStats,
+            pending_count: pendingStats?.pending_count || 0,
+            pending_quantity: pendingStats?.pending_quantity || 0
+          }
+        };
+        break;
+
+      // ==================== GET ALL DATA (products + pending) ====================
+      case 'get_all_inventory':
+        const allProducts = await client.query('SELECT *, "product" as source FROM products ORDER BY created_at DESC');
+        const allPending = await client.query("SELECT *, 'pending' as source FROM pending_products WHERE status = 'pending' ORDER BY created_at DESC");
+        result = { 
+          success: true, 
+          data: {
+            products: allProducts,
+            pending: allPending,
+            total: allProducts.length + allPending.length
+          }
+        };
         break;
 
       // ==================== TEST ====================

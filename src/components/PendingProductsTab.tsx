@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Save, Trash2, CheckCheck } from 'lucide-react';
+import { Package, Save, Trash2, CheckCheck, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingProductItem, PendingProduct } from './PendingProductItem';
@@ -17,6 +17,7 @@ import {
   QueueProduct
 } from '@/lib/mysqlCollections';
 import { subscribeToSuppliers } from '@/lib/mysqlCollections';
+import { findPriceByBarcode, initPriceCache } from '@/lib/localPriceCache';
 
 export const PendingProductsTab = () => {
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
@@ -24,8 +25,17 @@ export const PendingProductsTab = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [csvLoaded, setCsvLoaded] = useState(false);
   const ITEMS_PER_PAGE = 50;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
+  // Загрузка CSV кэша при монтировании
+  useEffect(() => {
+    initPriceCache().then((count) => {
+      console.log('📦 CSV кэш цен загружен:', count);
+      setCsvLoaded(true);
+    });
+  }, []);
 
   // Обработчик добавления нового поставщика
   const handleSupplierAdded = (newSupplier: Supplier) => {
@@ -62,22 +72,55 @@ export const PendingProductsTab = () => {
     };
   }, []);
 
-  // Конвертация QueueProduct в PendingProduct
-  const convertToPendingProduct = (item: QueueProduct): PendingProduct => ({
-    id: item.id,
-    barcode: item.barcode || '',
-    name: item.product_name || '',
-    category: item.category || '',
-    purchasePrice: item.purchase_price ? item.purchase_price.toString() : '',
-    retailPrice: item.sale_price ? item.sale_price.toString() : '',
-    quantity: item.quantity?.toString() || '1',
-    unit: 'шт',
-    expiryDate: '',
-    supplier: item.supplier || '',
-    frontPhoto: item.front_photo || undefined,
-    barcodePhoto: item.barcode_photo || undefined,
-    photos: item.image_url ? [item.image_url] : [],
-  });
+  // Конвертация QueueProduct в PendingProduct с авто-заполнением цен из CSV
+  const convertToPendingProduct = (item: QueueProduct): PendingProduct => {
+    let purchasePrice = item.purchase_price ? item.purchase_price.toString() : '';
+    let retailPrice = item.sale_price ? item.sale_price.toString() : '';
+    let name = item.product_name || '';
+    let category = item.category || '';
+    let quantity = item.quantity?.toString() || '1';
+    
+    // Если цены пустые или 0, ищем в CSV
+    if (item.barcode && (!item.purchase_price || !item.sale_price)) {
+      const csvData = findPriceByBarcode(item.barcode);
+      if (csvData) {
+        console.log(`📋 Найдены цены из CSV для ${item.barcode}:`, csvData);
+        // Розничная = закупочная * 1.3 (30% маржа)
+        if (!purchasePrice || purchasePrice === '0') {
+          purchasePrice = csvData.purchasePrice.toString();
+        }
+        if (!retailPrice || retailPrice === '0') {
+          retailPrice = Math.round(csvData.purchasePrice * 1.3).toString();
+        }
+        if (!name && csvData.name) {
+          name = csvData.name;
+        }
+        if (!category && csvData.category) {
+          category = csvData.category;
+        }
+        // Используем количество из CSV если в очереди 1 (по умолчанию)
+        if (csvData.quantity > 0 && item.quantity === 1) {
+          quantity = csvData.quantity.toString();
+        }
+      }
+    }
+    
+    return {
+      id: item.id,
+      barcode: item.barcode || '',
+      name,
+      category,
+      purchasePrice,
+      retailPrice,
+      quantity,
+      unit: 'шт',
+      expiryDate: '',
+      supplier: item.supplier || '',
+      frontPhoto: item.front_photo || undefined,
+      barcodePhoto: item.barcode_photo || undefined,
+      photos: item.image_url ? [item.image_url] : [],
+    };
+  };
 
   // Загрузка временных товаров из Firebase
   useEffect(() => {
@@ -454,6 +497,74 @@ export const PendingProductsTab = () => {
     }
   };
 
+  // Авто-заполнение цен из CSV для всех товаров без цен
+  const handleAutoFillPrices = async () => {
+    if (!csvLoaded) {
+      toast.error('CSV кэш ещё не загружен');
+      return;
+    }
+
+    const productsWithoutPrices = pendingProducts.filter(
+      p => p.barcode && (!p.purchasePrice || p.purchasePrice === '0' || !p.retailPrice || p.retailPrice === '0')
+    );
+
+    if (productsWithoutPrices.length === 0) {
+      toast.info('Все товары уже имеют цены');
+      return;
+    }
+
+    toast.loading(`🔄 Заполняем цены из CSV...`, { id: 'auto-fill' });
+
+    let filledCount = 0;
+    let notFoundCount = 0;
+
+    for (const product of productsWithoutPrices) {
+      const csvData = findPriceByBarcode(product.barcode);
+      if (csvData) {
+        const purchasePrice = csvData.purchasePrice;
+        const retailPrice = Math.round(csvData.purchasePrice * 1.3); // 30% маржа
+        const quantity = csvData.quantity > 0 ? csvData.quantity : parseFloat(product.quantity) || 1;
+        
+        try {
+          await updateQueueItem(product.id, {
+            product_name: csvData.name || product.name,
+            category: csvData.category || product.category,
+            purchase_price: purchasePrice,
+            sale_price: retailPrice,
+            quantity: quantity,
+          });
+          
+          // Обновляем локальный стейт
+          setPendingProducts(prev => prev.map(p => 
+            p.id === product.id 
+              ? { 
+                  ...p, 
+                  name: csvData.name || p.name,
+                  category: csvData.category || p.category,
+                  purchasePrice: purchasePrice.toString(),
+                  retailPrice: retailPrice.toString(),
+                  quantity: quantity.toString()
+                }
+              : p
+          ));
+          
+          filledCount++;
+          console.log(`✅ Заполнены цены для ${product.barcode}: закуп=${purchasePrice}, розница=${retailPrice}, кол-во=${quantity}`);
+        } catch (error) {
+          console.error(`Ошибка обновления ${product.barcode}:`, error);
+        }
+      } else {
+        notFoundCount++;
+        console.log(`❌ Не найден в CSV: ${product.barcode}`);
+      }
+    }
+
+    toast.success(
+      `✅ Заполнено: ${filledCount} | Не найдено: ${notFoundCount}`,
+      { id: 'auto-fill', duration: 5000 }
+    );
+  };
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -465,6 +576,16 @@ export const PendingProductsTab = () => {
             </h3>
           </div>
           <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleAutoFillPrices}
+              disabled={pendingProducts.length === 0 || !csvLoaded}
+              title="Заполнить цены из CSV файлов"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Заполнить цены
+            </Button>
             <Button
               variant="default"
               size="sm"

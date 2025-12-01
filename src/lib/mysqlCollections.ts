@@ -52,6 +52,9 @@ export interface QueueProduct {
   product_name?: string;
   category?: string;
   quantity?: number;
+  purchase_price?: number;
+  sale_price?: number;
+  supplier?: string;
   front_photo?: string;
   barcode_photo?: string;
   image_url?: string;
@@ -67,8 +70,9 @@ export const addToQueue = async (data: Partial<QueueProduct>): Promise<void> => 
       name: data.product_name || '',
       category: data.category,
       quantity: data.quantity || 1,
-      purchase_price: 0,
-      sale_price: 0,
+      purchase_price: data.purchase_price || 0,
+      sale_price: data.sale_price || 0,
+      supplier: data.supplier,
       front_photo: data.front_photo,
       barcode_photo: data.barcode_photo,
       image_url: data.image_url,
@@ -88,6 +92,9 @@ export const getQueueProducts = async (): Promise<QueueProduct[]> => {
     product_name: p.name,
     category: p.category,
     quantity: p.quantity,
+    purchase_price: p.purchase_price,
+    sale_price: p.sale_price,
+    supplier: p.supplier,
     front_photo: p.front_photo,
     barcode_photo: p.barcode_photo,
     image_url: p.image_url,

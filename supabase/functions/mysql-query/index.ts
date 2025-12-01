@@ -534,9 +534,9 @@ serve(async (req) => {
       case 'add_to_queue':
         const queueId = crypto.randomUUID();
         await client.execute(
-          `INSERT INTO pending_products (id, barcode, name, category, quantity, front_photo, barcode_photo, image_url, added_by, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [queueId, data.barcode || null, data.product_name || null, data.category || null, data.quantity || 1, data.front_photo || null, data.barcode_photo || null, data.image_url || null, data.created_by || 'system']
+          `INSERT INTO pending_products (id, barcode, name, category, quantity, purchase_price, sale_price, supplier, front_photo, barcode_photo, image_url, added_by, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+          [queueId, data.barcode || null, data.product_name || null, data.category || null, data.quantity || 1, data.purchase_price || 0, data.sale_price || 0, data.supplier || null, data.front_photo || null, data.barcode_photo || null, data.image_url || null, data.created_by || 'system']
         );
         result = { success: true, data: { insertId: queueId } };
         break;
@@ -548,6 +548,9 @@ serve(async (req) => {
         if (data.product_name !== undefined) { queueUpdates.push('name = ?'); queueValues.push(data.product_name); }
         if (data.category !== undefined) { queueUpdates.push('category = ?'); queueValues.push(data.category); }
         if (data.quantity !== undefined) { queueUpdates.push('quantity = ?'); queueValues.push(data.quantity); }
+        if (data.purchase_price !== undefined) { queueUpdates.push('purchase_price = ?'); queueValues.push(data.purchase_price); }
+        if (data.sale_price !== undefined) { queueUpdates.push('sale_price = ?'); queueValues.push(data.sale_price); }
+        if (data.supplier !== undefined) { queueUpdates.push('supplier = ?'); queueValues.push(data.supplier); }
         if (data.status !== undefined) { queueUpdates.push('status = ?'); queueValues.push(data.status); }
         if (queueUpdates.length > 0) {
           queueValues.push(data.id);

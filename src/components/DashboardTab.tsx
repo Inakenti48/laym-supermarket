@@ -23,10 +23,10 @@ export const DashboardTab = () => {
   // Уведомления о новых товарах в очереди (для админа)
   const { queueCount, newItems } = useAdminNotifications();
 
-  // Перезагрузка при изменении Firebase товаров
+  // Логирование количества товаров для дебага
   useEffect(() => {
     if (!firebaseLoading) {
-      setRefreshTrigger(prev => prev + 1);
+      console.log(`📦 MySQL товаров загружено: ${firebaseProducts.length}`);
     }
   }, [firebaseProducts.length, firebaseLoading]);
 
@@ -41,25 +41,28 @@ export const DashboardTab = () => {
     expiringCount: 0,
   });
 
+  // Расчёт статистики из загруженных товаров
   useEffect(() => {
-    const calculateStats = async () => {
-      try {
-        setIsLoading(true);
-        setConnectionError(false);
+    // Не считаем пока идёт загрузка
+    if (firebaseLoading) {
+      setIsLoading(true);
+      return;
+    }
 
-        // Используем Firebase товары из хука
-        const products = firebaseProducts;
-        
-        if (firebaseLoading) {
-          return; // Ждём загрузки
-        }
+    setIsLoading(true);
+    setConnectionError(false);
+
+    try {
+      const products = firebaseProducts || [];
+      
+      console.log(`📊 Расчёт статистики: ${products.length} товаров из MySQL`);
       
       const totalProductsCount = products.length; // Уникальных товаров в базе
       const totalQuantity = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
       const totalPurchaseCost = products.reduce((sum, p) => sum + ((p.purchasePrice || 0) * (p.quantity || 0)), 0);
 
       // Подсчет товаров с низким остатком (менее 10 шт)
-      const lowStockCount = products.filter(p => (p.quantity || 0) < 10).length;
+      const lowStockCount = products.filter(p => (p.quantity || 0) < 10 && (p.quantity || 0) > 0).length;
 
       // Истекающие товары (в течение 3 дней)
       const threeDaysFromNow = new Date();
@@ -82,44 +85,41 @@ export const DashboardTab = () => {
         (log.message.includes('Продажа:') || log.message.includes('Чек'))
       ).length;
 
-      // Подсчет выручки из проданных товаров
+      // Потенциальная выручка
       const totalRevenue = products.reduce((sum, p) => {
-        const paidAmount = p.paidAmount || 0;
-        const purchasePrice = p.purchasePrice || 1;
-        const retailPrice = p.retailPrice || 0;
-        return sum + (retailPrice * (paidAmount / purchasePrice));
+        return sum + ((p.retailPrice || 0) * (p.quantity || 0));
       }, 0);
 
-        setStats({
-          totalRevenue,
-          totalProductsCount,
-          totalQuantity,
-          totalPurchaseCost,
-          salesToday,
-          activeEmployees,
-          lowStockCount,
-          expiringCount,
-        });
+      setStats({
+        totalRevenue,
+        totalProductsCount,
+        totalQuantity,
+        totalPurchaseCost,
+        salesToday,
+        activeEmployees,
+        lowStockCount,
+        expiringCount,
+      });
 
-        setLastUpdate(new Date());
-        setConnectionError(false);
-      } catch (error: any) {
-        console.error('❌ Error loading stats:', error);
-        setConnectionError(true);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      setLastUpdate(new Date());
+      setConnectionError(false);
+    } catch (error: any) {
+      console.error('❌ Error calculating stats:', error);
+      setConnectionError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [firebaseProducts, firebaseLoading, refreshTrigger]);
 
-    calculateStats();
-    
-    // Обновление каждые 30 секунд
+  // Автообновление каждые 15 секунд
+  useEffect(() => {
     const interval = setInterval(() => {
+      console.log('🔄 Автообновление данных дашборда...');
       refetch();
-    }, 30000);
+    }, 15000);
     
     return () => clearInterval(interval);
-  }, [refreshTrigger, firebaseProducts, firebaseLoading]);
+  }, [refetch]);
 
   const handleManualRefresh = () => {
     refetch();

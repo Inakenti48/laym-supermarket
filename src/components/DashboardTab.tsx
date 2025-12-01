@@ -416,8 +416,8 @@ export const DashboardTab = () => {
                           <TableCell className="font-mono text-xs">{product.barcode}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{product.name}</TableCell>
                           <TableCell className="text-muted-foreground">{product.category || '-'}</TableCell>
-                          <TableCell className="text-right">₽{product.purchasePrice?.toFixed(2) || '0'}</TableCell>
-                          <TableCell className="text-right">₽{product.retailPrice?.toFixed(2) || '0'}</TableCell>
+                          <TableCell className="text-right">₽{Number(product.purchasePrice || 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-right">₽{Number(product.retailPrice || 0).toFixed(2)}</TableCell>
                           <TableCell className="text-right font-medium">{product.quantity || 0}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {product.lastUpdated ? new Date(product.lastUpdated).toLocaleDateString('ru-RU') : '-'}

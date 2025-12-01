@@ -430,9 +430,9 @@ export const SuppliersTab = () => {
           <Card key={supplier.id} className="p-4">
             <div className="flex justify-between items-start mb-2">
               <h4 className="font-semibold">{supplier.name}</h4>
-              {supplier.totalDebt > 0 && (
+              {Number(supplier.totalDebt || 0) > 0 && (
                 <Badge variant="destructive">
-                  Долг: {supplier.totalDebt.toFixed(2)} ₽
+                  Долг: {Number(supplier.totalDebt || 0).toFixed(2)} ₽
                 </Badge>
               )}
             </div>
@@ -473,7 +473,7 @@ export const SuppliersTab = () => {
                             <span>{new Date(p.date).toLocaleDateString('ru-RU')}</span>
                           </div>
                           <div className="text-muted-foreground">
-                            {p.productQuantity} x {p.productPrice} ₽ = {(p.productQuantity * p.productPrice).toFixed(2)} ₽
+                            {p.productQuantity} x {p.productPrice} ₽ = {(Number(p.productQuantity || 0) * Number(p.productPrice || 0)).toFixed(2)} ₽
                           </div>
                           <div>
                             {p.paymentType === 'full' && 'Полная оплата'}
@@ -488,7 +488,7 @@ export const SuppliersTab = () => {
                 </DialogContent>
               </Dialog>
 
-              {supplier.totalDebt > 0 && (
+              {Number(supplier.totalDebt || 0) > 0 && (
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="default">
@@ -501,7 +501,7 @@ export const SuppliersTab = () => {
                       <DialogTitle>Погашение долга - {supplier.name}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      <p>Текущий долг: <strong>{supplier.totalDebt.toFixed(2)} ₽</strong></p>
+                      <p>Текущий долг: <strong>{Number(supplier.totalDebt || 0).toFixed(2)} ₽</strong></p>
                       <Input
                         type="number"
                         placeholder="Сумма погашения"

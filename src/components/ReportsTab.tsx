@@ -68,14 +68,14 @@ export const ReportsTab = () => {
 
   // Статистика товаров
   const totalProducts = products.length;
-  const totalValue = products.reduce((sum, p) => sum + (p.purchasePrice * p.quantity), 0);
-  const totalRetailValue = products.reduce((sum, p) => sum + (p.retailPrice * p.quantity), 0);
+  const totalValue = products.reduce((sum, p) => sum + (Number(p.purchasePrice || 0) * Number(p.quantity || 0)), 0);
+  const totalRetailValue = products.reduce((sum, p) => sum + (Number(p.retailPrice || 0) * Number(p.quantity || 0)), 0);
   const potentialProfit = totalRetailValue - totalValue;
-  const totalDebt = products.reduce((sum, p) => sum + p.debtAmount, 0);
+  const totalDebt = products.reduce((sum, p) => sum + Number(p.debtAmount || 0), 0);
 
   // Статистика поставщиков
   const totalSuppliers = suppliers.length;
-  const totalSupplierDebt = suppliers.reduce((sum, s) => sum + s.totalDebt, 0);
+  const totalSupplierDebt = suppliers.reduce((sum, s) => sum + Number(s.totalDebt || 0), 0);
 
   // Товары по категориям
   const categoriesMap = new Map<string, { count: number; value: number }>();
@@ -83,7 +83,7 @@ export const ReportsTab = () => {
     const existing = categoriesMap.get(p.category) || { count: 0, value: 0 };
     categoriesMap.set(p.category, {
       count: existing.count + 1,
-      value: existing.value + (p.purchasePrice * p.quantity)
+      value: existing.value + (Number(p.purchasePrice || 0) * Number(p.quantity || 0))
     });
   });
   const categories = Array.from(categoriesMap.entries())
@@ -260,7 +260,7 @@ export const ReportsTab = () => {
                           <TableCell className="text-right">{product.purchasePrice}₽</TableCell>
                           <TableCell className="text-right">{product.retailPrice}₽</TableCell>
                           <TableCell className="text-right font-semibold">
-                            {(product.purchasePrice * product.quantity).toFixed(2)}₽
+                            {(Number(product.purchasePrice || 0) * Number(product.quantity || 0)).toFixed(2)}₽
                           </TableCell>
                         </TableRow>
                       ))

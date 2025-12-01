@@ -392,10 +392,10 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       }
       const userName = localStorage.getItem('login_user_name') || 'Устройство';
       
-      // AI вызов с таймаутом 15 секунд
+      // AI вызов с таймаутом 20 секунд (flash-lite быстрая модель)
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const aiController = new AbortController();
-      const aiTimeout = setTimeout(() => aiController.abort(), 15000);
+      const aiTimeout = setTimeout(() => aiController.abort(), 20000);
       
       let response: Response;
       try {

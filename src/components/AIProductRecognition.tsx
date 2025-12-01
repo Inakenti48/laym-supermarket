@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { SaveQueueIndicator } from '@/components/SaveQueueIndicator';
 // AI распознавание через Gemini
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
@@ -441,36 +442,50 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       const hasPrices = priceInfo && priceInfo.purchasePrice > 0;
       
-      let savedTo = aiResult.savedTo || '';
-      
-      // Сохраняем в MySQL с загрузкой фото в S3
+      // Загрузка фото в S3 в фоне (не блокирует)
       const purchasePrice = priceInfo?.purchasePrice || 0;
       const salePrice = purchasePrice > 0 ? Math.round(purchasePrice * 1.3) : 0;
       
-      try {
-        // Сохраняем товар (фото загружаются в фоне)
-        const { processScannedProduct } = await import('@/lib/productScanner');
-        
-        const saveResult = await processScannedProduct(
-          scannedBarcode || `unknown_${Date.now()}`,
-          frontPhoto || null,
-          barcodePhoto || null,
-          {
-            name: priceInfo?.name || scannedName || 'Неизвестный товар',
-            category: priceInfo?.category || scannedCategory,
-            purchase_price: purchasePrice,
-            sale_price: salePrice,
-            quantity: 1,
-          },
-          userName
-        );
-        
-        if (saveResult.success) {
-          savedTo = saveResult.addedToQueue ? 'queue' : 'products';
+      // Загружаем фото в фон (не ждём)
+      let frontPhotoUrl: string | undefined;
+      let barcodePhotoUrl: string | undefined;
+      
+      const uploadPhotosInBackground = async () => {
+        try {
+          const { uploadProductPhoto } = await import('@/lib/productScanner');
+          const barcode = scannedBarcode || `unknown_${Date.now()}`;
+          
+          const [frontResult, barcodeResult] = await Promise.allSettled([
+            frontPhoto ? uploadProductPhoto(barcode, frontPhoto, 'front') : Promise.resolve(null),
+            barcodePhoto ? uploadProductPhoto(barcode, barcodePhoto, 'barcode') : Promise.resolve(null)
+          ]);
+          
+          if (frontResult.status === 'fulfilled') frontPhotoUrl = frontResult.value || undefined;
+          if (barcodeResult.status === 'fulfilled') barcodePhotoUrl = barcodeResult.value || undefined;
+        } catch {
+          // Фото не критично
         }
-      } catch {
-        // Ошибка сохранения - не критично, покажем результат AI
-      }
+      };
+      
+      // Запускаем загрузку фото в фоне
+      uploadPhotosInBackground();
+      
+      // СРАЗУ добавляем в очередь гарантированного сохранения
+      const { addProductToSaveQueue } = await import('@/lib/saveQueue');
+      
+      const queueResult = await addProductToSaveQueue({
+        barcode: scannedBarcode || `unknown_${Date.now()}`,
+        name: priceInfo?.name || scannedName || 'Неизвестный товар',
+        category: priceInfo?.category || scannedCategory,
+        purchase_price: purchasePrice,
+        sale_price: salePrice,
+        quantity: 1,
+        front_photo_url: frontPhotoUrl,
+        barcode_photo_url: barcodePhotoUrl,
+        scanned_by: userName
+      });
+      
+      const savedTo = queueResult.hasPrice ? 'products' : 'queue';
       
       // Увеличиваем счетчик
       setAddedProductsCount(prev => prev + 1);
@@ -481,17 +496,14 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       setTempBarcodePhoto('');
       setIsProcessing(false);
       
-      // Показываем статус
-      if (savedTo === 'products' || savedTo === 'products_updated') {
-        const price = aiResult.price || priceInfo?.purchasePrice || 0;
-        setNotification(`✅ ${scannedName} → база (${price}₽)`);
-        toast.success(`✅ "${scannedName}" сохранён с ценой ${price}₽`, { duration: 2000 });
-      } else if (savedTo === 'queue' || savedTo === 'queue_exists') {
-        setNotification(`📋 ${scannedName || scannedBarcode} → очередь`);
-        toast.info(`📋 "${scannedName || scannedBarcode}" добавлен в очередь`, { duration: 2000 });
+      // Показываем статус (товар добавлен в очередь сохранения)
+      if (savedTo === 'products') {
+        const price = priceInfo?.purchasePrice || purchasePrice || 0;
+        setNotification(`✅ ${scannedName} → сохраняется (${price}₽)`);
+        toast.success(`✅ "${scannedName}" сохраняется в базу`, { duration: 2000 });
       } else {
-        setNotification(`⚠️ ${scannedName || scannedBarcode} - заполните вручную`);
-        toast.warning('Заполните данные вручную', { duration: 2000 });
+        setNotification(`📋 ${scannedName || scannedBarcode} → очередь`);
+        toast.info(`📋 "${scannedName || scannedBarcode}" в очередь`, { duration: 2000 });
       }
       
       onProductFound({
@@ -616,6 +628,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
 
   return (
     <>
+      <SaveQueueIndicator />
+      
       <AlertDialog open={showExistingProductDialog} onOpenChange={setShowExistingProductDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

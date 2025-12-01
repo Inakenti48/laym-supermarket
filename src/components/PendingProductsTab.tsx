@@ -33,25 +33,30 @@ export const PendingProductsTab = () => {
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   // Автоматический перенос товаров с ценами в MySQL (products)
-  const autoTransferProductsWithPrices = useCallback(async (products: PendingProduct[]) => {
-    if (autoTransferRan.current || products.length === 0) return;
-    autoTransferRan.current = true;
+  const autoTransferProductsWithPrices = useCallback(async (products: PendingProduct[], force = false) => {
+    // Если уже запускался автоперенос и это не принудительный вызов - пропускаем
+    if (!force && autoTransferRan.current) return;
+    if (products.length === 0) return;
+    if (isAutoTransferring) return;
     
-    // Находим товары с ценами
+    // Находим товары с ОБЕИМИ ценами (закуп И розница)
     const productsWithPrices = products.filter(p => {
       const purchasePrice = parseFloat(p.purchasePrice) || 0;
       const retailPrice = parseFloat(p.retailPrice) || 0;
+      // Товар должен иметь штрихкод, название и ОБЕ цены > 0
       return p.barcode && p.name && purchasePrice > 0 && retailPrice > 0;
     });
 
     if (productsWithPrices.length === 0) {
-      console.log('📋 Нет товаров с ценами для автопереноса');
+      console.log('📋 Нет товаров с обеими ценами для переноса');
+      if (!force) autoTransferRan.current = true;
       return;
     }
 
-    console.log(`🚀 Автоперенос: найдено ${productsWithPrices.length} товаров с ценами`);
+    autoTransferRan.current = true;
+    console.log(`🚀 Перенос: найдено ${productsWithPrices.length} товаров с ценами (закуп+розница)`);
     setIsAutoTransferring(true);
-    toast.loading(`🚀 Автоперенос ${productsWithPrices.length} товаров в базу...`, { id: 'auto-transfer' });
+    toast.loading(`🚀 Перенос ${productsWithPrices.length} товаров в базу...`, { id: 'auto-transfer' });
 
     const loginUser = await getCurrentLoginUser();
     const userId = loginUser?.id || 'system';
@@ -61,13 +66,18 @@ export const PendingProductsTab = () => {
 
     for (const product of productsWithPrices) {
       try {
+        const purchasePrice = parseFloat(product.purchasePrice);
+        const retailPrice = parseFloat(product.retailPrice);
+        
+        console.log(`📦 Переносим: ${product.name} | Закуп: ${purchasePrice} | Розница: ${retailPrice}`);
+        
         // Добавляем в таблицу products
         await insertProduct({
           barcode: product.barcode,
           name: product.name,
           category: product.category || 'Без категории',
-          purchase_price: parseFloat(product.purchasePrice),
-          sale_price: parseFloat(product.retailPrice),
+          purchase_price: purchasePrice,
+          sale_price: retailPrice,
           quantity: parseFloat(product.quantity) || 1,
           unit: 'шт',
           expiry_date: product.expiryDate || undefined,
@@ -87,9 +97,9 @@ export const PendingProductsTab = () => {
     setIsAutoTransferring(false);
 
     if (successCount > 0) {
-      addLog(`Автоперенос: перенесено ${successCount} товаров в базу`);
+      addLog(`Перенос товаров: ${successCount} в базу (закуп+розница заполнены)`);
       toast.success(
-        `✅ Автоперенос: ${successCount} в базу${errorCount > 0 ? ` | Ошибок: ${errorCount}` : ''}`,
+        `✅ Перенесено: ${successCount} товаров${errorCount > 0 ? ` | Ошибок: ${errorCount}` : ''}`,
         { id: 'auto-transfer', duration: 5000 }
       );
       
@@ -102,7 +112,7 @@ export const PendingProductsTab = () => {
     } else {
       toast.dismiss('auto-transfer');
     }
-  }, [currentPage]);
+  }, [currentPage, isAutoTransferring]);
 
   // Загрузка CSV кэша при монтировании
   useEffect(() => {

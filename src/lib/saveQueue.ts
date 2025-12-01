@@ -19,13 +19,23 @@ interface SaveQueueItem {
   hasPrice: boolean;
   attempts: number;
   lastAttempt: number;
-  status: 'pending' | 'saving' | 'saved' | 'queued';
+  status: 'pending' | 'saving' | 'saved' | 'queued' | 'failed';
   error?: string;
 }
 
+export type { SaveQueueItem };
+
 const STORAGE_KEY = 'product_save_queue';
 const MAX_ATTEMPTS = 10;
-const RETRY_DELAYS = [1000, 2000, 3000, 5000, 8000, 10000, 15000, 20000, 30000, 60000];
+const RETRY_DELAYS = [2000, 3000, 5000, 8000, 10000, 15000, 20000, 30000, 45000, 60000];
+
+// Callback для уведомлений о failed товарах
+type FailedCallback = (item: SaveQueueItem) => void;
+let onFailedCallback: FailedCallback | null = null;
+
+export function setOnFailedCallback(callback: FailedCallback | null) {
+  onFailedCallback = callback;
+}
 
 class ProductSaveQueue {
   private queue: SaveQueueItem[] = [];
@@ -146,6 +156,20 @@ class ProductSaveQueue {
   
   // Обработка одного элемента
   private async processItem(item: SaveQueueItem): Promise<boolean> {
+    // Если уже 10 попыток - помечаем как failed
+    if (item.attempts >= MAX_ATTEMPTS) {
+      item.status = 'failed';
+      item.error = 'Не удалось сохранить после 10 попыток';
+      this.saveToStorage();
+      this.notify();
+      
+      // Вызываем callback для уведомления
+      if (onFailedCallback) {
+        onFailedCallback(item);
+      }
+      return false;
+    }
+    
     item.status = 'saving';
     item.attempts++;
     item.lastAttempt = Date.now();
@@ -175,34 +199,9 @@ class ProductSaveQueue {
           return true;
         }
         
-        // Если много попыток - fallback в очередь pending
-        if (item.attempts >= MAX_ATTEMPTS / 2) {
-          const queueResult = await createPendingProduct({
-            barcode: item.barcode,
-            name: item.name,
-            purchase_price: item.purchase_price,
-            sale_price: item.sale_price,
-            quantity: item.quantity,
-            category: item.category,
-            expiry_date: item.expiry_date,
-            front_photo: item.front_photo_url,
-            barcode_photo: item.barcode_photo_url,
-            image_url: item.front_photo_url,
-            added_by: item.scanned_by
-          });
-          
-          if (queueResult.success) {
-            item.status = 'queued';
-            item.error = 'Сохранён в очередь (ошибка базы)';
-            this.saveToStorage();
-            this.notify();
-            return true;
-          }
-        }
-        
         throw new Error('Insert failed');
       } else {
-        // Без цены - сразу в очередь
+        // Без цены - в очередь pending_products
         const result = await createPendingProduct({
           barcode: item.barcode,
           name: item.name,
@@ -242,17 +241,39 @@ class ProductSaveQueue {
     this.isProcessing = true;
     
     while (true) {
-      // Находим элементы для обработки
+      // Находим элементы для обработки (pending и не превысившие лимит)
       const pending = this.queue.filter(item => 
         item.status === 'pending' && 
         item.attempts < MAX_ATTEMPTS
       );
       
+      // Проверяем элементы которые превысили лимит но ещё pending
+      const overLimit = this.queue.filter(item => 
+        item.status === 'pending' && 
+        item.attempts >= MAX_ATTEMPTS
+      );
+      
+      // Помечаем их как failed
+      for (const item of overLimit) {
+        item.status = 'failed';
+        item.error = 'Не удалось сохранить после 10 попыток';
+        if (onFailedCallback) {
+          onFailedCallback(item);
+        }
+      }
+      
+      if (overLimit.length > 0) {
+        this.saveToStorage();
+        this.notify();
+      }
+      
       if (pending.length === 0) {
-        // Очищаем успешно сохранённые старше 5 минут
+        // Очищаем успешно сохранённые старше 5 минут (но НЕ failed!)
         const fiveMinAgo = Date.now() - 5 * 60 * 1000;
         this.queue = this.queue.filter(item => 
-          (item.status !== 'saved' && item.status !== 'queued') ||
+          item.status === 'failed' || // Не удаляем failed
+          item.status === 'pending' ||
+          item.status === 'saving' ||
           item.lastAttempt > fiveMinAgo
         );
         this.saveToStorage();
@@ -283,6 +304,23 @@ class ProductSaveQueue {
     }
   }
   
+  // Повторить сохранение failed товара
+  retryFailed(id: string) {
+    const item = this.queue.find(i => i.id === id);
+    if (item && item.status === 'failed') {
+      item.status = 'pending';
+      item.attempts = 0;
+      item.error = undefined;
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+  
+  // Получить failed товары
+  getFailedItems(): SaveQueueItem[] {
+    return this.queue.filter(i => i.status === 'failed');
+  }
+  
   // Получить текущее состояние
   getQueue(): SaveQueueItem[] {
     return [...this.queue];
@@ -294,8 +332,9 @@ class ProductSaveQueue {
     const saving = this.queue.filter(i => i.status === 'saving').length;
     const saved = this.queue.filter(i => i.status === 'saved').length;
     const queued = this.queue.filter(i => i.status === 'queued').length;
+    const failed = this.queue.filter(i => i.status === 'failed').length;
     
-    return { pending, saving, saved, queued, total: this.queue.length };
+    return { pending, saving, saved, queued, failed, total: this.queue.length };
   }
   
   // Очистить успешные

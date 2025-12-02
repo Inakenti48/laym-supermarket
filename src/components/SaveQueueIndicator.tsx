@@ -145,40 +145,32 @@ export const SaveQueueIndicator = () => {
         `}
         onClick={() => failedItems.length > 0 && setShowFailedPanel(true)}
       >
-        {failedItems.length > 0 && (
+        {failedItems.length > 0 ? (
           <>
             <AlertTriangle className="h-4 w-4" />
             <span>⚠️ НЕ ЗАНЕСЕНО: {failedItems.length}</span>
           </>
-        )}
-        
-        {failedItems.length === 0 && stats.saving > 0 && (
+        ) : stats.saving > 0 ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Сохраняю: {stats.saving} из {stats.total}</span>
+            <span>💾 {stats.saving}/{stats.total}</span>
           </>
-        )}
-        
-        {failedItems.length === 0 && stats.pending > 0 && stats.saving === 0 && (
+        ) : stats.pending > 0 ? (
           <>
             <Clock className="h-4 w-4" />
-            <span>В очереди: {stats.pending} из {stats.total}</span>
+            <span>⏳ {stats.pending}/{stats.total}</span>
           </>
-        )}
-        
-        {failedItems.length === 0 && allDone && (
+        ) : allDone ? (
           <>
             <CheckCircle className="h-4 w-4" />
-            <span>✓ Сохранено: {stats.saved + stats.queued}</span>
+            <span>✓ {stats.saved + stats.queued}</span>
           </>
-        )}
-        
-        {failedItems.length === 0 && !allDone && stats.pending === 0 && stats.saving === 0 && stats.total > 0 && (
+        ) : stats.total > 0 ? (
           <>
             <Clock className="h-4 w-4" />
-            <span>В очереди: {stats.total} (готово: {stats.saved + stats.queued})</span>
+            <span>📦 {stats.total}</span>
           </>
-        )}
+        ) : null}
       </div>
     </>
   );

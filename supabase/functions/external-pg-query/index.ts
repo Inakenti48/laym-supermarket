@@ -253,6 +253,132 @@ serve(async (req) => {
           result = { success: true, data: cancellations.rows };
           break;
 
+        case 'create_tables':
+          console.log('Creating tables in external PostgreSQL...');
+          
+          // Enable UUID extension
+          await connection.queryObject(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+          
+          // SUPPLIERS
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS suppliers (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              name VARCHAR(255) NOT NULL,
+              phone VARCHAR(50),
+              address TEXT,
+              contact_person VARCHAR(255),
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `);
+          await connection.queryObject(`CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name)`);
+          
+          // PRODUCTS
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS products (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              barcode VARCHAR(100) NOT NULL,
+              name VARCHAR(500) NOT NULL,
+              category VARCHAR(255) DEFAULT '',
+              purchase_price DECIMAL(12, 2) DEFAULT 0,
+              sale_price DECIMAL(12, 2) DEFAULT 0,
+              quantity INTEGER DEFAULT 0,
+              unit VARCHAR(50) DEFAULT 'шт',
+              supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+              expiry_date DATE,
+              photo_url TEXT,
+              created_by VARCHAR(255) DEFAULT 'system',
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              CONSTRAINT products_barcode_unique UNIQUE (barcode)
+            )
+          `);
+          await connection.queryObject(`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`);
+          await connection.queryObject(`CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)`);
+          
+          // PENDING_PRODUCTS
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS pending_products (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              barcode VARCHAR(100) NOT NULL,
+              name VARCHAR(500) NOT NULL,
+              purchase_price DECIMAL(12, 2) DEFAULT 0,
+              sale_price DECIMAL(12, 2) DEFAULT 0,
+              quantity INTEGER DEFAULT 1,
+              category VARCHAR(255),
+              supplier VARCHAR(255),
+              expiry_date DATE,
+              photo_url TEXT,
+              front_photo TEXT,
+              barcode_photo TEXT,
+              added_by VARCHAR(255) DEFAULT 'system',
+              status VARCHAR(20) DEFAULT 'pending',
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              CONSTRAINT pending_products_barcode_unique UNIQUE (barcode)
+            )
+          `);
+          await connection.queryObject(`CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_products(status)`);
+          
+          // EMPLOYEES
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS employees (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              name VARCHAR(255) NOT NULL,
+              role VARCHAR(100) NOT NULL DEFAULT 'employee',
+              phone VARCHAR(50),
+              login VARCHAR(100),
+              password_hash VARCHAR(255),
+              active BOOLEAN DEFAULT true,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              CONSTRAINT employees_login_unique UNIQUE (login)
+            )
+          `);
+          
+          // SALES
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS sales (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              items JSONB NOT NULL DEFAULT '[]',
+              total DECIMAL(12, 2) NOT NULL DEFAULT 0,
+              cashier_name VARCHAR(255) NOT NULL,
+              cashier_role VARCHAR(100) DEFAULT 'cashier',
+              payment_method VARCHAR(50) DEFAULT 'cash',
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `);
+          await connection.queryObject(`CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)`);
+          
+          // SYSTEM_LOGS
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS system_logs (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              action VARCHAR(500) NOT NULL,
+              user_name VARCHAR(255),
+              details TEXT,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `);
+          
+          // CANCELLATION_REQUESTS
+          await connection.queryObject(`
+            CREATE TABLE IF NOT EXISTS cancellation_requests (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              items JSONB NOT NULL DEFAULT '[]',
+              cashier VARCHAR(255) NOT NULL,
+              reason TEXT,
+              status VARCHAR(20) DEFAULT 'pending',
+              processed_by VARCHAR(255),
+              processed_at TIMESTAMP WITH TIME ZONE,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `);
+          
+          console.log('All tables created successfully!');
+          result = { success: true, message: 'All tables created successfully' };
+          break;
+
         default:
           result = { success: false, error: `Unknown action: ${action}` };
       }

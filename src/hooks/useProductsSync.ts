@@ -1,10 +1,11 @@
-// MySQL версия синхронизации продуктов
+// Unified Database версия синхронизации продуктов
 import { useState, useEffect, useCallback } from 'react';
-import { getAllProducts, Product } from '@/lib/mysqlDatabase';
+import { getAllProducts, UnifiedProduct, getDatabaseMode } from '@/lib/unifiedDatabase';
 import { StoredProduct } from '@/lib/storage';
+import { useDatabaseMode } from './useDatabaseMode';
 
-// Конвертация MySQL Product в StoredProduct
-const convertToStoredProduct = (p: Product): StoredProduct => ({
+// Конвертация UnifiedProduct в StoredProduct
+const convertToStoredProduct = (p: UnifiedProduct): StoredProduct => ({
   id: p.id,
   barcode: p.barcode,
   name: p.name,
@@ -12,7 +13,7 @@ const convertToStoredProduct = (p: Product): StoredProduct => ({
   purchasePrice: Number(p.purchase_price) || 0,
   retailPrice: Number(p.sale_price) || 0,
   quantity: Number(p.quantity) || 0,
-  unit: 'шт',
+  unit: 'шт' as const,
   expiryDate: p.expiry_date,
   photos: [],
   paymentType: 'full',
@@ -28,25 +29,31 @@ export function useProductsSync() {
   const [products, setProducts] = useState<StoredProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { mode } = useDatabaseMode();
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const mysqlProducts = await getAllProducts();
-      setProducts(mysqlProducts.map(convertToStoredProduct));
+      console.log(`🔄 Загрузка товаров из ${mode.toUpperCase()}...`);
+      const unifiedProducts = await getAllProducts();
+      setProducts(unifiedProducts.map(convertToStoredProduct));
+      console.log(`✅ Загружено ${unifiedProducts.length} товаров из ${mode.toUpperCase()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки');
+      const message = err instanceof Error ? err.message : 'Ошибка загрузки';
+      setError(message);
+      console.error(`❌ Ошибка загрузки из ${mode}:`, err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
 
+  // Перезагружаем при изменении режима БД
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, mode]);
 
-  return { products, loading, error, refresh, refetch: refresh };
+  return { products, loading, error, refresh, refetch: refresh, mode };
 }
 
 // Алиасы для обратной совместимости

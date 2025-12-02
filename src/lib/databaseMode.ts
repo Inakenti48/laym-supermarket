@@ -1,11 +1,13 @@
 // Управление режимом базы данных
-export type DatabaseMode = 'mysql' | 'postgresql';
+export type DatabaseMode = 'mysql' | 'postgresql' | 'external_pg';
 
 const STORAGE_KEY = 'database_mode';
 
 export const getDatabaseMode = (): DatabaseMode => {
   const stored = localStorage.getItem(STORAGE_KEY);
-  return (stored === 'postgresql' ? 'postgresql' : 'mysql') as DatabaseMode;
+  if (stored === 'postgresql') return 'postgresql';
+  if (stored === 'external_pg') return 'external_pg';
+  return 'mysql';
 };
 
 export const setDatabaseMode = (mode: DatabaseMode): void => {
@@ -19,4 +21,12 @@ export const subscribeToDatabaseMode = (callback: (mode: DatabaseMode) => void):
   };
   window.addEventListener('database-mode-changed', handler);
   return () => window.removeEventListener('database-mode-changed', handler);
+};
+
+export const getDatabaseLabel = (mode: DatabaseMode): string => {
+  switch (mode) {
+    case 'mysql': return 'MySQL';
+    case 'postgresql': return 'Cloud PG';
+    case 'external_pg': return 'External PG';
+  }
 };

@@ -170,11 +170,11 @@ export const DashboardTab = () => {
     },
     {
       title: 'В очереди',
-      value: queueCount.toString(),
+      value: pendingProducts.length.toString(),
       description: 'Товаров ожидают проверки',
       icon: Bell,
-      color: queueCount > 0 ? 'text-warning' : 'text-muted-foreground',
-      highlight: queueCount > 0
+      color: pendingProducts.length > 0 ? 'text-warning' : 'text-muted-foreground',
+      highlight: pendingProducts.length > 0
     },
     {
       title: 'Продажи сегодня',

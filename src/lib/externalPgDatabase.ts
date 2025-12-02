@@ -6,9 +6,10 @@ interface ExternalPGResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  message?: string;
 }
 
-const DEFAULT_TIMEOUT = 10000;
+const DEFAULT_TIMEOUT = 30000; // 30 sec for table creation
 const MAX_RETRIES = 2;
 
 export async function externalPgRequest<T = unknown>(
@@ -57,6 +58,17 @@ export async function externalPgRequest<T = unknown>(
   }
   
   return { success: false, error: 'Все попытки исчерпаны' };
+}
+
+// === CREATE TABLES ===
+
+export async function createTables(): Promise<{ success: boolean; message?: string; error?: string }> {
+  const result = await externalPgRequest<{ message: string }>('create_tables', {}, 60000);
+  return { 
+    success: result.success, 
+    message: result.message || result.data?.message,
+    error: result.error 
+  };
 }
 
 // === PRODUCTS ===

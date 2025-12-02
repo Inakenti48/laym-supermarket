@@ -325,7 +325,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         return;
       }
       
-      // КРИТИЧНО: Режим двух фото - ТОЛЬКО захват, БЕЗ распознавания
+      // Режим двух фото - ТОЛЬКО захват, БЕЗ распознавания (до 2 фото)
       if (mode === 'dual') {
         if (!tempFrontPhoto) {
           // Шаг 1: Захватываем ЛИЦЕВУЮ сторону
@@ -334,6 +334,8 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           setNotification('✅ Фото 1/2 - лицевая');
           toast.success('📸 Лицевая сторона захвачена. Теперь снимите штрихкод', { position: 'top-center' });
           setTimeout(() => setNotification(''), 1500);
+          setIsProcessing(false);
+          return;
         } else if (!tempBarcodePhoto) {
           // Шаг 2: Захватываем ШТРИХКОД и АВТОМАТИЧЕСКИ запускаем распознавание
           const barcodeImg = image;
@@ -350,17 +352,116 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
           }, 50);
           return;
         } else {
-          // Если оба фото уже есть, игнорируем
-          toast.warning('Обе фотографии уже захвачены', { position: 'top-center' });
+          // Если оба фото уже есть, повторно запускаем распознавание
+          toast.info('Запускаю распознавание...', { position: 'top-center' });
           setIsProcessing(false);
+          setTimeout(() => {
+            handleAIScanWithPhotos(tempFrontPhoto, tempBarcodePhoto);
+          }, 50);
+          return;
         }
+      }
+      
+      // Режимы product, barcode, expiry - одно фото, сразу распознаём
+      if (mode === 'expiry') {
+        // Режим распознавания срока годности
+        setNotification('📅 Распознаю даты...');
+        setIsProcessing(true);
+        
+        try {
+          const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/recognize-expiry-date`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: image })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Ошибка: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.success && (result.expiryDate || result.manufacturingDate)) {
+            setNotification('✅ Даты распознаны');
+            toast.success(`Дата изготовления: ${result.manufacturingDate || 'не найдена'}, Срок годности: ${result.expiryDate || 'не найден'}`, { duration: 4000 });
+            
+            onProductFound({
+              barcode: '',
+              expiryDate: result.expiryDate,
+              manufacturingDate: result.manufacturingDate
+            });
+          } else {
+            setNotification('❌ Даты не найдены');
+            toast.error('Не удалось распознать даты на изображении', { position: 'top-center' });
+          }
+        } catch (err: any) {
+          console.error('Ошибка распознавания дат:', err);
+          setNotification('❌ Ошибка');
+          toast.error('Ошибка распознавания срока годности', { position: 'top-center' });
+        }
+        
+        setTimeout(() => setNotification(''), 2000);
+        setIsProcessing(false);
         return;
       }
       
-      // Другие режимы - используйте AI dual режим
-      setNotification('⚠️ Используйте AI режим');
-      toast.warning('Используйте AI сканирование (режим dual)', { position: 'top-center' });
-      setTimeout(() => setNotification(''), 1500);
+      // Режимы product и barcode - одно фото для AI распознавания
+      setNotification('⚡ AI распознавание...');
+      
+      const deviceId = localStorage.getItem('device_id') || `device-${Date.now()}`;
+      const userName = localStorage.getItem('login_user_name') || 'Устройство';
+      
+      try {
+        const compressedImage = await compressForAI(image);
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frontPhoto: compressedImage,
+            barcodePhoto: mode === 'barcode' ? compressedImage : null,
+            deviceId,
+            userName
+          })
+        });
+        
+        if (!response.ok) {
+          if (response.status === 429) {
+            toast.error('⚠️ Превышен лимит запросов', { position: 'top-center' });
+            throw new Error('rate_limit');
+          }
+          throw new Error(`Ошибка: ${response.status}`);
+        }
+        
+        const aiResult = await response.json();
+        
+        if (aiResult.barcode || aiResult.name) {
+          setNotification(`✅ ${aiResult.name || aiResult.barcode}`);
+          toast.success(`Распознано: ${aiResult.name || aiResult.barcode}`, { duration: 3000 });
+          
+          onProductFound({
+            barcode: aiResult.barcode || '',
+            name: aiResult.name,
+            category: aiResult.category,
+            capturedImage: image
+          });
+        } else {
+          setNotification('❌ Не распознано');
+          toast.error('Не удалось распознать товар', { position: 'top-center' });
+        }
+      } catch (err: any) {
+        console.error('Ошибка AI распознавания:', err);
+        if (!err.message?.includes('rate_limit')) {
+          setNotification('❌ Ошибка');
+          toast.error('Ошибка распознавания', { position: 'top-center' });
+        }
+      }
+      
+      setTimeout(() => setNotification(''), 2000);
+      setIsProcessing(false);
+      
     } catch (err: any) {
       if (err.message?.includes('rate_limit') || err.message?.includes('429')) {
         toast.error('Слишком много запросов', { position: 'top-center' });
@@ -368,7 +469,6 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         toast.error('Требуется пополнить баланс', { position: 'top-center' });
       }
       setNotification('');
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -793,7 +893,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 </div>
               )}
               
-              {/* Кнопка захвата фото */}
+              {/* Кнопка захвата фото - режим dual */}
               {mode === 'dual' && dualPhotoStep !== 'ready' && (
                 <Button
                   onClick={handleManualCapture}
@@ -843,16 +943,16 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
                 </div>
               )}
               
-              {/* Кнопка для других режимов */}
+              {/* Кнопка для режимов product, barcode, expiry */}
               {mode !== 'dual' && (
                 <Button
                   onClick={handleManualCapture}
                   size="lg"
-                  className="rounded-full shadow-lg w-full"
-                  disabled={!cameraReady}
+                  className="rounded-full shadow-lg w-full h-11 sm:h-12 text-sm sm:text-base"
+                  disabled={!cameraReady || isProcessing}
                 >
-                  <Camera className="h-5 w-5 mr-2" />
-                  Сфотографировать
+                  <Camera className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  {isProcessing ? 'Распознаю...' : mode === 'expiry' ? '📅 Распознать даты' : mode === 'barcode' ? '📷 Сканировать штрихкод' : '📷 Распознать товар'}
                 </Button>
               )}
             </div>

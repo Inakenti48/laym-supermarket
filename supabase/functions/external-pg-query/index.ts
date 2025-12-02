@@ -17,8 +17,10 @@ function getPool(): Pool {
     const user = Deno.env.get('EXTERNAL_PG_USER');
     const password = Deno.env.get('EXTERNAL_PG_PASSWORD');
 
+    console.log(`🔧 External PG Config: host=${host}, port=${port}, database=${database}, user=${user}`);
+
     if (!host || !database || !user || !password) {
-      throw new Error('Missing external PostgreSQL configuration');
+      throw new Error(`Missing external PostgreSQL configuration: host=${!!host}, db=${!!database}, user=${!!user}, pass=${!!password}`);
     }
 
     pool = new Pool({

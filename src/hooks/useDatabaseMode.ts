@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DatabaseMode, getDatabaseMode, setDatabaseMode, subscribeToDatabaseMode } from '@/lib/databaseMode';
+import { DatabaseMode, getDatabaseMode, setDatabaseMode, subscribeToDatabaseMode, getDatabaseLabel } from '@/lib/databaseMode';
 
 export function useDatabaseMode() {
   const [mode, setMode] = useState<DatabaseMode>(getDatabaseMode);
@@ -10,7 +10,9 @@ export function useDatabaseMode() {
   }, []);
 
   const toggleMode = () => {
-    const newMode: DatabaseMode = mode === 'mysql' ? 'postgresql' : 'mysql';
+    const modes: DatabaseMode[] = ['mysql', 'postgresql', 'external_pg'];
+    const currentIndex = modes.indexOf(mode);
+    const newMode = modes[(currentIndex + 1) % modes.length];
     setDatabaseMode(newMode);
   };
 
@@ -18,5 +20,13 @@ export function useDatabaseMode() {
     setDatabaseMode(newMode);
   };
 
-  return { mode, toggleMode, switchTo, isMySQL: mode === 'mysql', isPostgreSQL: mode === 'postgresql' };
+  return { 
+    mode, 
+    toggleMode, 
+    switchTo, 
+    label: getDatabaseLabel(mode),
+    isMySQL: mode === 'mysql', 
+    isPostgreSQL: mode === 'postgresql',
+    isExternalPG: mode === 'external_pg'
+  };
 }

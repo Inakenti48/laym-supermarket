@@ -1,7 +1,8 @@
-// Unified Database Layer - переключение между MySQL и PostgreSQL
+// Unified Database Layer - переключение между MySQL, PostgreSQL и External PG
 import { getDatabaseMode } from './databaseMode';
 import { supabase } from '@/integrations/supabase/client';
 import * as mysql from './mysqlDatabase';
+import * as externalPg from './externalPgDatabase';
 
 // === PRODUCTS ===
 
@@ -28,7 +29,11 @@ export async function getAllProducts(): Promise<UnifiedProduct[]> {
     return mysql.getAllProducts();
   }
   
-  // PostgreSQL
+  if (mode === 'external_pg') {
+    return externalPg.getAllProducts();
+  }
+  
+  // PostgreSQL (Cloud)
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -63,6 +68,10 @@ export async function getProductByBarcode(barcode: string): Promise<UnifiedProdu
     return mysql.getProductByBarcode(barcode);
   }
   
+  if (mode === 'external_pg') {
+    return externalPg.getProductByBarcode(barcode);
+  }
+  
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -95,6 +104,10 @@ export async function insertProduct(product: Omit<UnifiedProduct, 'id' | 'create
     return mysql.insertProduct(product);
   }
   
+  if (mode === 'external_pg') {
+    return externalPg.insertProduct(product);
+  }
+  
   const { data, error } = await supabase
     .from('products')
     .insert({
@@ -122,6 +135,10 @@ export async function updateProduct(barcode: string, updates: Partial<UnifiedPro
     return mysql.updateProduct(barcode, updates);
   }
   
+  if (mode === 'external_pg') {
+    return externalPg.updateProduct(barcode, updates);
+  }
+  
   const { error } = await supabase
     .from('products')
     .update({
@@ -144,6 +161,10 @@ export async function deleteProduct(barcode: string): Promise<boolean> {
   
   if (mode === 'mysql') {
     return mysql.deleteProduct(barcode);
+  }
+  
+  if (mode === 'external_pg') {
+    return externalPg.deleteProduct(barcode);
   }
   
   const { error } = await supabase
@@ -172,6 +193,10 @@ export async function getAllSuppliers(): Promise<UnifiedSupplier[]> {
     return mysql.getAllSuppliers();
   }
   
+  if (mode === 'external_pg') {
+    return externalPg.getAllSuppliers();
+  }
+  
   const { data, error } = await supabase
     .from('suppliers')
     .select('*')
@@ -194,6 +219,10 @@ export async function insertSupplier(supplier: Omit<UnifiedSupplier, 'id' | 'cre
   
   if (mode === 'mysql') {
     return mysql.insertSupplier(supplier);
+  }
+  
+  if (mode === 'external_pg') {
+    return externalPg.insertSupplier(supplier);
   }
   
   const { data, error } = await supabase
@@ -236,6 +265,18 @@ export async function getAllSales(): Promise<UnifiedSale[]> {
     }));
   }
   
+  if (mode === 'external_pg') {
+    const sales = await externalPg.getAllSales();
+    return sales.map(s => ({
+      id: s.id,
+      items: typeof s.items === 'string' ? JSON.parse(s.items) : (s.items || []),
+      total: s.total,
+      cashier_name: s.cashier_name,
+      payment_method: s.payment_method,
+      created_at: s.created_at
+    }));
+  }
+  
   const { data, error } = await supabase
     .from('sales')
     .select('*')
@@ -257,7 +298,6 @@ export async function insertSale(sale: Omit<UnifiedSale, 'id' | 'created_at'>): 
   const mode = getDatabaseMode();
   
   if (mode === 'mysql') {
-    // MySQL expects single item sales
     const item = sale.items[0];
     if (!item) return { success: false };
     
@@ -270,6 +310,10 @@ export async function insertSale(sale: Omit<UnifiedSale, 'id' | 'created_at'>): 
       cashier: sale.cashier_name,
       payment_method: sale.payment_method
     });
+  }
+  
+  if (mode === 'external_pg') {
+    return externalPg.insertSale(sale);
   }
   
   const { data, error } = await supabase
@@ -315,6 +359,19 @@ export async function getAllEmployees(): Promise<UnifiedEmployee[]> {
     }));
   }
   
+  if (mode === 'external_pg') {
+    const employees = await externalPg.getAllEmployees();
+    return employees.map(e => ({
+      id: e.id,
+      name: e.name,
+      role: e.role,
+      phone: e.phone,
+      login: e.login,
+      active: e.active,
+      created_at: e.created_at
+    }));
+  }
+  
   const { data, error } = await supabase
     .from('employees')
     .select('*')
@@ -340,6 +397,7 @@ export async function insertEmployee(employee: Omit<UnifiedEmployee, 'id' | 'cre
     return mysql.insertEmployee(employee);
   }
   
+  // External PG and Cloud PG use same Supabase structure
   const { data, error } = await supabase
     .from('employees')
     .insert({
@@ -360,6 +418,10 @@ export async function getAllLogs(): Promise<mysql.SystemLog[]> {
   
   if (mode === 'mysql') {
     return mysql.getAllLogs();
+  }
+  
+  if (mode === 'external_pg') {
+    return externalPg.getAllLogs();
   }
   
   const { data, error } = await supabase
@@ -384,6 +446,10 @@ export async function insertLog(action: string, userName?: string, details?: str
   
   if (mode === 'mysql') {
     return mysql.insertLog(action, userName, details);
+  }
+  
+  if (mode === 'external_pg') {
+    return externalPg.insertLog(action, userName, details);
   }
   
   const { error } = await supabase
@@ -424,6 +490,14 @@ export async function getPendingProducts(): Promise<UnifiedPendingProduct[]> {
     return mysql.getPendingProducts();
   }
   
+  if (mode === 'external_pg') {
+    const pending = await externalPg.getPendingProducts();
+    return pending.map(p => ({
+      ...p,
+      image_url: p.photo_url
+    }));
+  }
+  
   const { data, error } = await supabase
     .from('vremenno_product_foto')
     .select('*')
@@ -458,6 +532,10 @@ export async function createPendingProduct(product: Omit<UnifiedPendingProduct, 
     return mysql.createPendingProduct(product);
   }
   
+  if (mode === 'external_pg') {
+    return externalPg.createPendingProduct(product);
+  }
+  
   const { data, error } = await supabase
     .from('vremenno_product_foto')
     .insert({
@@ -488,7 +566,10 @@ export async function approvePendingProduct(id: string): Promise<boolean> {
     return mysql.approvePendingProduct(id);
   }
   
-  // PostgreSQL - удаляем из очереди после одобрения (товар переносится в products)
+  if (mode === 'external_pg') {
+    return externalPg.approvePendingProduct(id);
+  }
+  
   const { error } = await supabase
     .from('vremenno_product_foto')
     .delete()
@@ -504,7 +585,10 @@ export async function rejectPendingProduct(id: string): Promise<boolean> {
     return mysql.rejectPendingProduct(id);
   }
   
-  // PostgreSQL - удаляем отклонённый товар
+  if (mode === 'external_pg') {
+    return externalPg.rejectPendingProduct(id);
+  }
+  
   const { error } = await supabase
     .from('vremenno_product_foto')
     .delete()
@@ -520,6 +604,17 @@ export async function getCancellationRequests(): Promise<mysql.CancellationReque
   
   if (mode === 'mysql') {
     return mysql.getCancellationRequests();
+  }
+  
+  if (mode === 'external_pg') {
+    const cancellations = await externalPg.getCancellationRequests();
+    return cancellations.map(c => ({
+      id: c.id,
+      items: typeof c.items === 'string' ? JSON.parse(c.items) : (c.items || []),
+      cashier: c.cashier,
+      status: c.status,
+      created_at: c.created_at
+    }));
   }
   
   const { data, error } = await supabase
@@ -542,13 +637,14 @@ export async function getCancellationRequests(): Promise<mysql.CancellationReque
 
 // === TEST CONNECTION ===
 
-export async function testConnection(): Promise<{ mysql: boolean; postgresql: boolean }> {
+export async function testConnection(): Promise<{ mysql: boolean; postgresql: boolean; external_pg: boolean }> {
   const mysqlOk = await mysql.testConnection();
+  const externalPgOk = await externalPg.testConnection();
   
   const { error } = await supabase.from('products').select('id').limit(1);
   const pgOk = !error;
   
-  return { mysql: mysqlOk, postgresql: pgOk };
+  return { mysql: mysqlOk, postgresql: pgOk, external_pg: externalPgOk };
 }
 
 // Получить текущий режим БД

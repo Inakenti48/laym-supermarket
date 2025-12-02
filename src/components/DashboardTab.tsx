@@ -12,6 +12,7 @@ import { useAdminNotifications } from '@/hooks/useAdminNotifications';
 import { Badge } from '@/components/ui/badge';
 import { mysqlRequest, PendingProduct as MySQLPendingProduct } from '@/lib/mysqlDatabase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DatabaseModeSwitch } from './DatabaseModeSwitch';
 
 export const DashboardTab = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -21,21 +22,20 @@ export const DashboardTab = () => {
   const [pendingProducts, setPendingProducts] = useState<MySQLPendingProduct[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   
-  // MySQL realtime синхронизация товаров
-  const { products: firebaseProducts, loading: firebaseLoading, refetch } = useProductsSync();
+  // Unified Database синхронизация товаров (MySQL или PostgreSQL)
+  const { products: firebaseProducts, loading: firebaseLoading, refetch, mode: dbMode } = useProductsSync();
   
   // Уведомления о новых товарах в очереди (для админа)
   const { queueCount, newItems } = useAdminNotifications();
 
-  // Загрузка товаров из очереди
+  // Загрузка товаров из очереди (из unified database)
   const loadPendingProducts = async () => {
     setPendingLoading(true);
     try {
-      const result = await mysqlRequest<MySQLPendingProduct[]>('get_pending_products');
-      if (result.success && result.data) {
-        setPendingProducts(result.data);
-        console.log(`📋 Товаров в очереди: ${result.data.length}`);
-      }
+      const { getPendingProducts } = await import('@/lib/unifiedDatabase');
+      const data = await getPendingProducts();
+      setPendingProducts(data as unknown as MySQLPendingProduct[]);
+      console.log(`📋 Товаров в очереди (${dbMode}): ${data.length}`);
     } catch (error) {
       console.error('Ошибка загрузки очереди:', error);
     } finally {
@@ -43,17 +43,17 @@ export const DashboardTab = () => {
     }
   };
 
-  // Загружаем pending при монтировании и при обновлении
+  // Загружаем pending при монтировании, обновлении и смене режима БД
   useEffect(() => {
     loadPendingProducts();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, dbMode]);
 
   // Логирование количества товаров для дебага
   useEffect(() => {
     if (!firebaseLoading) {
-      console.log(`📦 MySQL товаров загружено: ${firebaseProducts.length}`);
+      console.log(`📦 Товаров загружено из ${dbMode.toUpperCase()}: ${firebaseProducts.length}`);
     }
-  }, [firebaseProducts.length, firebaseLoading]);
+  }, [firebaseProducts.length, firebaseLoading, dbMode]);
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -214,7 +214,7 @@ export const DashboardTab = () => {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Панель управления</h2>
           <p className="text-muted-foreground mt-2">
-            Обзор ключевых показателей вашего бизнеса
+            Обзор ключевых показателей • <span className="font-medium text-primary">{dbMode === 'mysql' ? 'MySQL' : 'PostgreSQL'}</span>
           </p>
           {lastUpdate && !connectionError && (
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -224,6 +224,7 @@ export const DashboardTab = () => {
           )}
         </div>
         <div className="flex gap-2">
+          <DatabaseModeSwitch />
           <Button 
             onClick={handleManualRefresh} 
             variant="outline" 

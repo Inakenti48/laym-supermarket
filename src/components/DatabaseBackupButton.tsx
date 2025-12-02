@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Database, Loader2 } from "lucide-react";
+import { Download, Upload, Database, Loader2, ArrowRightLeft } from "lucide-react";
 import { exportAllDatabaseData, exportDatabaseAsSQL, importDatabaseFromJSON } from "@/lib/databaseBackup";
+import { migrateAllToPostgres } from "@/lib/databaseMigration";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +13,7 @@ import {
 
 export const DatabaseBackupButton = () => {
   const [importing, setImporting] = useState(false);
+  const [migrating, setMigrating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportClick = () => {
@@ -27,12 +29,26 @@ export const DatabaseBackupButton = () => {
       await importDatabaseFromJSON(file);
     } finally {
       setImporting(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
+
+  const handleMigrateToPostgres = async () => {
+    if (!confirm('Скопировать все данные из MySQL в PostgreSQL? Существующие данные в PostgreSQL будут обновлены.')) {
+      return;
+    }
+    
+    setMigrating(true);
+    try {
+      await migrateAllToPostgres();
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const isLoading = importing || migrating;
 
   return (
     <>
@@ -45,13 +61,13 @@ export const DatabaseBackupButton = () => {
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={importing}>
-            {importing ? (
+          <Button variant="outline" size="sm" disabled={isLoading}>
+            {isLoading ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Database className="h-4 w-4 mr-2" />
             )}
-            {importing ? "Импорт..." : "База данных"}
+            {migrating ? "Миграция..." : importing ? "Импорт..." : "База данных"}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -67,6 +83,11 @@ export const DatabaseBackupButton = () => {
           <DropdownMenuItem onClick={handleImportClick}>
             <Upload className="h-4 w-4 mr-2" />
             Импорт из JSON
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleMigrateToPostgres}>
+            <ArrowRightLeft className="h-4 w-4 mr-2" />
+            MySQL → PostgreSQL
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

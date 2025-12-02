@@ -156,27 +156,30 @@ export const SaveQueueIndicator = () => {
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Сохраняю {stats.saving}...</span>
+            {stats.pending > 0 && <span className="text-xs opacity-80 ml-1">(+{stats.pending})</span>}
           </>
         )}
         
         {failedItems.length === 0 && stats.pending > 0 && stats.saving === 0 && (
           <>
             <Clock className="h-4 w-4" />
-            <span>Ожидает: {stats.pending}</span>
+            <span>В очереди: {stats.pending}</span>
           </>
         )}
         
-        {failedItems.length === 0 && allDone && (
+        {failedItems.length === 0 && !hasActive && stats.queued > 0 && (
+          <>
+            <Clock className="h-4 w-4" />
+            <span>📋 На обработке: {stats.queued}</span>
+            {stats.saved > 0 && <span className="text-xs opacity-80 ml-1">(сохранено: {stats.saved})</span>}
+          </>
+        )}
+        
+        {failedItems.length === 0 && allDone && stats.queued === 0 && (
           <>
             <CheckCircle className="h-4 w-4" />
-            <span>✓ Сохранено: {stats.saved + stats.queued}</span>
+            <span>✓ Сохранено: {stats.saved}</span>
           </>
-        )}
-        
-        {(stats.saved > 0 || stats.queued > 0) && !allDone && failedItems.length === 0 && (
-          <span className="text-xs opacity-80 ml-1">
-            (готово: {stats.saved + stats.queued})
-          </span>
         )}
       </div>
     </>

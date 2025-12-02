@@ -1,14 +1,17 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Database, Loader2, ArrowRightLeft } from "lucide-react";
+import { Download, Upload, Database, Loader2, ArrowRightLeft, ArrowRight } from "lucide-react";
 import { exportAllDatabaseData, exportDatabaseAsSQL, importDatabaseFromJSON } from "@/lib/databaseBackup";
-import { migrateAllToPostgres } from "@/lib/databaseMigration";
+import { migrateAllToPostgres, migrateToExternalPG, migrateCloudToExternalPG } from "@/lib/databaseMigration";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 
 export const DatabaseBackupButton = () => {
@@ -35,14 +38,34 @@ export const DatabaseBackupButton = () => {
     }
   };
 
-  const handleMigrateToPostgres = async () => {
-    if (!confirm('Скопировать все данные из MySQL в PostgreSQL? Существующие данные в PostgreSQL будут обновлены.')) {
-      return;
-    }
+  const handleMigrateToCloudPG = async () => {
+    if (!confirm('Скопировать все данные из MySQL в Cloud PostgreSQL?')) return;
     
     setMigrating(true);
     try {
       await migrateAllToPostgres();
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleMigrateToExternalPG = async () => {
+    if (!confirm('Скопировать все данные из MySQL в External PostgreSQL? Убедитесь что таблицы созданы.')) return;
+    
+    setMigrating(true);
+    try {
+      await migrateToExternalPG();
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleMigrateCloudToExternal = async () => {
+    if (!confirm('Скопировать все данные из Cloud PG в External PostgreSQL?')) return;
+    
+    setMigrating(true);
+    try {
+      await migrateCloudToExternalPG();
     } finally {
       setMigrating(false);
     }
@@ -70,7 +93,7 @@ export const DatabaseBackupButton = () => {
             {migrating ? "Миграция..." : importing ? "Импорт..." : "База данных"}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onClick={exportAllDatabaseData}>
             <Download className="h-4 w-4 mr-2" />
             Экспорт в JSON
@@ -85,10 +108,26 @@ export const DatabaseBackupButton = () => {
             Импорт из JSON
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleMigrateToPostgres}>
-            <ArrowRightLeft className="h-4 w-4 mr-2" />
-            MySQL → PostgreSQL
-          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Миграция данных
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={handleMigrateToCloudPG}>
+                <ArrowRight className="h-4 w-4 mr-2" />
+                MySQL → Cloud PG
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleMigrateToExternalPG}>
+                <ArrowRight className="h-4 w-4 mr-2" />
+                MySQL → External PG
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleMigrateCloudToExternal}>
+                <ArrowRight className="h-4 w-4 mr-2" />
+                Cloud PG → External PG
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         </DropdownMenuContent>
       </DropdownMenu>
     </>

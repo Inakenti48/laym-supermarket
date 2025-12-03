@@ -26,8 +26,8 @@ interface SaveQueueItem {
 export type { SaveQueueItem };
 
 const STORAGE_KEY = 'product_save_queue';
-const MAX_ATTEMPTS = 10;
-const RETRY_DELAYS = [2000, 3000, 5000, 8000, 10000, 15000, 20000, 30000, 45000, 60000];
+const MAX_ATTEMPTS = 5;
+const RETRY_DELAYS = [500, 1000, 2000, 3000, 5000]; // Ускоренные задержки
 
 // Callback для уведомлений о failed товарах
 type FailedCallback = (item: SaveQueueItem) => void;
@@ -156,10 +156,10 @@ class ProductSaveQueue {
   
   // Обработка одного элемента
   private async processItem(item: SaveQueueItem): Promise<boolean> {
-    // Если уже 10 попыток - помечаем как failed
+    // Если уже 5 попыток - помечаем как failed
     if (item.attempts >= MAX_ATTEMPTS) {
       item.status = 'failed';
-      item.error = 'Не удалось сохранить после 10 попыток';
+      item.error = 'Не удалось сохранить после 5 попыток';
       this.saveToStorage();
       this.notify();
       
@@ -256,7 +256,7 @@ class ProductSaveQueue {
       // Помечаем их как failed
       for (const item of overLimit) {
         item.status = 'failed';
-        item.error = 'Не удалось сохранить после 10 попыток';
+        item.error = 'Не удалось сохранить после 5 попыток';
         if (onFailedCallback) {
           onFailedCallback(item);
         }
@@ -284,23 +284,24 @@ class ProductSaveQueue {
         continue;
       }
       
-      // Обрабатываем до 3 элементов параллельно
-      const batch = pending.slice(0, 3);
+      // Обрабатываем до 8 элементов параллельно для скорости
+      const batch = pending.slice(0, 8);
       
       await Promise.all(batch.map(async (item) => {
-        // Задержка на основе количества попыток
-        const delay = RETRY_DELAYS[Math.min(item.attempts, RETRY_DELAYS.length - 1)];
-        const timeSinceLastAttempt = Date.now() - item.lastAttempt;
-        
-        if (timeSinceLastAttempt < delay) {
-          await new Promise(r => setTimeout(r, delay - timeSinceLastAttempt));
+        // Быстрая задержка только при повторных попытках
+        if (item.attempts > 0) {
+          const delay = RETRY_DELAYS[Math.min(item.attempts - 1, RETRY_DELAYS.length - 1)];
+          const timeSinceLastAttempt = Date.now() - item.lastAttempt;
+          if (timeSinceLastAttempt < delay) {
+            await new Promise(r => setTimeout(r, delay - timeSinceLastAttempt));
+          }
         }
         
         await this.processItem(item);
       }));
       
-      // Небольшая пауза между batch'ами
-      await new Promise(r => setTimeout(r, 500));
+      // Минимальная пауза между batch'ами
+      await new Promise(r => setTimeout(r, 100));
     }
   }
   

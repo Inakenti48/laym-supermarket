@@ -3,7 +3,7 @@ import { Camera, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { SaveQueueIndicator } from '@/components/SaveQueueIndicator';
-// AI распознавание через Gemini
+// OCR распознавание через OCR.space API
 import { compressForAI } from '@/lib/imageCompression';
 import { retryOperation } from '@/lib/retryUtils';
 import { initPriceCache, findPriceByBarcode, findPriceByName, getCacheSize } from '@/lib/localPriceCache';
@@ -416,7 +416,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
         const compressedImage = await compressForAI(image);
         const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
         
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ocr-scan-product`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -499,7 +499,7 @@ export const AIProductRecognition = ({ onProductFound, mode = 'product', hidden 
       
       let response: Response;
       try {
-        response = await fetch(`${SUPABASE_URL}/functions/v1/fast-scan-product`, {
+        response = await fetch(`${SUPABASE_URL}/functions/v1/ocr-scan-product`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

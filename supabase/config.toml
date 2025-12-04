@@ -49,3 +49,6 @@ verify_jwt = false
 
 [functions.external-pg-query]
 verify_jwt = false
+
+[functions.ocr-scan-product]
+verify_jwt = false

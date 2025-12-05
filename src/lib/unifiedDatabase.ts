@@ -1,8 +1,14 @@
-// Unified Database Layer - переключение между MySQL, PostgreSQL и External PG
+// Unified Database Layer - MySQL с fallback на локальный кэш CSV
 import { getDatabaseMode } from './databaseMode';
 import { supabase } from '@/integrations/supabase/client';
 import * as mysql from './mysqlDatabase';
 import * as externalPg from './externalPgDatabase';
+import { initPriceCache, getAllCachedProducts, findPriceByBarcode } from './localPriceCache';
+
+// Флаг доступности MySQL
+let mysqlAvailable = true;
+let lastMysqlCheck = 0;
+const MYSQL_CHECK_INTERVAL = 60000; // Проверять каждую минуту
 
 // === PRODUCTS ===
 
@@ -26,7 +32,24 @@ export async function getAllProducts(): Promise<UnifiedProduct[]> {
   const mode = getDatabaseMode();
   
   if (mode === 'mysql') {
-    return mysql.getAllProducts();
+    // Проверяем, прошло ли время для повторной попытки MySQL
+    const now = Date.now();
+    if (!mysqlAvailable && (now - lastMysqlCheck) < MYSQL_CHECK_INTERVAL) {
+      console.log('🔄 MySQL недоступен, используем локальный кэш CSV');
+      return getProductsFromLocalCache();
+    }
+    
+    try {
+      const products = await mysql.getAllProducts();
+      mysqlAvailable = true;
+      return products;
+    } catch (error: any) {
+      console.error('❌ MySQL недоступен:', error.message);
+      mysqlAvailable = false;
+      lastMysqlCheck = now;
+      // Fallback на локальный кэш
+      return getProductsFromLocalCache();
+    }
   }
   
   if (mode === 'external_pg') {
@@ -58,6 +81,23 @@ export async function getAllProducts(): Promise<UnifiedProduct[]> {
     created_by: p.created_by || undefined,
     created_at: p.created_at,
     updated_at: p.updated_at
+  }));
+}
+
+// Получение товаров из локального CSV кэша
+async function getProductsFromLocalCache(): Promise<UnifiedProduct[]> {
+  await initPriceCache();
+  const cached = getAllCachedProducts();
+  return cached.map((p, i) => ({
+    id: `cache-${i}-${p.barcode}`,
+    barcode: p.barcode,
+    name: p.name,
+    category: p.category || 'Без категории',
+    purchase_price: p.purchase_price,
+    sale_price: p.sale_price,
+    quantity: 0, // Кэш не содержит остатков
+    unit: 'шт',
+    created_at: new Date().toISOString()
   }));
 }
 

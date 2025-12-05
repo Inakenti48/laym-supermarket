@@ -168,6 +168,24 @@ export function getAllPrices(): PriceEntry[] {
   return Array.from(priceCache.values());
 }
 
+// Получить все товары из кэша для использования как fallback
+export function getAllCachedProducts(): Array<{
+  barcode: string;
+  name: string;
+  category: string;
+  purchase_price: number;
+  sale_price: number;
+}> {
+  if (!priceCache) return [];
+  return Array.from(priceCache.values()).map(entry => ({
+    barcode: entry.code,
+    name: entry.name,
+    category: entry.category || 'Без категории',
+    purchase_price: entry.purchasePrice,
+    sale_price: Math.round(entry.purchasePrice * 1.3) // Наценка 30%
+  }));
+}
+
 // Размер кэша
 export function getCacheSize(): number {
   return priceCache?.size || 0;

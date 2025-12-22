@@ -52,17 +52,17 @@
     --glass-blur: 20px;
     --glass-blur-heavy: 40px;
     
-    /* Soft gradients - Eye-comfortable background */
+    /* Soft gradients - Gray background */
     --gradient-primary: linear-gradient(135deg, hsl(220 70% 55%), hsl(240 60% 65%));
     --gradient-success: linear-gradient(135deg, hsl(160 60% 45%), hsl(180 50% 50%));
-    --gradient-calm: linear-gradient(145deg, hsl(200 25% 96%) 0%, hsl(180 20% 94%) 25%, hsl(160 18% 95%) 50%, hsl(200 22% 96%) 75%, hsl(220 20% 97%) 100%);
+    --gradient-calm: hsl(0 0% 71%);
     --gradient-glass: linear-gradient(135deg, hsl(0 0% 100% / 0.8), hsl(0 0% 100% / 0.4));
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100% / 0.9), hsl(0 0% 100% / 0.7));
     
-    /* Animated background orbs */
-    --orb-1: hsl(180 35% 85% / 0.4);
-    --orb-2: hsl(200 30% 88% / 0.35);
-    --orb-3: hsl(160 25% 86% / 0.3);
+    /* Disabled orbs for solid background */
+    --orb-1: transparent;
+    --orb-2: transparent;
+    --orb-3: transparent;
     
     /* 3D Shadows */
     --shadow-sm: 0 2px 8px -2px hsl(220 50% 50% / 0.08);

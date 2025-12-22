@@ -9,13 +9,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[hsl(0_0%_15%)] text-white hover:bg-[hsl(0_0%_25%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
-        destructive: "bg-[hsl(0_0%_20%)] text-white hover:bg-[hsl(0_70%_45%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
-        outline: "border-2 border-[hsl(0_0%_25%)] bg-[hsl(0_0%_20%)] text-white hover:bg-[hsl(0_0%_30%)] rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5",
-        secondary: "bg-[hsl(0_0%_25%)] text-white hover:bg-[hsl(0_0%_35%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
-        ghost: "hover:bg-[hsl(0_0%_25%)] text-[hsl(0_0%_20%)] hover:text-white rounded-xl",
-        link: "text-[hsl(0_0%_20%)] underline-offset-4 hover:underline",
-        glass: "bg-[hsl(0_0%_20%/_0.9)] backdrop-blur-[20px] border border-[hsl(0_0%_30%)] text-white hover:bg-[hsl(0_0%_30%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        default: "bg-[hsl(220_1%_66%)] text-white hover:bg-[hsl(220_1%_56%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        destructive: "bg-[hsl(220_1%_66%)] text-white hover:bg-[hsl(0_70%_45%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        outline: "border-2 border-[hsl(220_1%_56%)] bg-[hsl(220_1%_66%)] text-white hover:bg-[hsl(220_1%_56%)] rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5",
+        secondary: "bg-[hsl(220_1%_66%)] text-white hover:bg-[hsl(220_1%_56%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        ghost: "hover:bg-[hsl(220_1%_66%)] text-[hsl(220_1%_40%)] hover:text-white rounded-xl",
+        link: "text-[hsl(220_1%_40%)] underline-offset-4 hover:underline",
+        glass: "bg-[hsl(220_1%_66%/_0.9)] backdrop-blur-[20px] border border-[hsl(220_1%_56%)] text-white hover:bg-[hsl(220_1%_56%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
       },
       size: {
         default: "h-10 px-4 py-2",

@@ -8,8 +8,10 @@
 
 @layer base {
   :root {
-    --background: 0 0% 71%;
+    --background: 180 1% 70%;
     --foreground: 220 15% 20%;
+    --cool-gray-5: 220 1% 66%;
+    --cool-gray-6: 220 2% 63%;
 
     --card: 0 0% 100%;
     --card-foreground: 220 15% 15%;

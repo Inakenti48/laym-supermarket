@@ -9,7 +9,7 @@
 @layer base {
   :root {
     --background: 220 5% 25%;
-    --foreground: 220 15% 20%;
+    --foreground: 0 0% 0%;
     --cool-gray-5: 220 1% 66%;
     --cool-gray-6: 220 2% 63%;
 

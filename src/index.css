@@ -8,10 +8,8 @@
 
 @layer base {
   :root {
-    --background: 220 5% 25%;
-    --foreground: 0 0% 0%;
-    --cool-gray-5: 220 1% 66%;
-    --cool-gray-6: 220 2% 63%;
+    --background: 220 30% 98%;
+    --foreground: 220 15% 20%;
 
     --card: 0 0% 100%;
     --card-foreground: 220 15% 15%;
@@ -86,7 +84,7 @@
   }
 
   .dark {
-    --background: 0 0% 71%;
+    --background: 225 25% 8%;
     --foreground: 220 20% 92%;
 
     --card: 225 25% 10%;
@@ -130,14 +128,14 @@
     
     --gradient-primary: linear-gradient(135deg, hsl(220 70% 55%), hsl(240 60% 60%));
     --gradient-success: linear-gradient(135deg, hsl(160 55% 45%), hsl(180 50% 50%));
-    --gradient-calm: hsl(0 0% 71%);
+    --gradient-calm: linear-gradient(145deg, hsl(220 20% 10%) 0%, hsl(200 18% 11%) 25%, hsl(180 15% 10%) 50%, hsl(200 20% 11%) 75%, hsl(220 18% 10%) 100%);
     --gradient-glass: linear-gradient(135deg, hsl(225 30% 15% / 0.9), hsl(225 30% 12% / 0.6));
     --gradient-card: linear-gradient(180deg, hsl(225 25% 12% / 0.9), hsl(225 25% 10% / 0.7));
     
-    /* Disabled orbs */
-    --orb-1: transparent;
-    --orb-2: transparent;
-    --orb-3: transparent;
+    /* Dark mode orbs */
+    --orb-1: hsl(200 40% 20% / 0.3);
+    --orb-2: hsl(180 35% 18% / 0.25);
+    --orb-3: hsl(220 30% 22% / 0.2);
     
     --shadow-sm: 0 2px 8px -2px hsl(0 0% 0% / 0.3);
     --shadow-md: 0 8px 24px -6px hsl(0 0% 0% / 0.4);

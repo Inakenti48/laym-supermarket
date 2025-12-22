@@ -9,13 +9,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-button hover:shadow-button-hover hover:-translate-y-0.5 rounded-xl",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-button hover:shadow-button-hover hover:-translate-y-0.5 rounded-xl",
-        outline: "border border-input bg-background/70 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-button hover:shadow-button-hover hover:-translate-y-0.5 rounded-xl",
-        ghost: "hover:bg-accent/50 hover:text-accent-foreground rounded-xl backdrop-blur-sm",
-        link: "text-primary underline-offset-4 hover:underline",
-        glass: "bg-background/60 backdrop-blur-[20px] border border-border/50 text-foreground hover:bg-background/80 shadow-glass hover:shadow-md hover:-translate-y-0.5 rounded-xl",
+        default: "bg-[hsl(0_0%_15%)] text-white hover:bg-[hsl(0_0%_25%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        destructive: "bg-[hsl(0_0%_20%)] text-white hover:bg-[hsl(0_70%_45%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        outline: "border-2 border-[hsl(0_0%_25%)] bg-[hsl(0_0%_20%)] text-white hover:bg-[hsl(0_0%_30%)] rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5",
+        secondary: "bg-[hsl(0_0%_25%)] text-white hover:bg-[hsl(0_0%_35%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
+        ghost: "hover:bg-[hsl(0_0%_25%)] text-[hsl(0_0%_20%)] hover:text-white rounded-xl",
+        link: "text-[hsl(0_0%_20%)] underline-offset-4 hover:underline",
+        glass: "bg-[hsl(0_0%_20%/_0.9)] backdrop-blur-[20px] border border-[hsl(0_0%_30%)] text-white hover:bg-[hsl(0_0%_30%)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 rounded-xl",
       },
       size: {
         default: "h-10 px-4 py-2",
